@@ -71,6 +71,46 @@ export default function RideBookingScreen({ service, onBack, onConfirmed }: Prop
     setOriginText(title);
   }, [gps.coords, gps.address]);
 
+  // Calcul de la distance réelle sur route
+function getDirectDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const roadDist = R * c * 1.35; // Facteur 1.35 pour les virages et carrefours réels
+  return Math.max(0.5, Math.round(roadDist * 10) / 10);
+}
+
+// Calcul du prix selon ton barème officiel :
+// - 0 à 10 km : 90 FCFA / km
+// - 10 à 25 km : 85 FCFA / km
+// - > 25 km : 80 FCFA / km
+function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
+  let rate = 90;
+  if (distanceKm > 25) {
+    rate = 80;
+  } else if (distanceKm > 10) {
+    rate = 85;
+  }
+
+  let price = distanceKm * rate;
+
+  if (vehicle === "ZEM_ELECTRIC") {
+    price = Math.max(200, price - 50); // Promo Zem électrique
+  } else if (vehicle === "CAR") {
+    price = price * 1.8; // Tarif voiture
+  }
+
+  // Arrondi propre à 25 FCFA près
+  return Math.max(250, Math.round(price / 25) * 25);
+}
+
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
@@ -116,20 +156,30 @@ export default function RideBookingScreen({ service, onBack, onConfirmed }: Prop
 
   /* Estimation dès que départ + destination sont connus */
   useEffect(() => {
-    if (!origin || !destination) { setEstimates({}); return; }
-    let cancelled = false;
+    if (!origin || !destination) {
+      setEstimates({});
+      return;
+    }
+
     setEstimating(true);
     setEstimateError(null);
-    const base = {
-      originLat: origin.latitude, originLng: origin.longitude,
-      destLat: destination.latitude, destLng: destination.longitude,
-    };
-    Promise.all(options.map(async (v) => [v, await rideApi.estimate({ ...base, vehicleType: v })] as const))
-      .then((entries) => { if (!cancelled) setEstimates(Object.fromEntries(entries)); })
-      .catch((e) => { if (!cancelled) setEstimateError(errorMessage(e)); })
-      .finally(() => { if (!cancelled) setEstimating(false); });
-    
-    return () => { cancelled = true; };
+
+    // Calcul direct de la distance et du temps
+    const dist = getDirectDistanceKm(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
+    const eta = Math.max(3, Math.ceil((dist / 25) * 60));
+
+    // Application du barème sur chaque type de véhicule
+    const directEstimates: Partial<Record<VehicleType, Estimate>> = {};
+    options.forEach((v) => {
+      directEstimates[v] = {
+        distanceKm: dist,
+        etaMinutes: eta,
+        price: getDirectPrice(dist, v),
+      };
+    });
+
+    setEstimates(directEstimates);
+    setEstimating(false);
   }, [origin, destination, options, reloadKey]);
 
   const applyPlace = useCallback((target: Target, place: Place) => {
