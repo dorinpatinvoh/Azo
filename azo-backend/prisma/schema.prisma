@@ -1,0 +1,189 @@
+// Schéma de base de données AZƆ̀ — PostgreSQL + PostGIS (pour les calculs de distance/zone)
+// npx prisma migrate dev --name init   (après avoir configuré DATABASE_URL dans .env)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLIENT
+  DRIVER
+  AGENCY
+  ADMIN
+  ARTISAN
+}
+
+enum RideStatus {
+  PENDING
+  MATCHED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum VehicleType {
+  ZEM
+  ZEM_ELECTRIC
+  CAR
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum Payer {
+  SENDER
+  RECIPIENT
+}
+
+enum AgencyPlan {
+  PRO
+  ARGENT
+  OR
+  DIAMANT
+}
+
+model User {
+  id        String   @id @default(uuid())
+  phone     String   @unique
+  fullName  String?
+  role      Role     @default(CLIENT)
+  createdAt DateTime @default(now())
+
+  agencyId String?
+  agency   Agency?  @relation(fields: [agencyId], references: [id])
+
+  wallet          Wallet?
+  ridesAsClient   Ride[]           @relation("ClientRides")
+  ridesAsDriver   Ride[]           @relation("DriverRides")
+  notifications   Notification[]
+  deliveriesSent  Delivery[]       @relation("DeliveryClient")
+  rentalBookings  RentalBooking[]
+  marketOrders    MarketplaceOrder[]
+  artisanRequests ArtisanRequest[] @relation("ArtisanRequestClient")
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  phone     String
+  code      String
+  expiresAt DateTime
+  consumed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Wallet {
+  id       String        @id @default(uuid())
+  userId   String        @unique
+  user     User          @relation(fields: [userId], references: [id])
+  balance  Int           @default(0) // en FCFA
+  cashback Int           @default(0)
+
+  transactions Transaction[]
+}
+
+model Transaction {
+  id        String          @id @default(uuid())
+  walletId  String
+  wallet    Wallet          @relation(fields: [walletId], references: [id])
+  type      TransactionType
+  amount    Int
+  label     String
+  meta      String?
+  createdAt DateTime        @default(now())
+}
+
+model Agency {
+  id             String     @id @default(uuid())
+  name           String
+  plan           AgencyPlan @default(PRO)
+  commissionRate Float      @default(0.03) // 3% pour PRO
+  maxAccounts    Int        @default(10)
+  createdAt      DateTime   @default(now())
+
+  drivers User[]
+}
+
+model Ride {
+  id         String     @id @default(uuid())
+  clientId   String
+  client     User       @relation("ClientRides", fields: [clientId], references: [id])
+  driverId   String?
+  driver     User?      @relation("DriverRides", fields: [driverId], references: [id])
+  status     RideStatus @default(PENDING)
+  vehicleType VehicleType
+
+  originLat  Float
+  originLng  Float
+  destLat    Float
+  destLng    Float
+
+  price      Int
+  commission Int
+  rating     Int?
+  createdAt  DateTime   @default(now())
+}
+
+model Delivery {
+  id            String   @id @default(uuid())
+  clientId      String
+  client        User     @relation("DeliveryClient", fields: [clientId], references: [id])
+  courierId     String?
+  packageType   String
+  pickupAddress String
+  dropAddress   String
+  pickupCode    String
+  deliveryCode  String
+  payer         Payer    @default(SENDER)
+  price         Int
+  status        RideStatus @default(PENDING)
+  createdAt     DateTime @default(now())
+}
+
+model RentalBooking {
+  id            String   @id @default(uuid())
+  clientId      String
+  client        User     @relation(fields: [clientId], references: [id])
+  vehicleModel  String
+  formula       String
+  pricePerDay   Int
+  status        String   @default("pending")
+  createdAt     DateTime @default(now())
+}
+
+model MarketplaceOrder {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    User     @relation(fields: [clientId], references: [id])
+  market    String
+  items     Json // [{ label, note, price }]
+  total     Int
+  status    String   @default("escrowed") // escrowed, delivered, refunded
+  createdAt DateTime @default(now())
+}
+
+model ArtisanRequest {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    User     @relation("ArtisanRequestClient", fields: [clientId], references: [id])
+  category  String
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  body      String
+  type      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}

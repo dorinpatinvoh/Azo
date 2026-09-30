@@ -1,0 +1,109 @@
+import React, { useState, useCallback } from "react";
+import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useFonts as usePJS, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold } from "@expo-google-fonts/plus-jakarta-sans";
+import { useFonts as useInter, Inter_400Regular } from "@expo-google-fonts/inter";
+import { View, ActivityIndicator, Pressable, Text, StyleSheet } from "react-native";
+
+import SplashScreen from "./screens/SplashScreen";
+import OtpLoginScreen from "./screens/OtpLoginScreen";
+import HomeScreen from "./screens/HomeScreen";
+import RideRequestScreen from "./screens/RideRequestScreen";
+import RideTrackingScreen from "./screens/RideTrackingScreen";
+import RideRatingScreen from "./screens/RideRatingScreen";
+import DeliveryScreen from "./screens/DeliveryScreen";
+import VehicleRentalScreen from "./screens/VehicleRentalScreen";
+import WalletScreen from "./screens/WalletScreen";
+import DriverHomeScreen from "./screens/DriverHomeScreen";
+import AgencyDashboardScreen from "./screens/AgencyDashboardScreen";
+import AdminDashboardScreen from "./screens/AdminDashboardScreen";
+import MarketplaceEscrowScreen from "./screens/MarketplaceEscrowScreen";
+import ArtisansScreen from "./screens/ArtisansScreen";
+import NotificationsScreen from "./screens/NotificationsScreen";
+import DevMenuScreen, { ScreenId } from "./screens/DevMenuScreen";
+import { colors, radius, spacing } from "./theme/colors";
+import { typography } from "./theme/typography";
+
+// Navigation minimale par état local — à remplacer par React Navigation
+// (@react-navigation/native-stack) une fois le nombre d'écrans stabilisé.
+type Route = ScreenId | "menu";
+
+export default function App() {
+  const [route, setRoute] = useState<Route>("splash");
+  // Id de la course en cours (créée par l'écran de demande, utilisée pour la noter)
+  const [rideId, setRideId] = useState<string | undefined>();
+
+  const [pjsLoaded] = usePJS({
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+  });
+  const [interLoaded] = useInter({ Inter_400Regular });
+
+  const goTo = useCallback((r: Route) => setRoute(r), []);
+  const backToMenu = useCallback(() => setRoute("menu"), []);
+
+  if (!pjsLoaded || !interLoaded) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
+
+      {route === "splash" && <SplashScreen onStart={() => goTo("otp")} />}
+      {route === "otp" && <OtpLoginScreen onVerified={() => goTo("home")} onBack={() => goTo("splash")} />}
+      {route === "home" && <HomeScreen onSelectService={() => goTo("ride-request")} />}
+      {route === "ride-request" && (
+        <RideRequestScreen
+          onBack={() => goTo("home")}
+          onConfirm={(_vehicle, id) => {
+            setRideId(id);
+            goTo("ride-tracking");
+          }}
+        />
+      )}
+      {route === "ride-tracking" && (
+        <RideTrackingScreen onBack={() => goTo("home")} onFinish={() => goTo("ride-rating")} />
+      )}
+      {route === "ride-rating" && <RideRatingScreen rideId={rideId} onDone={() => goTo("home")} />}
+      {route === "delivery" && <DeliveryScreen onBack={backToMenu} onConfirm={backToMenu} />}
+      {route === "rental" && <VehicleRentalScreen onBack={backToMenu} onReserve={backToMenu} />}
+      {route === "wallet" && <WalletScreen onBack={backToMenu} />}
+      {route === "driver-home" && <DriverHomeScreen onBack={backToMenu} />}
+      {route === "agency-dashboard" && <AgencyDashboardScreen onBack={backToMenu} />}
+      {route === "admin-dashboard" && <AdminDashboardScreen onBack={backToMenu} />}
+      {route === "marketplace" && <MarketplaceEscrowScreen onBack={backToMenu} onConfirm={backToMenu} />}
+      {route === "artisans" && <ArtisansScreen onBack={backToMenu} onRequestArtisan={backToMenu} />}
+      {route === "notifications" && <NotificationsScreen onBack={backToMenu} />}
+      {route === "menu" && <DevMenuScreen onSelect={(id) => goTo(id)} />}
+
+      {/* Bouton flottant temporaire pour ouvrir le menu de tous les écrans (dev uniquement) */}
+      {route !== "menu" && (
+        <Pressable style={styles.devFab} onPress={() => goTo("menu")}>
+          <Text style={styles.devFabText}>⋮⋮</Text>
+        </Pressable>
+      )}
+    </SafeAreaProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  devFab: {
+    position: "absolute",
+    bottom: 90,
+    right: spacing.md,
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    backgroundColor: colors.onSurface,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.75,
+  },
+  devFabText: { color: "#fff", fontWeight: "800" },
+});
