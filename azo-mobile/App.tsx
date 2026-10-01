@@ -246,7 +246,7 @@ export default function App() {
         <VehicleRentalScreen onBack={() => goTo("home")} onReserve={() => goTo("home")} />
       )}
 
-      {route === "wallet" && <WalletScreen onBack={() => goTo("home")} onNavigateTab={goTo} />}
+      {route === "wallet" && <WalletScreen onBack={() => goTo("home")} />}
 
       {/* [AJOUT] Onglet Courses */}
       {route === "courses" && (

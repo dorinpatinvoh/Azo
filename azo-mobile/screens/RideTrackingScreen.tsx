@@ -1,3 +1,5 @@
+// ⚠️ LEGACY : écran remplacé par RideBookingScreen / LiveTrackingScreen.
+// Plus importé par App.tsx, gardé uniquement pour référence (git permet de le supprimer).
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Linking } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";

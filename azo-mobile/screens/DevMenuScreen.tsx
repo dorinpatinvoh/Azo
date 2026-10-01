@@ -7,7 +7,8 @@ import { typography } from "../theme/typography";
 
 export type ScreenId =
   | "splash" | "otp" | "home" | "ride-request" | "ride-tracking" | "ride-rating"
-  | "delivery" | "rental" | "wallet" | "driver-home" | "agency-dashboard"
+  | "delivery" | "rental" | "wallet" | "courses" | "profile"
+  | "driver-home" | "agency-dashboard"
   | "admin-dashboard" | "marketplace" | "artisans" | "notifications";
 
 const SCREENS: { id: ScreenId; label: string; group: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
@@ -20,6 +21,8 @@ const SCREENS: { id: ScreenId; label: string; group: string; icon: keyof typeof 
   { id: "delivery", label: "7. Livraison colis", group: "Client", icon: "local-shipping" },
   { id: "rental", label: "8. Location de véhicules", group: "Client", icon: "directions-car" },
   { id: "wallet", label: "9. Portefeuille / Paiement", group: "Client", icon: "account-balance-wallet" },
+  { id: "courses", label: "9b. Mes courses (historique)", group: "Client", icon: "receipt-long" },
+  { id: "profile", label: "9c. Mon profil", group: "Client", icon: "person" },
   { id: "marketplace", label: "10. Courses au marché (Marketplace)", group: "V2", icon: "storefront" },
   { id: "artisans", label: "11. Espace Artisans", group: "V2", icon: "build" },
   { id: "driver-home", label: "12. Accueil conducteur", group: "Professionnel", icon: "two-wheeler" },

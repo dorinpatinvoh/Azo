@@ -1,3 +1,5 @@
+// ⚠️ LEGACY : écran remplacé par RideBookingScreen / LiveTrackingScreen.
+// Plus importé par App.tsx, gardé uniquement pour référence (git permet de le supprimer).
 import React, { useMemo, useState } from "react";
 import {
   View,

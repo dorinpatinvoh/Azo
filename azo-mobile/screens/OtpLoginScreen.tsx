@@ -16,7 +16,7 @@ import * as SecureStore from "expo-secure-store";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
-import { authApi } from "../services/api";
+import { authApi, errorMessage } from "../services/api";
 
 type Step = "phone" | "code";
 type ProfileRole = "CLIENT" | "DRIVER" | "AGENCY";
@@ -43,11 +43,9 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
       await authApi.requestOtp(phone.replace(/\D/g, ""));
       setCode(["", "", "", ""]);
       setStep("code");
-    } catch (e: any) {
-      console.warn("API requestOtp warning/error:", e);
-      // Mode tolérant / fallback pour ne pas bloquer le passage de l'étape phone -> code
-      setCode(["", "", "", ""]);
-      setStep("code");
+    } catch (e) {
+      // Sans code envoyé, l'étape suivante ne sert à rien : on prévient et on reste ici.
+      Alert.alert("Envoi impossible", errorMessage(e));
     } finally {
       setSending(false);
     }
@@ -61,30 +59,18 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
     try {
       const response = await authApi.verifyOtp(phone.replace(/\D/g, ""), fullCode, profile);
 
-      if (response?.token) {
-        await SecureStore.setItemAsync("userToken", response.token);
-      }
+      await SecureStore.setItemAsync("userToken", response.token);
 
-      // Si l'utilisateur a sélectionné "DRIVER" ou "AGENCY", son choix sur l'écran prévaut
-      // sinon on prend le rôle renvoyé par le backend
-      const backendRole = response?.user?.role ? String(response.user.role).toUpperCase().trim() : null;
-      
-      const normalizedRole = 
-        profile !== "CLIENT" 
-          ? profile 
-          : (backendRole || "CLIENT");
-
-      await SecureStore.setItemAsync("userRole", normalizedRole);
+      // Le rôle qui compte est celui du serveur : il est signé dans le jeton JWT.
+      // (Le profil choisi n'est appliqué qu'à la création du compte ; sinon c'est le rôle existant.)
+      const role = String(response.user.role || "CLIENT").toUpperCase().trim();
+      await SecureStore.setItemAsync("userRole", role);
 
       // Déclenchement de la redirection dans App.tsx
-      onVerified(normalizedRole);
-    } catch (e: any) {
-      console.warn("API verifyOtp error, passage en mode dev/fallback :", e);
-
-      // En cas d'erreur/mode déconnecté, on respecte le choix cliqué
-      const fallbackRole = profile.toUpperCase().trim();
-      await SecureStore.setItemAsync("userRole", fallbackRole);
-      onVerified(fallbackRole);
+      onVerified(role);
+    } catch (e) {
+      // Code faux, expiré, ou serveur injoignable : on NE connecte PAS l'utilisateur.
+      Alert.alert("Connexion impossible", errorMessage(e));
     } finally {
       setSending(false);
     }
@@ -192,7 +178,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
               {code.map((digit, i) => (
                 <TextInput
                   key={i}
-                  ref={(el) => (inputsRef.current[i] = el)}
+                  ref={(el) => { inputsRef.current[i] = el; }}
                   style={[styles.codeBox, digit ? styles.codeBoxFilled : null]}
                   keyboardType="number-pad"
                   maxLength={1}

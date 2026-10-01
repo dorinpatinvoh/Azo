@@ -43,7 +43,7 @@ export default function DriverHomeScreen({ onBack }: Props) {
             sock.emit("driver:location", { rideId: "", lat, lng });
           },
           (err) => console.warn("geo err", err),
-          { enableHighAccuracy: true, distanceFilter: 5 }
+          { enableHighAccuracy: true }
         );
         watchIdRef.current = id as unknown as number;
       }
