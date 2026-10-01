@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Linking } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Linking, Alert } from "react-native";
 import MapView, { Marker, Polyline, UrlTile } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -51,6 +51,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const [driverPos, setDriverPos] = useState<LatLng | null>(null);
   const [failures, setFailures] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   /* Statut + infos chauffeur : polling séquentiel (pas de chevauchement) */
   useEffect(() => {
@@ -125,6 +126,42 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   const done = ride.status === "COMPLETED";
   const searching = ride.status === "PENDING";
+  const finished = done || ride.status === "CANCELLED";
+  // On ne peut annuler que tant que la course n'a pas démarré : après le départ,
+  // le client paie le trajet (le backend refuse toute annulation en IN_PROGRESS).
+  const cancellable = ride.status === "PENDING" || ride.status === "MATCHED";
+  const paymentLabel =
+    ride.status === "CANCELLED" ? "aucun débit"
+    : done ? "AZƆ̀ Pay (débité)"
+    : "AZƆ̀ Pay (débité à l'arrivée)";
+
+  function handleCancelRide() {
+    if (!ride) return;
+    Alert.alert(
+      "Annuler la course ?",
+      ride.driver
+        ? "Ton chauffeur est prévenu. Aucun montant n'est débité avant le départ."
+        : "Aucun montant n'est débité avant le départ.",
+      [
+        { text: "Garder la course", style: "cancel" },
+        {
+          text: "Annuler la course",
+          style: "destructive",
+          onPress: async () => {
+            setCancelling(true);
+            try {
+              const updated = await rideApi.cancel(ride.id);
+              setRide(updated);
+            } catch (e) {
+              Alert.alert("Annulation impossible", errorMessage(e));
+            } finally {
+              setCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -198,14 +235,26 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
         <View style={{ gap: 2 }}>
           {!!destinationLabel && <Text style={styles.muted} numberOfLines={1}>→ {destinationLabel}</Text>}
           <Text style={styles.price}>
-            {ride.price.toLocaleString("fr-FR")} FCFA · AZƆ̀ Pay {done ? "(débité)" : "(débité à l'arrivée)"}
+            {ride.price.toLocaleString("fr-FR")} FCFA · {paymentLabel}
           </Text>
         </View>
 
-        {done ? (
-          <Pressable style={styles.primaryBtn} onPress={onFinish ?? onClose}><Text style={styles.primaryText}>Terminer</Text></Pressable>
+        {finished ? (
+          // Course terminée -> notation ; course annulée -> simple fermeture (rien à noter).
+          <Pressable style={styles.primaryBtn} onPress={done ? (onFinish ?? onClose) : onClose}>
+            <Text style={styles.primaryText}>{done ? "Terminer" : "Fermer"}</Text>
+          </Pressable>
         ) : (
-          <Pressable style={styles.secondaryBtn} onPress={onClose}><Text style={styles.secondaryText}>Réduire</Text></Pressable>
+          <>
+            {cancellable && (
+              <Pressable style={styles.cancelBtn} onPress={handleCancelRide} disabled={cancelling}>
+                {cancelling
+                  ? <ActivityIndicator size="small" color={ERROR_COLOR} />
+                  : <Text style={styles.cancelText}>Annuler la course</Text>}
+              </Pressable>
+            )}
+            <Pressable style={styles.secondaryBtn} onPress={onClose}><Text style={styles.secondaryText}>Réduire</Text></Pressable>
+          </>
         )}
       </View>
     </View>
@@ -234,6 +283,8 @@ const styles = StyleSheet.create({
   primaryText: { ...typography.labelMd, color: "#fff", fontWeight: "800", fontSize: 16 },
   secondaryBtn: { borderRadius: radius.full, paddingVertical: 12, paddingHorizontal: 24, alignItems: "center", borderWidth: 1.5, borderColor: colors.outline },
   secondaryText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
+  cancelBtn: { borderRadius: radius.full, paddingVertical: 12, alignItems: "center", borderWidth: 1.5, borderColor: ERROR_COLOR },
+  cancelText: { ...typography.labelMd, color: ERROR_COLOR, fontWeight: "700" },
   driverMarker: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" },
   offline: { position: "absolute", left: spacing.md, right: spacing.md, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: ERROR_COLOR, borderRadius: radius.lg, padding: spacing.sm },
   offlineText: { ...typography.labelMd, color: "#fff" },
