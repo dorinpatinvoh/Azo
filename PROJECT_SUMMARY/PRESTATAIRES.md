@@ -189,7 +189,10 @@ drapeau « régularisation requise », pour ne pas casser tes comptes de test.
 |---|---|---|
 | `GET` | `/providers/me` | ✅ **3a** — Mon dossier : statut, identité, checklist des pièces, champs manquants, délais/SLA, journal (timeline) |
 | `POST` | `/providers/applications` | ✅ **3a** — Créer/mettre à jour un brouillon (type, identité, zone, véhicule/métier, formule) |
-| `POST` | `/providers/applications/:id/documents` | ✅ **3a** (déclaration) — Déclare une pièce (type, expiration). ⏳ **3d** : dépôt du fichier (multipart, ≤ 8 Mo, jpg/png/pdf) |
+| `GET` | `/providers/requirements` | ✅ **3b** — Toute la configuration du wizard (types ouverts, choix de véhicule, champs et pièces exigés, formules d'agence, limites d'upload). L'app n'a rien en dur : ouvrir ARTISAN/COURIER plus tard ne demandera aucun changement mobile. |
+| `POST` | `/providers/applications/:id/documents` | ✅ **3a** — Déclare une pièce et sa date d'expiration (permis, assurance, visite technique, CNI). |
+| `POST` | `/providers/applications/:id/documents/:kind/file` | ✅ **3b** — Dépôt réel du fichier (multipart, champ `file`, ≤ 8 Mo, JPG/PNG/WEBP/PDF), écrit dans `uploads/`, ancien fichier supprimé, pièce remise en attente de validation. |
+| `GET` | `/providers/documents/:docId/file` | ✅ **3b** — Lecture d'une pièce : propriétaire du dossier ou administrateur uniquement, jamais en statique public. |
 | `POST` | `/providers/applications/:id/submit` | ✅ **3a** — Soumettre → `SUBMITTED` (+ notification aux admins) |
 | `GET` | `/providers/me/stats` | ⏳ **3d** — Gains, missions, note (après approbation) |
 
@@ -334,12 +337,11 @@ Même châssis que le chauffeur, adapté à la livraison :
 - gestion des utilisateurs (`GET /admin/users` existe) avec blocage/déblocage ;
 - paramétrage : tarifs, formules d'agence, commission, SLA de validation.
 
-**Où loger la console admin ?** Deux options :
-- **A. Dans l'app mobile** (rôle ADMIN) — rapide à livrer, réutilise le thème existant,
-  mais l'examen de pièces sur petit écran est pénible ;
-- **B. Une app web séparée** (`azo-admin`, React + Vite, mêmes endpoints JWT) — grand
-  écran, comparaison CNI/selfie côte à côte, tableaux filtrables, export. **Recommandé** :
-  la validation de documents est un travail de bureau, et le backend ne change pas.
+**Où loger la console admin ?** Choix retenu : **dans l'app mobile** (rôle ADMIN), écran
+`AdminProvidersScreen`, qui est aussi l'écran d'accueil d'un administrateur après
+connexion. Les photos s'ouvrent en plein écran pour la comparaison CNI/selfie.
+Une app web séparée (`azo-admin`, React + Vite) reste possible plus tard sans toucher au
+backend : les endpoints sont les mêmes.
 
 ---
 
@@ -387,8 +389,8 @@ Même châssis que le chauffeur, adapté à la livraison :
 | Étape | Contenu | Livrable vérifiable |
 |---|---|---|
 | **3a — Socle backend** ✅ **fait** | Migration `20261001200000_providers` (ProviderProfile, ProviderDocument, ProviderEvent, UserStatus), module `providers` (11 routes), rôle retiré de l'inscription, lecture du rôle/statut en base à chaque requête JWT, agences verrouillées (création par dossier, rattachement d'un chauffeur approuvé seulement), seed ADMIN + commandes `providers:list` / `providers:approve` | Un dossier peut être créé, soumis, instruit, approuvé/rejeté/suspendu en HTTP ; le rôle n'est accordé qu'à l'approbation ; `tsc` → 0 erreur |
-| **3b — Parcours mobile prestataire** | Wizard 5 étapes, déclaration des pièces, écran « Dossier en cours » avec timeline, gestion NEED_INFO/REJECTED | Sur téléphone : dépôt d'un dossier chauffeur complet et suivi jusqu'à la décision |
-| **3c — Console admin** | File d'attente, fiche dossier, validation des pièces, décisions, audit — **dans l'app mobile** (choix retenu) | Un admin valide un dossier de bout en bout depuis son téléphone |
+| **3b — Parcours mobile prestataire** ✅ **fait** | `ProviderOnboardingScreen` (wizard 5 étapes : activité dont Zem / Zem électrique / Voiture indépendante, identité, véhicule ou agence + formule, pièces avec photos à l'appareil ou en galerie + dates d'expiration, récapitulatif et 3 engagements) ; `ProviderStatusScreen` (statut, délai/SLA, messages de l'admin, checklist, timeline, rafraîchissement automatique) ; `providersApi` + upload multipart dans `services/api.ts` ; `expo-image-picker` | Sur téléphone : dépôt d'un dossier chauffeur complet avec selfie + CNI, puis suivi jusqu'à la décision |
+| **3c — Console admin** ✅ **fait** | `AdminProvidersScreen` : file d'attente filtrable avec compteurs par statut, stats (délai moyen, hors délai SLA), fiche dossier, **photos en plein écran**, validation/refus pièce par pièce avec motif, approbation (dérogation tracée si pièces manquantes), demande d'information, refus, suspension, réactivation, journal. Accueil du rôle ADMIN. | Un admin valide un dossier de bout en bout depuis son téléphone |
 | **3d — Espaces métier + fichiers** | Upload réel des pièces (photos/PDF), agence réelle (branche `GET /agencies/dashboard` + flotte), Artisan (modèle + missions + profil public), Coursier (missions + double OTP), débit des frais d'activation | Chaque prestataire travaille réellement et voit ses gains |
 | **3e — Durcissement** | JWT secret obligatoire, OTP limité (6 chiffres, 3 essais), socket authentifié, `.env` et `node_modules/` hors git | Aucun trou de la liste §9 ne subsiste |
 
@@ -403,11 +405,14 @@ Même châssis que le chauffeur, adapté à la livraison :
    dans le modèle de données mais le dépôt de dossier est refusé tant que leur espace
    métier n'existe pas (`ENABLED_PROVIDER_TYPES` dans `providers.module.ts`).
 2. **Console admin** : dans l'app mobile (rôle ADMIN), pas d'app web séparée pour l'instant.
-3. **Pièces justificatives** : le modèle, la checklist et la validation admin sont en place ;
-   une pièce se **déclare** (type + date d'expiration) et le **dépôt du fichier** arrive en 3d.
-   Conséquence assumée : un dossier peut être soumis avec des pièces manquantes, et
-   l'approbation exige alors une dérogation tracée (`overrideDocuments: true`, inscrite au
-   journal). C'est ce qui permet d'activer un compte de test aujourd'hui.
+3. **Pièces justificatives** : le **selfie et la photo de la pièce d'identité sont
+   obligatoires** pour déposer un dossier (`PHOTO_DOCUMENTS`) — sans image, l'admin ne peut
+   rien vérifier. Les fichiers sont déposés en multipart (8 Mo max, JPG/PNG/WEBP/PDF),
+   stockés dans `azo-backend/uploads/` (hors git) et servis uniquement au propriétaire ou à
+   un administrateur. Les autres pièces peuvent encore être déclarées sans fichier
+   (expiration seulement) : l'approbation exige alors une dérogation tracée
+   (`overrideDocuments: true`, inscrite au journal).
+   Reste à faire en 3d : stockage objet signé (S3/R2/MinIO) et suppression de l'EXIF.
 4. **Frais d'activation des agences** : le montant de la formule est **enregistré**
    (`Agency.activationFee`, `feePaidAt = null`) mais **pas encore débité** — la décision
    attend le branchement de la passerelle de paiement. À trancher avant la mise en service.

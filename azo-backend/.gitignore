@@ -1,0 +1,10 @@
+# Pièces justificatives déposées par les prestataires (photos, scans, PDF).
+# Données sensibles : elles ne sont jamais servies en public, seulement via
+# GET /providers/documents/:docId/file (propriétaire du dossier ou administrateur).
+uploads/
+
+# Sortie de compilation
+dist/
+
+# Fichiers temporaires
+*.log

@@ -10,8 +10,16 @@ import {
   Param,
   Post,
   Query,
+  Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { Response } from "express";
+import * as fs from "fs";
+import * as fsp from "fs/promises";
+import * as path from "path";
 import {
   IsArray,
   IsBoolean,
@@ -130,7 +138,53 @@ const DECIDABLE_STATUSES: ProviderStatus[] = ["SUBMITTED", "UNDER_REVIEW", "NEED
 export const RESUBMIT_DELAY_DAYS = 7; // délai avant de re-déposer un dossier rejeté
 export const REVIEW_SLA_HOURS = 48; // engagement de réponse affiché au prestataire
 
+/* ---------------------------------- fichiers (pièces justificatives) --------- */
+
+export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 8 Mo par pièce
+export const ACCEPTED_MIME: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "application/pdf": ".pdf",
+};
+// Racine de stockage. Les fichiers ne sont JAMAIS servis en statique public :
+// ils passent par GET /providers/documents/:docId/file, qui vérifie le propriétaire.
+const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+
+// Pièces dont le FICHIER (photo ou scan) est obligatoire pour déposer un dossier.
+// Une simple déclaration ne suffit pas : sans image, l'admin ne peut rien vérifier.
+export const PHOTO_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
+  DRIVER: ["SELFIE", "CNI"],
+  COURIER: ["SELFIE", "CNI"],
+  AGENCY: ["SELFIE", "CNI"],
+  ARTISAN: ["SELFIE", "CNI"],
+};
+
+// Ce que l'app affiche à l'étape « Quel conducteur es-tu ? » : le choix du véhicule
+// distingue le zem (moto-taxi) du conducteur indépendant en voiture.
+const VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
+  { value: "ZEM", label: "Zem (moto-taxi)", hint: "Courses courtes en ville — commission 15 %" },
+  { value: "ZEM_ELECTRIC", label: "Zem électrique", hint: "Moto électrique — commission 15 %" },
+  { value: "CAR", label: "Voiture — conducteur indépendant", hint: "Courses confort — commission 15 %" },
+];
+
+const TYPE_DESCRIPTIONS: Record<ProviderType, string> = {
+  DRIVER: "Conduis des clients en zem, zem électrique ou voiture, et encaisse tes courses sur AZƆ̀ Pay.",
+  AGENCY: "Gère une flotte de chauffeurs, suis leur activité et paie une formule mensuelle.",
+  ARTISAN: "Reçois des demandes d'intervention (plomberie, électricité, maçonnerie…).",
+  COURIER: "Assure des livraisons de colis avec double code de confirmation.",
+};
+
 type ProviderWithDocs = ProviderProfile & { documents: ProviderDocument[] };
+
+// Fichier reçu en multipart (multer, stockage mémoire puis écrit sur disque).
+// @types/multer n'est pas installé : on type le strict nécessaire.
+type UploadedDocument = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+  size: number;
+};
 
 /* -------------------------------------------------------------------------- */
 /*  DTO                                                                        */
@@ -205,10 +259,21 @@ export class ProvidersService {
   }
 
   private missingDocuments(provider: ProviderWithDocs): DocumentKind[] {
-    const declared = new Set(
-      provider.documents.filter((d) => d.status !== "INVALID").map((d) => d.kind)
-    );
-    return REQUIRED_DOCUMENTS[provider.type].filter((kind) => !declared.has(kind));
+    const photoKinds = PHOTO_DOCUMENTS[provider.type];
+    return REQUIRED_DOCUMENTS[provider.type].filter((kind) => {
+      const doc = provider.documents.find((d) => d.kind === kind);
+      if (!doc || doc.status === "INVALID") return true;
+      // Une pièce dont la photo est obligatoire doit avoir un fichier réellement déposé.
+      if (photoKinds.includes(kind) && !doc.url) return true;
+      return false;
+    });
+  }
+
+  // Pièces dont la photo manque à l'appel (blocage du dépôt de dossier).
+  private missingPhotos(provider: ProviderWithDocs): string[] {
+    return PHOTO_DOCUMENTS[provider.type]
+      .filter((kind) => !provider.documents.find((d) => d.kind === kind)?.url)
+      .map((kind) => DOCUMENT_LABELS[kind]);
   }
 
   private missingFields(provider: ProviderProfile): string[] {
@@ -250,6 +315,7 @@ export class ProvidersService {
         kind,
         label: DOCUMENT_LABELS[kind],
         required,
+        photoRequired: PHOTO_DOCUMENTS[provider.type].includes(kind),
         status: doc ? doc.status : "MISSING",
         hasFile: !!doc?.url,
         expiresAt: doc?.expiresAt ?? null,
@@ -391,7 +457,11 @@ export class ProvidersService {
         enabledTypes: ENABLED_PROVIDER_TYPES.map((type) => ({
           type,
           label: TYPE_LABELS[type],
-          requiredDocuments: REQUIRED_DOCUMENTS[type].map((kind) => ({ kind, label: DOCUMENT_LABELS[kind] })),
+          requiredDocuments: REQUIRED_DOCUMENTS[type].map((kind) => ({
+            kind,
+            label: DOCUMENT_LABELS[kind],
+            photoRequired: PHOTO_DOCUMENTS[type].includes(kind),
+          })),
           requiredFields: REQUIRED_FIELDS[type].map((field) => FIELD_LABELS[field] ?? String(field)),
         })),
       };
@@ -519,6 +589,14 @@ export class ProvidersService {
     const missingFields = this.missingFields(provider);
     if (missingFields.length > 0)
       throw new BadRequestException(`Informations manquantes : ${missingFields.join(", ")}`);
+
+    // La photo est obligatoire : sans image, l'administrateur ne peut rien vérifier.
+    const missingPhotos = this.missingPhotos(provider);
+    if (missingPhotos.length > 0)
+      throw new BadRequestException(
+        `Photos obligatoires manquantes : ${missingPhotos.join(", ")}. ` +
+          "Prends-les depuis l'app avant de déposer le dossier."
+      );
 
     if (provider.status === "REJECTED" && provider.reviewedAt) {
       const delayEnd = new Date(provider.reviewedAt.getTime() + RESUBMIT_DELAY_DAYS * 24 * 3600 * 1000);
@@ -947,6 +1025,146 @@ export class ProvidersService {
     return this.serialize(updated);
   }
 
+  /* -------------------------------------------------------- pièces justificatives */
+
+  // GET /providers/requirements — toute la configuration du wizard d'inscription,
+  // servie par l'API : l'app n'a aucun libellé ni aucune liste de pièces en dur.
+  // Ouvrir ARTISAN ou COURIER plus tard ne demandera donc aucun changement mobile.
+  requirements() {
+    return {
+      enabledTypes: ENABLED_PROVIDER_TYPES,
+      types: (Object.keys(TYPE_LABELS) as ProviderType[]).map((type) => ({
+        type,
+        label: TYPE_LABELS[type],
+        description: TYPE_DESCRIPTIONS[type],
+        enabled: ENABLED_PROVIDER_TYPES.includes(type),
+        vehicleChoices:
+          type === "DRIVER" || type === "COURIER"
+            ? VEHICLE_CHOICES.filter((v) => type === "DRIVER" || v.value !== "CAR")
+            : [],
+        requiredFields: REQUIRED_FIELDS[type].map((field) => ({
+          field,
+          label: FIELD_LABELS[field] ?? String(field),
+        })),
+        requiredDocuments: REQUIRED_DOCUMENTS[type].map((kind) => ({
+          kind,
+          label: DOCUMENT_LABELS[kind],
+          photoRequired: PHOTO_DOCUMENTS[type].includes(kind),
+        })),
+        optionalDocuments: OPTIONAL_DOCUMENTS[type]
+          .filter((kind) => !REQUIRED_DOCUMENTS[type].includes(kind))
+          .map((kind) => ({ kind, label: DOCUMENT_LABELS[kind], photoRequired: false })),
+      })),
+      plans: (Object.keys(PLANS) as AgencyPlan[]).map((plan) => ({
+        plan,
+        label: PLAN_LABELS[plan],
+        fee: PLANS[plan].fee,
+        maxAccounts: PLANS[plan].maxAccounts,
+        commissionRate: PLANS[plan].rate,
+      })),
+      review: { slaHours: REVIEW_SLA_HOURS, resubmitDelayDays: RESUBMIT_DELAY_DAYS },
+      upload: { maxBytes: MAX_UPLOAD_BYTES, acceptedMimeTypes: Object.keys(ACCEPTED_MIME) },
+    };
+  }
+
+  // POST /providers/applications/:id/documents/:kind/file — dépôt du fichier (photo/PDF).
+  // Stockage sur disque, hors base ; jamais servi en public (voir documentFile).
+  async uploadDocument(
+    userId: string,
+    applicationId: string,
+    kind: DocumentKind,
+    file?: UploadedDocument
+  ) {
+    const provider = await this.loadProviderById(applicationId);
+    if (provider.userId !== userId) throw new ForbiddenException("Ce dossier ne t'appartient pas");
+    if (!EDITABLE_STATUSES.includes(provider.status))
+      throw new BadRequestException(
+        "Le dossier n'est plus modifiable : les pièces ne peuvent plus être remplacées"
+      );
+
+    const allowed = [...REQUIRED_DOCUMENTS[provider.type], ...OPTIONAL_DOCUMENTS[provider.type]];
+    if (!allowed.includes(kind))
+      throw new BadRequestException(
+        `La pièce « ${DOCUMENT_LABELS[kind]} » n'est pas demandée pour un dossier ${TYPE_LABELS[provider.type]}`
+      );
+
+    if (!file || !file.buffer || file.buffer.length === 0)
+      throw new BadRequestException("Aucun fichier reçu : reprends la photo");
+    const ext = ACCEPTED_MIME[file.mimetype];
+    if (!ext)
+      throw new BadRequestException(
+        `Format refusé (${file.mimetype || "inconnu"}) : utilise une photo JPG, PNG ou WEBP, ou un PDF`
+      );
+    if (file.size > MAX_UPLOAD_BYTES)
+      throw new BadRequestException(
+        `Fichier trop lourd (${Math.round(file.size / 1024 / 1024)} Mo) : la limite est de ${Math.round(
+          MAX_UPLOAD_BYTES / 1024 / 1024
+        )} Mo`
+      );
+
+    const directory = path.join(UPLOAD_ROOT, "providers", provider.id);
+    await fsp.mkdir(directory, { recursive: true });
+    const filename = `${kind}-${Date.now()}${ext}`;
+    await fsp.writeFile(path.join(directory, filename), file.buffer);
+
+    // L'ancien fichier d'une pièce remplacée est supprimé du disque.
+    const previous = provider.documents.find((d) => d.kind === kind);
+    if (previous?.url) {
+      const old = path.resolve(UPLOAD_ROOT, previous.url);
+      if (old.startsWith(path.resolve(UPLOAD_ROOT))) await fsp.rm(old, { force: true }).catch(() => undefined);
+    }
+
+    const relative = `providers/${provider.id}/${filename}`;
+    const document = await this.prisma.providerDocument.upsert({
+      where: { providerId_kind: { providerId: provider.id, kind } },
+      create: {
+        providerId: provider.id,
+        kind,
+        url: relative,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+      },
+      update: {
+        url: relative,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        // Une pièce remplacée repart en attente de validation.
+        status: "PENDING",
+        reviewerNote: null,
+        reviewedAt: null,
+        uploadedAt: new Date(),
+      },
+    });
+
+    await this.log(
+      provider.id,
+      null,
+      "DOCUMENT_ADDED",
+      `Photo déposée : ${DOCUMENT_LABELS[kind]} (${Math.round(file.size / 1024)} Ko)`
+    );
+    return document;
+  }
+
+  // Lecture d'une pièce : le propriétaire du dossier ou un administrateur, personne d'autre.
+  async documentFile(userId: string, role: string, documentId: string) {
+    const doc = await this.prisma.providerDocument.findUnique({
+      where: { id: documentId },
+      include: { provider: { select: { userId: true } } },
+    });
+    if (!doc) throw new NotFoundException("Pièce introuvable");
+    if (role !== Role.ADMIN && doc.provider.userId !== userId)
+      throw new ForbiddenException("Tu n'as pas accès à cette pièce");
+    if (!doc.url) throw new NotFoundException("Cette pièce a été déclarée sans fichier");
+
+    const absolute = path.resolve(UPLOAD_ROOT, doc.url);
+    if (!absolute.startsWith(path.resolve(UPLOAD_ROOT)))
+      throw new ForbiddenException("Chemin de fichier invalide");
+    if (!fs.existsSync(absolute))
+      throw new NotFoundException("Fichier introuvable sur le serveur : redépose la pièce");
+
+    return { absolute, mimeType: doc.mimeType ?? "application/octet-stream", kind: doc.kind };
+  }
+
   /* ------------------------------------------------- appelés par d'autres modules */
 
   // Ouvre un brouillon de dossier à l'inscription (le choix « Conducteur » / « Agence »
@@ -988,16 +1206,45 @@ export class ProvidersController {
     return this.svc.me(u.userId);
   }
 
+  // GET /providers/requirements — configuration du wizard (types, pièces, formules, limites d'upload)
+  @Get("requirements")
+  requirements() {
+    return this.svc.requirements();
+  }
+
   // POST /providers/applications
   @Post("applications")
   save(@CurrentUser() u, @Body() dto: SaveApplicationDto) {
     return this.svc.saveApplication(u.userId, dto);
   }
 
-  // POST /providers/applications/:id/documents
+  // POST /providers/applications/:id/documents — déclare une pièce (type + expiration)
   @Post("applications/:id/documents")
   addDocument(@CurrentUser() u, @Param("id") id: string, @Body() dto: RegisterDocumentDto) {
     return this.svc.addDocument(u.userId, id, dto);
+  }
+
+  // POST /providers/applications/:id/documents/:kind/file — dépôt de la photo (multipart, champ "file")
+  @Post("applications/:id/documents/:kind/file")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  uploadDocumentFile(
+    @CurrentUser() u,
+    @Param("id") id: string,
+    @Param("kind") kind: DocumentKind,
+    @UploadedFile() file: UploadedDocument
+  ) {
+    if (!Object.values(DocumentKind).includes(kind))
+      throw new BadRequestException(`Type de pièce inconnu : ${kind}`);
+    return this.svc.uploadDocument(u.userId, id, kind, file);
+  }
+
+  // GET /providers/documents/:docId/file — photo/PDF d'une pièce (propriétaire ou admin)
+  @Get("documents/:docId/file")
+  async documentFile(@CurrentUser() u, @Param("docId") docId: string, @Res() res: Response) {
+    const { absolute, mimeType } = await this.svc.documentFile(u.userId, u.role, docId);
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.sendFile(absolute);
   }
 
   // POST /providers/applications/:id/submit

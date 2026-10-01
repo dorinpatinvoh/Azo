@@ -53,7 +53,7 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
 | Auth | `POST /auth/request-otp`, `POST /auth/verify-otp` |
 | Utilisateur | `GET/PATCH /users/me` |
 | Courses | `POST /rides/estimate`, `POST /rides`, `GET /rides/history`, `GET /rides/pending`, `GET /rides/:id`, `POST /rides/:id/accept|start|complete|rate|cancel` |
-| Prestataires | `GET /providers/me`, `POST /providers/applications`, `POST /providers/applications/:id/documents`, `POST /providers/applications/:id/submit` |
+| Prestataires | `GET /providers/requirements`, `GET /providers/me`, `POST /providers/applications`, `POST /providers/applications/:id/documents`, `POST /providers/applications/:id/documents/:kind/file` (photo, multipart), `GET /providers/documents/:docId/file`, `POST /providers/applications/:id/submit` |
 | Temps réel | WebSocket : `ride:join`, `driver:location`, `ride:status` |
 | Portefeuille | `GET /wallet`, `GET /wallet/transactions`, `POST /wallet/recharge` |
 | Livraison | `POST /deliveries`, `POST /deliveries/:id/confirm-pickup|confirm-delivery` |
@@ -73,7 +73,11 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
 - Marketplace : l'argent est bloqué en séquestre jusqu'à validation du client.
 - **Prestataires** : l'inscription crée toujours un compte `CLIENT`. Le rôle métier
   (`DRIVER`, `AGENCY`) n'est accordé qu'à l'approbation d'un dossier par un admin.
+  Les photos (selfie + pièce d'identité) sont **obligatoires** pour déposer un dossier.
   Détails dans `PROJECT_SUMMARY/PRESTATAIRES.md`.
+- **Pièces justificatives** : stockées dans `azo-backend/uploads/` (hors git), jamais
+  servies en public — lecture via `GET /providers/documents/:docId/file`, réservée au
+  propriétaire du dossier ou à un administrateur. JPG/PNG/WEBP/PDF, 8 Mo maximum.
 - **Agences** : rattachement d'un chauffeur uniquement si son dossier est approuvé, dans
   la limite du plafond de la formule, avec notification et retrait possible.
 
