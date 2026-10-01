@@ -9,6 +9,7 @@ export type ScreenId =
   | "splash" | "otp" | "home" | "ride-request" | "ride-tracking" | "ride-rating"
   | "delivery" | "rental" | "wallet" | "courses" | "profile"
   | "driver-home" | "agency-dashboard"
+  | "provider-onboarding" | "provider-status" | "admin-providers"
   | "admin-dashboard" | "marketplace" | "artisans" | "notifications";
 
 const SCREENS: { id: ScreenId; label: string; group: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
@@ -25,8 +26,11 @@ const SCREENS: { id: ScreenId; label: string; group: string; icon: keyof typeof 
   { id: "profile", label: "9c. Mon profil", group: "Client", icon: "person" },
   { id: "marketplace", label: "10. Courses au marché (Marketplace)", group: "V2", icon: "storefront" },
   { id: "artisans", label: "11. Espace Artisans", group: "V2", icon: "build" },
+  { id: "provider-onboarding", label: "12a. Inscription prestataire (wizard)", group: "Professionnel", icon: "how-to-reg" },
+  { id: "provider-status", label: "12b. Mon dossier prestataire", group: "Professionnel", icon: "fact-check" },
   { id: "driver-home", label: "12. Accueil conducteur", group: "Professionnel", icon: "two-wheeler" },
   { id: "agency-dashboard", label: "13. Mon agence", group: "Agence", icon: "apartment" },
+  { id: "admin-providers", label: "14a. Validation des prestataires", group: "Admin", icon: "verified-user" },
   { id: "admin-dashboard", label: "14. Tableau de bord admin", group: "Admin", icon: "admin-panel-settings" },
   { id: "notifications", label: "15. Notifications", group: "Commun", icon: "notifications" },
 ];

@@ -31,9 +31,38 @@ import MarketplaceEscrowScreen from "./screens/MarketplaceEscrowScreen";
 import ArtisansScreen from "./screens/ArtisansScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
 import DevMenuScreen, { ScreenId } from "./screens/DevMenuScreen";
+import ProviderOnboardingScreen from "./screens/ProviderOnboardingScreen";
+import ProviderStatusScreen from "./screens/ProviderStatusScreen";
+import AdminProvidersScreen from "./screens/AdminProvidersScreen";
+import { ProviderRef, ProviderType } from "./services/api";
 import { colors, radius, spacing } from "./theme/colors";
 
 type Route = ScreenId | "menu";
+
+/**
+ * Écran d'arrivée après connexion.
+ * Un client dont le dossier prestataire n'est pas encore approuvé tombe sur le suivi
+ * de son dossier : c'est la seule façon de savoir où en est sa demande.
+ */
+function routeFor(role: string, providerStatus?: string | null): Route {
+  switch ((role || "").toUpperCase().trim()) {
+    case "DRIVER":
+    case "CONDUCTEUR":
+    case "CHAUFFEUR":
+      return "driver-home";
+    case "AGENCY":
+    case "AGENCE":
+      return "agency-dashboard";
+    case "ADMIN":
+      // La console de validation est le vrai travail de l'admin : c'est l'écran d'accueil.
+      return "admin-providers";
+    case "ARTISAN":
+      return "artisans";
+    default:
+      if (providerStatus && providerStatus !== "APPROVED") return "provider-status";
+      return "home";
+  }
+}
 
 export default function App() {
   const [route, setRoute] = useState<Route>("splash");
@@ -89,6 +118,8 @@ export default function App() {
     try {
       await SecureStore.deleteItemAsync("userRole");
       await SecureStore.deleteItemAsync("userToken");
+      await SecureStore.deleteItemAsync("providerStatus");
+      await SecureStore.deleteItemAsync("providerType");
     } catch (error) {
       console.warn("Erreur lors de la suppression des jetons SecureStore :", error);
     } finally {
@@ -109,28 +140,8 @@ export default function App() {
 
         if (savedRole) {
           const role = savedRole.toUpperCase().trim();
-
-          switch (role) {
-            case "DRIVER":
-            case "CONDUCTEUR":
-            case "CHAUFFEUR":
-              setRoute("driver-home");
-              break;
-            case "AGENCY":
-            case "AGENCE":
-              setRoute("agency-dashboard");
-              break;
-            case "ADMIN":
-              setRoute("admin-dashboard");
-              break;
-            case "ARTISAN":
-              setRoute("artisans");
-              break;
-            case "CLIENT":
-            default:
-              setRoute("home");
-              break;
-          }
+          const savedProviderStatus = await SecureStore.getItemAsync("providerStatus");
+          setRoute(routeFor(role, savedProviderStatus));
         } else {
           setRoute("splash");
         }
@@ -169,28 +180,8 @@ export default function App() {
 
       {route === "otp" && (
         <OtpLoginScreen
-          onVerified={(role?: string | null) => {
-            const normalizedRole = (role || "").toUpperCase().trim();
-            switch (normalizedRole) {
-              case "DRIVER":
-              case "CONDUCTEUR":
-              case "CHAUFFEUR":
-                goTo("driver-home");
-                break;
-              case "AGENCY":
-              case "AGENCE":
-                goTo("agency-dashboard");
-                break;
-              case "ADMIN":
-                goTo("admin-dashboard");
-                break;
-              case "ARTISAN":
-                goTo("artisans");
-                break;
-              default:
-                goTo("home");
-                break;
-            }
+          onVerified={(role?: string | null, provider?: ProviderRef | null) => {
+            goTo(routeFor(role ?? "", provider?.status ?? null));
           }}
           onBack={() => goTo("splash")}
         />
@@ -266,9 +257,32 @@ export default function App() {
         <ProfileScreen
           onNavigateTab={goTo}
           onOpenNotifications={() => goTo("notifications")}
+          onOpenProvider={() => goTo("provider-status")}
           onLogout={handleLogout}
         />
       )}
+
+      {/* Inscription prestataire : wizard de dépôt de dossier (identité, véhicule, photos) */}
+      {route === "provider-onboarding" && (
+        <ProviderOnboardingScreen
+          onSubmitted={() => goTo("provider-status")}
+          onBack={() => goTo("home")}
+        />
+      )}
+
+      {/* Suivi du dossier : statuts, pièces, journal, décision de l'admin */}
+      {route === "provider-status" && (
+        <ProviderStatusScreen
+          onEdit={() => goTo("provider-onboarding")}
+          onEnterWorkspace={(type: ProviderType) =>
+            goTo(type === "AGENCY" ? "agency-dashboard" : "driver-home")
+          }
+          onBack={() => goTo("home")}
+        />
+      )}
+
+      {/* Console administrateur : validation des dossiers prestataires */}
+      {route === "admin-providers" && <AdminProvidersScreen onBack={handleLogout} />}
 
       {route === "driver-home" && <DriverHomeScreen onLogout={handleLogout} />}
 

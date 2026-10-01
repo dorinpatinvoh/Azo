@@ -16,13 +16,14 @@ import * as SecureStore from "expo-secure-store";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
-import { authApi, errorMessage } from "../services/api";
+import { ProviderRef, authApi, errorMessage } from "../services/api";
 
 type Step = "phone" | "code";
 type ProfileRole = "CLIENT" | "DRIVER" | "AGENCY";
 
 type Props = {
-  onVerified: (role: string) => void;
+  // `provider` = le dossier prestataire ouvert par le profil choisi (null si simple client).
+  onVerified: (role: string, provider?: ProviderRef | null) => void;
   onBack: () => void;
 };
 
@@ -62,12 +63,17 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
       await SecureStore.setItemAsync("userToken", response.token);
 
       // Le rôle qui compte est celui du serveur : il est signé dans le jeton JWT.
-      // (Le profil choisi n'est appliqué qu'à la création du compte ; sinon c'est le rôle existant.)
+      // Choisir « Conducteur » ou « Agence » n'accorde plus aucun rôle : cela ouvre un
+      // dossier prestataire qu'un administrateur AZƆ̀ doit valider.
       const role = String(response.user.role || "CLIENT").toUpperCase().trim();
       await SecureStore.setItemAsync("userRole", role);
 
+      const provider = response.provider ?? null;
+      await SecureStore.setItemAsync("providerStatus", provider?.status ?? "");
+      await SecureStore.setItemAsync("providerType", provider?.type ?? "");
+
       // Déclenchement de la redirection dans App.tsx
-      onVerified(role);
+      onVerified(role, provider);
     } catch (e) {
       // Code faux, expiré, ou serveur injoignable : on NE connecte PAS l'utilisateur.
       Alert.alert("Connexion impossible", errorMessage(e));
@@ -135,6 +141,17 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
                   </Text>
                 </Pressable>
               ))}
+            </View>
+          )}
+
+          {step === "phone" && profile !== "CLIENT" && (
+            <View style={styles.profileHint}>
+              <MaterialIcons name="shield" size={16} color={colors.primary} />
+              <Text style={styles.profileHintText}>
+                {profile === "DRIVER"
+                  ? "Conducteur : tu déposeras un dossier (identité, véhicule, photos). Un administrateur AZƆ̀ le valide avant l'ouverture de ton espace."
+                  : "Agence : tu déposeras un dossier (raison sociale, formule, pièces). Un administrateur AZƆ̀ le valide avant la création de ta flotte."}
+              </Text>
             </View>
           )}
 
@@ -303,6 +320,16 @@ const styles = StyleSheet.create({
   },
   codeBoxFilled: { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.surfaceContainerLowest },
   profileRow: { flexDirection: "row", gap: spacing.xs, marginBottom: spacing.sm },
+  profileHint: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    backgroundColor: colors.primaryFixed,
+    borderRadius: radius.lg,
+    padding: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  profileHintText: { ...typography.labelSm, color: colors.onPrimaryFixed, flex: 1, lineHeight: 18 },
   profileChip: {
     flex: 1,
     height: 44,

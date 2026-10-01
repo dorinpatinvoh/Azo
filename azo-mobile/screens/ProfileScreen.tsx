@@ -11,6 +11,7 @@ import { fcfa, DEMO_USER, DEMO_BALANCE, DEMO_RIDES } from "../utils/rideDisplay"
 type Props = {
   onNavigateTab: (tab: ClientTab) => void;
   onOpenNotifications: () => void;
+  onOpenProvider: () => void;
   onLogout: () => void;
 };
 
@@ -25,7 +26,7 @@ function formatPhone(phone: string) {
   return `+229 ${local.replace(/(\d{2})(?=\d)/g, "$1 ").trim()}`;
 }
 
-export default function ProfileScreen({ onNavigateTab, onOpenNotifications, onLogout }: Props) {
+export default function ProfileScreen({ onNavigateTab, onOpenNotifications, onOpenProvider, onLogout }: Props) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [rides, setRides] = useState<Ride[]>([]);
@@ -89,6 +90,13 @@ export default function ProfileScreen({ onNavigateTab, onOpenNotifications, onLo
     { id: "wallet", label: "Mon portefeuille", meta: balance !== null ? fcfa(balance) : undefined, icon: "account-balance-wallet" as const, onPress: () => onNavigateTab("wallet") },
     { id: "courses", label: "Mes courses", meta: `${rides.length}`, icon: "receipt-long" as const, onPress: () => onNavigateTab("courses") },
     { id: "notifs", label: "Notifications", icon: "notifications-none" as const, onPress: onOpenNotifications },
+    {
+      id: "provider",
+      label: user?.role && user.role !== "CLIENT" ? "Mon espace prestataire" : "Devenir chauffeur / agence",
+      meta: user?.role && user.role !== "CLIENT" ? user.role.toLowerCase() : "dossier à valider",
+      icon: "how-to-reg" as const,
+      onPress: onOpenProvider,
+    },
   ];
 
   return (

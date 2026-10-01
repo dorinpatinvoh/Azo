@@ -35,6 +35,13 @@
         {
           "locationAlwaysAndWhenInUsePermission": "AZƆ̀ a besoin de ta position pour te trouver un chauffeur."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "AZƆ̀ utilise tes photos pour joindre tes pièces justificatives à ton dossier prestataire.",
+          "cameraPermission": "AZƆ̀ utilise l'appareil photo pour ton selfie de vérification et tes pièces justificatives."
+        }
       ]
     ]
   }
