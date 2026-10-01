@@ -1,10 +1,15 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
+import { ProvidersService } from "../providers/providers.module";
 
 @Injectable()
 export class AuthService {
-  constructor(private prisma: PrismaService, private jwt: JwtService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwt: JwtService,
+    private providers: ProvidersService
+  ) {}
 
   // Normalise : garde uniquement les chiffres, préfixe +229
   private normalizePhone(phone: string): string {
@@ -38,16 +43,41 @@ export class AuthService {
 
     await this.prisma.otpCode.update({ where: { id: otp.id }, data: { consumed: true } });
 
-    // Crée l'utilisateur (et son portefeuille) à la première connexion
-    const role: "CLIENT" | "DRIVER" | "AGENCY" = profile === "DRIVER" || profile === "AGENCY" ? profile : "CLIENT";
+    // L'inscription crée TOUJOURS un compte client (avec son portefeuille).
+    // Le rôle prestataire ne se choisit plus ici : il est accordé par un administrateur
+    // après examen du dossier (pièces d'identité, permis, RCCM...). Avant cette règle,
+    // n'importe qui pouvait s'auto-attribuer le rôle DRIVER ou AGENCY en un tap.
     let user = await this.prisma.user.findUnique({ where: { phone } });
     if (!user) {
       user = await this.prisma.user.create({
-        data: { phone, role, wallet: { create: {} } },
+        data: { phone, wallet: { create: {} } },
       });
+    }
+    if (user.status === "BLOCKED") {
+      throw new ForbiddenException("Compte suspendu par AZƆ̀ : contacte le support pour le réactiver");
+    }
+
+    // Le profil déclaré à l'inscription ouvre un BROUILLON de dossier prestataire :
+    // rien n'est accordé tant qu'un admin ne l'a pas approuvé.
+    let provider = await this.providers.statusOf(user.id);
+    if (!provider && (profile === "DRIVER" || profile === "AGENCY")) {
+      await this.providers.openDraftOnSignup(user.id, profile);
+      provider = await this.providers.statusOf(user.id);
     }
 
     const token = await this.jwt.signAsync({ sub: user.id, role: user.role, phone: user.phone });
-    return { token, user: { id: user.id, phone: user.phone, role: user.role, fullName: user.fullName } };
+    return {
+      token,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        fullName: user.fullName,
+      },
+      // Sert à l'app pour afficher l'écran « Dossier en cours » (étape 3b) :
+      // status DRAFT = à compléter, SUBMITTED/UNDER_REVIEW = en attente, APPROVED = actif.
+      provider: provider ? { id: provider.id, type: provider.type, status: provider.status } : null,
+    };
   }
 }

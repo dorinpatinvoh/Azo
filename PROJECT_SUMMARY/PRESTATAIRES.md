@@ -7,19 +7,19 @@
 
 ---
 
-## 1. État des lieux (ce qui existe vraiment dans le code)
+## 1. État des lieux (audit du code avant l'étape 3a)
 
 | Élément | État | Détail |
 |---|---|---|
-| Rôle prestataire | ⚠️ **Auto-attribué** | `POST /auth/verify-otp` accepte `profile: DRIVER \| AGENCY` et crée le compte avec ce rôle, signé dans le JWT. Aucun document, aucune validation : n'importe qui devient chauffeur ou agence en 2 taps. |
-| Création d'agence | ⚠️ **Ouverte et gratuite** | `POST /agencies` accessible à tout utilisateur connecté. Les formules `PLANS` (PRO 45 000 F / ARGENT 100 000 F / OR 250 000 F / DIAMANT 500 000 F) sont définies mais **jamais facturées** ; le `fee` n'est utilisé nulle part. |
-| Ajout d'un chauffeur à une agence | ⚠️ **Sans consentement** | `POST /agencies/drivers` passe n'importe quel numéro existant en `role: DRIVER` rattaché à l'agence, sans que la personne l'ait demandé ni accepté. |
-| Statut de compte | ❌ **Inexistant** | `User` n'a pas de champ `status` : impossible de mettre en attente, suspendre ou bloquer un compte. |
-| Artisans | ❌ **Coquille vide** | `ArtisanRequest` = `{ clientId, category, status }`. Pas d'`artisanId`, pas de prix, pas de créneau, pas de statut réel. `GET /artisans` liste les `User` de rôle ARTISAN… qui ne peuvent exister que si quelqu'un les crée à la main en base. Le filtre `?category=` est ignoré. |
-| Coursiers / livraison | ❌ **Côté livreur absent** | `Delivery.courierId` n'est jamais renseigné, aucun endpoint de missions disponibles, aucune vérification de propriété sur les confirmations OTP, rien n'est facturé. |
-| Écran Agence (mobile) | ❌ **Maquette** | `AgencyDashboardScreen.tsx` : 0 appel API, tout est codé en dur (« Transports Sahel & Frères SARL », 4 850 000 F, 18/22 chauffeurs). L'endpoint réel `GET /agencies/dashboard` existe déjà et n'est branché nulle part. |
-| Écran Admin (mobile) | ❌ **Maquette** | `AdminDashboardScreen.tsx` : 0 appel API, 8 boutons de gestion qui ne mènent à rien. `GET /admin/stats` et `GET /admin/users` existent déjà côté backend. |
-| Chauffeur indépendant | ✅ **Réel** | `DriverHomeScreen.tsx` refait à l'étape 2 : GPS, socket, missions en direct, acceptation, paiement wallet, annulation. C'est le seul espace prestataire fonctionnel — et le modèle à répliquer. |
+| Rôle prestataire | ✅ **corrigé en 3a** | Avant : `POST /auth/verify-otp` acceptait `profile: DRIVER \| AGENCY` et créait le compte avec ce rôle signé dans le JWT — n'importe qui devenait chauffeur ou agence en 2 taps. Maintenant l'inscription crée toujours un `CLIENT` et le profil déclaré ouvre un **brouillon de dossier** ; le rôle vient de la décision admin. |
+| Création d'agence | ✅ **corrigé en 3a** | Avant : `POST /agencies` ouvert à tout compte connecté, formule gratuite (les frais `PLANS` jamais facturés). Maintenant la route est supprimée : l'agence naît de l'approbation d'un dossier `AGENCY`, avec la formule du dossier et `activationFee` enregistré (débit à trancher, §11.4). |
+| Ajout d'un chauffeur à une agence | ✅ **corrigé en 3a** | Avant : `POST /agencies/drivers` passait n'importe quel numéro en `DRIVER` rattaché à l'agence, sans consentement ni vérification. Maintenant : dossier `DRIVER` **approuvé** exigé, plafond de formule respecté, chauffeur notifié, rattachement journalisé et réversible (`DELETE /agencies/drivers/:userId`). |
+| Statut de compte | ✅ **corrigé en 3a** | `User.status` (`ACTIVE` / `PENDING_VALIDATION` / `BLOCKED`) ajouté, relu à chaque requête authentifiée : une suspension prend effet immédiatement. |
+| Artisans | ❌ **Coquille vide** | `ArtisanRequest` = `{ clientId, category, status }`. Pas d'`artisanId`, pas de prix, pas de créneau. `GET /artisans` liste les `User` de rôle ARTISAN, que personne ne peut plus s'auto-attribuer. Le filtre `?category=` est ignoré. → étape 3d. |
+| Coursiers / livraison | ❌ **Côté livreur absent** | `Delivery.courierId` n'est jamais renseigné, aucun endpoint de missions disponibles, aucune vérification de propriété sur les confirmations OTP, rien n'est facturé. → étape 3d. |
+| Écran Agence (mobile) | ⚠️ **Backend prêt** | `AgencyDashboardScreen.tsx` : 0 appel API, tout est codé en dur. `GET /agencies/dashboard` renvoie désormais des chiffres réels (CA, commissions, note moyenne, sièges, roster avec état des chauffeurs) — il reste à brancher l'écran. → étape 3d. |
+| Écran Admin (mobile) | ⚠️ **Backend prêt** | `AdminDashboardScreen.tsx` : 0 appel API, 8 boutons qui ne mènent à rien. Les routes de validation existent (`/admin/providers*`) — il reste l'interface. → étape 3c. |
+| Chauffeur indépendant | ✅ **Réel** | `DriverHomeScreen.tsx` (étape 2) : GPS, socket, missions en direct, acceptation, paiement wallet, annulation. C'est la référence pour les autres espaces métier. |
 
 **Conclusion** : il manque la colonne vertébrale (dossier + validation + statut) et 3 espaces
 métiers sur 4. Le chauffeur indépendant sert de référence.
@@ -187,13 +187,11 @@ drapeau « régularisation requise », pour ne pas casser tes comptes de test.
 
 | Méthode | Route | Rôle |
 |---|---|---|
-| `GET` | `/providers/me` | Mon dossier (statut, pièces, timeline, motif de refus) |
-| `POST` | `/providers/applications` | Créer/mettre à jour un brouillon (type, identité, zone, véhicule/métier) |
-| `POST` | `/providers/applications/:id/documents` | Ajouter une pièce (multipart, ≤ 8 Mo, jpg/png/pdf) |
-| `DELETE` | `/providers/documents/:docId` | Retirer une pièce tant que le dossier n'est pas `UNDER_REVIEW` |
-| `POST` | `/providers/applications/:id/submit` | Soumettre → `SUBMITTED` (+ notification admin) |
-| `GET` | `/providers/me/timeline` | Journal visible du prestataire (dates, étapes, messages) |
-| `GET` | `/providers/me/stats` | Gains, missions, note (après approbation) |
+| `GET` | `/providers/me` | ✅ **3a** — Mon dossier : statut, identité, checklist des pièces, champs manquants, délais/SLA, journal (timeline) |
+| `POST` | `/providers/applications` | ✅ **3a** — Créer/mettre à jour un brouillon (type, identité, zone, véhicule/métier, formule) |
+| `POST` | `/providers/applications/:id/documents` | ✅ **3a** (déclaration) — Déclare une pièce (type, expiration). ⏳ **3d** : dépôt du fichier (multipart, ≤ 8 Mo, jpg/png/pdf) |
+| `POST` | `/providers/applications/:id/submit` | ✅ **3a** — Soumettre → `SUBMITTED` (+ notification aux admins) |
+| `GET` | `/providers/me/stats` | ⏳ **3d** — Gains, missions, note (après approbation) |
 
 Règles :
 - `submit` refuse si une pièce obligatoire du type manque (voir §6).
@@ -205,14 +203,14 @@ Règles :
 
 | Méthode | Route | Rôle |
 |---|---|---|
-| `GET` | `/admin/providers?status=SUBMITTED&type=DRIVER&city=Cotonou&page=1` | File d'attente filtrable + tri par ancienneté (SLA) |
-| `GET` | `/admin/providers/:id` | Dossier complet : identité, pièces, timeline, historique client |
-| `POST` | `/admin/providers/:id/start-review` | Verrou optimiste : le dossier passe `UNDER_REVIEW` avec `reviewedById` (évite 2 admins sur le même dossier — même technique que `rides.accept`) |
-| `POST` | `/admin/providers/:id/documents/:docId/decision` | `{ decision: VALID \| INVALID, note?, expiresAt? }` |
-| `POST` | `/admin/providers/:id/decision` | `{ decision: APPROVE \| REJECT \| NEED_INFO \| SUSPEND, reason }` |
-| `POST` | `/admin/providers/:id/reinstate` | Lever une suspension |
-| `GET` | `/admin/providers/stats` | Par statut/type/ville, délai moyen de traitement, dossiers en dépassement de SLA |
-| `GET` | `/admin/audit-log?actorId=&from=&to=` | Journal des décisions admin |
+| `GET` | `/admin/providers?status=SUBMITTED&type=DRIVER&city=Cotonou&page=1` | ✅ **3a** — File d'attente filtrable, paginée, triée par ancienneté (SLA) + compteurs par statut |
+| `GET` | `/admin/providers/stats` | ✅ **3a** — Par statut/type, dossiers en attente, en dépassement de SLA, délai moyen de traitement |
+| `GET` | `/admin/providers/:id` | ✅ **3a** — Dossier complet : identité, pièces, checklist, timeline, compte et wallet du candidat |
+| `POST` | `/admin/providers/:id/start-review` | ✅ **3a** — Verrou optimiste (`updateMany` avec le statut dans le WHERE) : deux admins ne peuvent pas instruire le même dossier |
+| `POST` | `/admin/providers/:id/documents/:docId/decision` | ✅ **3a** — `{ decision: VALID \| INVALID, note?, expiresAt? }`, recalcule le score KYC et notifie |
+| `POST` | `/admin/providers/:id/decision` | ✅ **3a** — `{ decision: APPROVE \| REJECT \| NEED_INFO \| SUSPEND, reason, overrideDocuments? }` |
+| `POST` | `/admin/providers/:id/reinstate` | ✅ **3a** — Lever une suspension |
+| `GET` | `/admin/audit-log?actorId=&from=&to=` | ⏳ **3c** — Le journal existe déjà (`ProviderEvent`) ; il reste la route de consultation globale |
 
 **Effets de `APPROVE` (une seule transaction Prisma)** :
 1. `ProviderProfile.status = APPROVED`, `activatedAt = now()`, `kycScore` recalculé ;
@@ -388,26 +386,33 @@ Même châssis que le chauffeur, adapté à la livraison :
 
 | Étape | Contenu | Livrable vérifiable |
 |---|---|---|
-| **3a — Socle backend** | Migration Prisma (ProviderProfile, Document, Event, UserStatus), module `providers`, endpoints prestataire + admin, seed ADMIN, retrait de l'auto-attribution du rôle | Un dossier peut être créé, soumis, revu, approuvé via HTTP ; le rôle n'est accordé qu'à l'approbation |
-| **3b — Parcours mobile prestataire** | Wizard 5 étapes, upload de pièces, écran « Dossier en cours » avec timeline, gestion NEED_INFO/REJECTED | Sur téléphone : dépôt d'un dossier chauffeur complet et suivi jusqu'à la décision |
-| **3c — Console admin** | File d'attente, fiche dossier, zoom pièces, décisions, audit (mobile **ou** web selon ton choix) | Un admin valide un dossier de bout en bout |
-| **3d — Espaces métier** | Agence réelle (branche l'endpoint existant + flotte par invitation), Artisan (modèle + missions + profil public), Coursier (missions + double OTP) | Chaque prestataire travaille réellement et voit ses gains |
-| **3e — Durcissement** | JWT secret obligatoire, OTP limité, socket authentifié, `.env` hors git, `node_modules` backend hors git | Aucun trou de la liste §9 ne subsiste |
+| **3a — Socle backend** ✅ **fait** | Migration `20261001200000_providers` (ProviderProfile, ProviderDocument, ProviderEvent, UserStatus), module `providers` (11 routes), rôle retiré de l'inscription, lecture du rôle/statut en base à chaque requête JWT, agences verrouillées (création par dossier, rattachement d'un chauffeur approuvé seulement), seed ADMIN + commandes `providers:list` / `providers:approve` | Un dossier peut être créé, soumis, instruit, approuvé/rejeté/suspendu en HTTP ; le rôle n'est accordé qu'à l'approbation ; `tsc` → 0 erreur |
+| **3b — Parcours mobile prestataire** | Wizard 5 étapes, déclaration des pièces, écran « Dossier en cours » avec timeline, gestion NEED_INFO/REJECTED | Sur téléphone : dépôt d'un dossier chauffeur complet et suivi jusqu'à la décision |
+| **3c — Console admin** | File d'attente, fiche dossier, validation des pièces, décisions, audit — **dans l'app mobile** (choix retenu) | Un admin valide un dossier de bout en bout depuis son téléphone |
+| **3d — Espaces métier + fichiers** | Upload réel des pièces (photos/PDF), agence réelle (branche `GET /agencies/dashboard` + flotte), Artisan (modèle + missions + profil public), Coursier (missions + double OTP), débit des frais d'activation | Chaque prestataire travaille réellement et voit ses gains |
+| **3e — Durcissement** | JWT secret obligatoire, OTP limité (6 chiffres, 3 essais), socket authentifié, `.env` et `node_modules/` hors git | Aucun trou de la liste §9 ne subsiste |
 
-3a → 3b → 3c forment un ensemble cohérent (on ne peut pas valider un dossier sans console).
+3b puis 3c forment un ensemble cohérent (on ne peut pas valider un dossier sans console).
 3d et 3e sont indépendants et peuvent être intervertis.
 
 ---
 
-## 11. Questions à trancher avant de coder
+## 11. Décisions retenues (1er octobre 2026)
 
-1. **Périmètre du premier lot** : les 4 types d'un coup, ou chauffeur + agence d'abord
-   (les deux qui ont déjà du code) et artisan/coursier ensuite ?
-2. **Console admin** : app web séparée (recommandé) ou écran dans l'app mobile ?
-3. **Pièces** : upload réel de photos dès 3b, ou d'abord une validation sur informations
-   déclarées (plus rapide, moins sûr) ?
-4. **Stockage des fichiers** : MinIO/`uploads` local pour commencer, ou directement un
-   service cloud (R2/Wasabi) avec tes clés ?
-5. **Facturation des agences** : on débité le fee d'activation du wallet dès 3a, ou on
-   attend le branchement FedaPay/KKiaPay ?
-6. **SLA de validation** : 48 h ouvrées comme proposé, ou autre ?
+1. **Périmètre du premier lot** : chauffeur + agence. `ARTISAN` et `COURIER` existent déjà
+   dans le modèle de données mais le dépôt de dossier est refusé tant que leur espace
+   métier n'existe pas (`ENABLED_PROVIDER_TYPES` dans `providers.module.ts`).
+2. **Console admin** : dans l'app mobile (rôle ADMIN), pas d'app web séparée pour l'instant.
+3. **Pièces justificatives** : le modèle, la checklist et la validation admin sont en place ;
+   une pièce se **déclare** (type + date d'expiration) et le **dépôt du fichier** arrive en 3d.
+   Conséquence assumée : un dossier peut être soumis avec des pièces manquantes, et
+   l'approbation exige alors une dérogation tracée (`overrideDocuments: true`, inscrite au
+   journal). C'est ce qui permet d'activer un compte de test aujourd'hui.
+4. **Frais d'activation des agences** : le montant de la formule est **enregistré**
+   (`Agency.activationFee`, `feePaidAt = null`) mais **pas encore débité** — la décision
+   attend le branchement de la passerelle de paiement. À trancher avant la mise en service.
+5. **Suspension** : `User.status = BLOCKED` coupe l'accès immédiatement (le rôle et le statut
+   sont relus en base à chaque requête authentifiée), sans attendre l'expiration du JWT.
+6. **Comptes existants** : les `DRIVER`/`AGENCY`/`ARTISAN` déjà en base sont régularisés par
+   la migration (dossier `APPROVED`, score KYC 0) — ils apparaissent dans la console admin
+   comme « pièces à fournir ».
