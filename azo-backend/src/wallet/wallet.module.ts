@@ -38,6 +38,31 @@ export class WalletService {
     return updated;
   }
 
+  // Transfert atomique : le client est débité et le chauffeur crédité dans LA MÊME
+  // transaction. Si le solde est insuffisant, rien ne bouge (aucun débit orphelin).
+  async transfer(
+    fromUserId: string,
+    toUserId: string,
+    debitAmount: number,
+    creditAmount: number,
+    fromLabel: string,
+    toLabel: string,
+    meta?: string
+  ) {
+    const from = await this.getWallet(fromUserId);
+    if (from.balance < debitAmount) throw new BadRequestException("Solde insuffisant");
+    const to = await this.getWallet(toUserId);
+
+    await this.prisma.$transaction([
+      this.prisma.wallet.update({ where: { id: from.id }, data: { balance: { decrement: debitAmount } } }),
+      this.prisma.transaction.create({ data: { walletId: from.id, type: "DEBIT", amount: debitAmount, label: fromLabel, meta } }),
+      this.prisma.wallet.update({ where: { id: to.id }, data: { balance: { increment: creditAmount } } }),
+      this.prisma.transaction.create({ data: { walletId: to.id, type: "CREDIT", amount: creditAmount, label: toLabel, meta } }),
+    ]);
+
+    return { debited: debitAmount, credited: creditAmount };
+  }
+
   // Débite le portefeuille — refuse si le solde est insuffisant
   async debit(userId: string, amount: number, label: string, meta?: string) {
     const wallet = await this.getWallet(userId);

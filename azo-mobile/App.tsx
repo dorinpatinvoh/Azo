@@ -270,7 +270,7 @@ export default function App() {
         />
       )}
 
-      {route === "driver-home" && <DriverHomeScreen onBack={handleLogout} />}
+      {route === "driver-home" && <DriverHomeScreen onLogout={handleLogout} />}
 
       {route === "agency-dashboard" && <AgencyDashboardScreen onBack={handleLogout} />}
 

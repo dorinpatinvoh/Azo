@@ -1,135 +1,522 @@
-import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Switch } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  View, Text, StyleSheet, Pressable, ScrollView, Switch,
+  ActivityIndicator, RefreshControl, Alert, Linking,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Location from "expo-location";
+import { io, Socket } from "socket.io-client";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
+import {
+  API_URL, Ride, errorMessage, placesApi, ridesApi, walletApi,
+} from "../services/api";
+import { fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
+import { distanceKm, fmtKm } from "../utils/geo";
 
-const ZONES = [
-  { name: "Dantokpa", level: "+200 FCFA", hot: true },
-  { name: "Cadjehoun", level: "Élevé", hot: true },
-  { name: "Ganhi", level: "Normal", hot: false },
-];
+type Props = { onLogout: () => void };
+type LatLng = { latitude: number; longitude: number };
+type GpsStatus = "idle" | "ok" | "denied" | "error";
 
-type Props = { onBack: () => void };
+const POLL_MS = 8000;
+const OFFLINE_MSG = "Serveur injoignable — vérifie que le backend tourne et que l'IP dans .env est la bonne.";
 
-export default function DriverHomeScreen({ onBack }: Props) {
-  const [online, setOnline] = useState(true);
-  const watchIdRef = useRef<number | null>(null);
-  const socketRef = useRef<any>(null);
+const isToday = (iso: string) => {
+  const d = new Date(iso);
+  const now = new Date();
+  return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+};
+
+export default function DriverHomeScreen({ onLogout }: Props) {
+  const [online, setOnline] = useState(false);
+  const [pending, setPending] = useState<Ride[]>([]);
+  const [history, setHistory] = useState<Ride[]>([]);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [activeRide, setActiveRide] = useState<Ride | null>(null);
+  const [position, setPosition] = useState<LatLng | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<GpsStatus>("idle");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [ridePlaces, setRidePlaces] = useState<{ origin?: string; destination?: string }>({});
+
+  const socketRef = useRef<Socket | null>(null);
+  const activeRideRef = useRef<Ride | null>(null);
+  activeRideRef.current = activeRide;
+
+  /* ---------- Compte : portefeuille + historique + course en cours ---------- */
+  const loadAccount = useCallback(async () => {
+    const [walletRes, historyRes] = await Promise.allSettled([walletApi.get(), ridesApi.history()]);
+    if (historyRes.status === "fulfilled") {
+      setHistory(historyRes.value);
+      setActiveRide((current) =>
+        current ?? historyRes.value.find((r) => r.status === "MATCHED" || r.status === "IN_PROGRESS") ?? null
+      );
+      setOffline(false);
+    } else {
+      setOffline(true);
+    }
+    if (walletRes.status === "fulfilled") setBalance(walletRes.value.balance);
+  }, []);
 
   useEffect(() => {
-    let mounted = true;
+    loadAccount().finally(() => setLoading(false));
+  }, [loadAccount]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([loadAccount(), loadPending().catch(() => undefined)]);
+    setRefreshing(false);
+  }, [loadAccount]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---------- Courses en attente (Zém Radar) ---------- */
+  const loadPending = useCallback(async () => {
+    const rides = await ridesApi.pending();
+    setPending(rides);
+    setOffline(false);
+    return rides;
+  }, []);
+
+  useEffect(() => {
+    if (!online || activeRide) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const rides = await loadPending();
+        if (!cancelled) setPending(rides);
+      } catch {
+        if (!cancelled) setOffline(true);
+      }
+    };
+    tick();
+    const timer = setInterval(tick, POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [online, activeRide, loadPending]);
+
+  /* ---------- Socket temps réel (position du chauffeur -> client) ---------- */
+  useEffect(() => {
     if (!online) {
-      // stop tracking
-      if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
-      if (socketRef.current) socketRef.current.disconnect();
+      socketRef.current?.disconnect();
+      socketRef.current = null;
       return;
     }
+    const socket = io(API_URL, { transports: ["websocket"] });
+    socketRef.current = socket;
+    socket.on("connect_error", () => console.warn("Socket AZƆ̀ injoignable :", API_URL));
+    return () => { socket.disconnect(); socketRef.current = null; };
+  }, [online]);
+
+  const emitPosition = useCallback((coords: LatLng) => {
+    const ride = activeRideRef.current;
+    const socket = socketRef.current;
+    if (ride && socket?.connected) {
+      socket.emit("driver:location", { rideId: ride.id, lat: coords.latitude, lng: coords.longitude });
+    }
+  }, []);
+
+  /* ---------- GPS réel (expo-location) ---------- */
+  useEffect(() => {
+    if (!online) return;
+    let sub: Location.LocationSubscription | null = null;
+    let cancelled = false;
 
     (async () => {
-      const { connectSocket, getSocket } = await import("../src/services/socket");
-      const base = "http://localhost:3000"; // TODO: config
-      const sock = connectSocket(base);
-      socketRef.current = sock;
-
-      // join a generic driver channel if needed
-      // start watching location
-      if (navigator && navigator.geolocation) {
-        const id = navigator.geolocation.watchPosition(
+      try {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (perm.status !== "granted") { setGpsStatus("denied"); return; }
+        setGpsStatus("ok");
+        sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 10000 },
           (pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            sock.emit("driver:location", { rideId: "", lat, lng });
-          },
-          (err) => console.warn("geo err", err),
-          { enableHighAccuracy: true }
+            const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+            setPosition(coords);
+            emitPosition(coords);
+          }
         );
-        watchIdRef.current = id as unknown as number;
+        if (cancelled) sub.remove();
+      } catch (e) {
+        console.warn("GPS error", e);
+        setGpsStatus("error");
       }
     })();
 
-    return () => {
-      mounted = false;
-      if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
-      if (socketRef.current) socketRef.current.disconnect();
-    };
-  }, [online]);
+    return () => { cancelled = true; sub?.remove(); };
+  }, [online, emitPosition]);
+
+  // La position bouge aussi quand le socket vient de se connecter : on renvoie la dernière.
+  useEffect(() => {
+    if (online && activeRide && position) emitPosition(position);
+  }, [online, activeRide?.id, position?.latitude, position?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---------- Adresses lisibles de la course en cours (best effort) ---------- */
+  useEffect(() => {
+    if (!activeRide) { setRidePlaces({}); return; }
+    let cancelled = false;
+    (async () => {
+      const [o, d] = await Promise.allSettled([
+        placesApi.reverseGeocode(activeRide.originLat, activeRide.originLng),
+        placesApi.reverseGeocode(activeRide.destLat, activeRide.destLng),
+      ]);
+      if (cancelled) return;
+      setRidePlaces({
+        origin: o.status === "fulfilled" ? o.value.address : undefined,
+        destination: d.status === "fulfilled" ? d.value.address : undefined,
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [activeRide?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---------- Actions ---------- */
+  const requests = useMemo(() => {
+    const withDistance = pending.map((r) => ({
+      ride: r,
+      km: position ? distanceKm(position, { latitude: r.originLat, longitude: r.originLng }) : null,
+    }));
+    return withDistance.sort((a, b) => (a.km ?? 999) - (b.km ?? 999));
+  }, [pending, position]);
+
+  const stats = useMemo(() => {
+    const done = history.filter((r) => r.status === "COMPLETED");
+    const today = done.filter((r) => isToday(r.createdAt));
+    const gainsToday = today.reduce((sum, r) => sum + (r.price - (r.commission ?? 0)), 0);
+    const rated = done.filter((r) => typeof r.rating === "number");
+    const rating = rated.length
+      ? rated.reduce((sum, r) => sum + (r.rating ?? 0), 0) / rated.length
+      : null;
+    const refused = history.filter((r) => r.status === "CANCELLED" && r.driverId).length;
+    return { gainsToday, countToday: today.length, rating, refused };
+  }, [history]);
+
+  const recent = useMemo(() => history.slice(0, 4), [history]);
+
+  async function handleToggleOnline(value: boolean) {
+    if (!value && activeRide) {
+      Alert.alert("Course en cours", "Termine ou annule ta course avant de passer hors ligne.");
+      return;
+    }
+    if (value && gpsStatus === "denied") {
+      Alert.alert(
+        "Localisation refusée",
+        "Pour recevoir des courses, autorise la localisation dans les réglages du téléphone."
+      );
+    }
+    setOnline(value);
+    if (value) loadPending().catch(() => setOffline(true));
+  }
+
+  async function handleAccept(ride: Ride) {
+    setBusy(true);
+    try {
+      const accepted = await ridesApi.accept(ride.id);
+      setActiveRide(accepted);
+      setPending((list) => list.filter((r) => r.id !== ride.id));
+    } catch (e) {
+      Alert.alert("Impossible d'accepter", errorMessage(e));
+      loadPending().catch(() => undefined); // elle est peut-être déjà prise par un autre
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleStart() {
+    if (!activeRide) return;
+    setBusy(true);
+    try {
+      setActiveRide(await ridesApi.start(activeRide.id));
+    } catch (e) {
+      Alert.alert("Démarrage impossible", errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleComplete() {
+    if (!activeRide) return;
+    const gain = activeRide.price;
+    Alert.alert(
+      "Terminer la course ?",
+      `${fcfa(gain)} seront débités du client et crédités sur ton portefeuille (moins la commission AZƆ̀).`,
+      [
+        { text: "Pas encore", style: "cancel" },
+        {
+          text: "Terminer",
+          onPress: async () => {
+            setBusy(true);
+            try {
+              const done = await ridesApi.complete(activeRide.id);
+              setActiveRide(null);
+              await loadAccount();
+              const net = done.price - (done.commission ?? 0);
+              Alert.alert("Course terminée 🎉", `+${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`);
+            } catch (e) {
+              Alert.alert("Impossible de terminer", errorMessage(e));
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  function handleCancel() {
+    if (!activeRide) return;
+    Alert.alert("Annuler la course ?", "Le client sera prévenu et la course repartira en recherche pour un autre chauffeur.", [
+      { text: "Garder la course", style: "cancel" },
+      {
+        text: "Annuler la course",
+        style: "destructive",
+        onPress: async () => {
+          setBusy(true);
+          try {
+            await ridesApi.cancel(activeRide.id);
+            setActiveRide(null);
+            await loadAccount();
+            loadPending().catch(() => undefined);
+          } catch (e) {
+            Alert.alert("Annulation impossible", errorMessage(e));
+          } finally {
+            setBusy(false);
+          }
+        },
+      },
+    ]);
+  }
+
+  function handleWithdraw() {
+    Alert.alert(
+      "Retrait Mobile Money",
+      "Le retrait automatique vers MTN MoMo / Moov arrive avec le branchement FedaPay. En attendant, ton solde AZƆ̀ Pay est disponible dans l'onglet Portefeuille."
+    );
+  }
+
+  function handleLogout() {
+    Alert.alert("Déconnexion", "Quitter ton espace conducteur ?", [
+      { text: "Annuler", style: "cancel" },
+      { text: "Se déconnecter", style: "destructive", onPress: onLogout },
+    ]);
+  }
+
+  const gpsWarning =
+    gpsStatus === "denied" ? "Localisation refusée : le client ne verra pas ta position."
+    : gpsStatus === "error" ? "GPS indisponible sur ce téléphone."
+    : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.iconButton}>
-          <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />
-        </Pressable>
+        <View style={{ width: 40 }} />
         <Text style={styles.headerTitle}>Zém Radar</Text>
-        <View style={styles.onlineToggle}>
-          <Text style={[styles.onlineLabel, { color: online ? colors.primary : colors.outline }]}>
-            {online ? "En ligne" : "Hors ligne"}
-          </Text>
-          <Switch
-            value={online}
-            onValueChange={setOnline}
-            trackColor={{ true: colors.primaryContainer, false: colors.surfaceContainer }}
-            thumbColor="#fff"
-          />
-        </View>
+        <Pressable onPress={handleLogout} style={styles.iconButton} accessibilityLabel="Se déconnecter">
+          <MaterialIcons name="logout" size={20} color={colors.onSurfaceVariant} />
+        </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      >
         <View style={styles.statusCard}>
           <View style={styles.statusRow}>
-            <View style={styles.motorcycleIcon}>
+            <View style={[styles.motorcycleIcon, { backgroundColor: online ? colors.primary : colors.outline }]}>
               <MaterialIcons name="two-wheeler" size={26} color={colors.onPrimary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.statusTitle}>Prêt à rouler</Text>
-              <Text style={styles.statusSubtitle}>En ligne • Secteur Haie Vive</Text>
+              <Text style={styles.statusTitle}>{online ? "Prêt à rouler" : "Hors ligne"}</Text>
+              <Text style={styles.statusSubtitle}>
+                {online
+                  ? position
+                    ? `GPS actif · ${position.latitude.toFixed(4)}, ${position.longitude.toFixed(4)}`
+                    : "Recherche de ta position…"
+                  : "Passe en ligne pour recevoir des courses"}
+              </Text>
             </View>
+            <Switch
+              value={online}
+              onValueChange={handleToggleOnline}
+              trackColor={{ true: colors.primaryContainer, false: colors.surfaceContainer }}
+              thumbColor="#fff"
+            />
           </View>
+          {gpsWarning && (
+            <View style={styles.warningRow}>
+              <MaterialIcons name="location-off" size={16} color={colors.error} />
+              <Text style={styles.warningText}>{gpsWarning}</Text>
+            </View>
+          )}
         </View>
 
-        <View style={styles.earningsCard}>
-          <Text style={styles.earningsLabel}>Gains du jour · Cotonou</Text>
-          <Text style={styles.earningsValue}>18 450 FCFA</Text>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: "84%" }]} />
+        {offline && (
+          <View style={styles.offlineBanner}>
+            <MaterialIcons name="cloud-off" size={16} color={colors.tertiary} />
+            <Text style={styles.offlineText}>{OFFLINE_MSG}</Text>
           </View>
-          <Text style={styles.progressLabel}>Objectif : 18 450 / 22 000 FCFA · 84%</Text>
+        )}
+
+        {/* --- Course en cours --- */}
+        {activeRide && (
+          <View style={styles.activeCard}>
+            <View style={styles.activeHeader}>
+              <Text style={styles.activeTitle}>
+                {activeRide.status === "MATCHED" ? "Course acceptée" : "Course en cours"}
+              </Text>
+              <View style={styles.pricePill}>
+                <Text style={styles.pricePillText}>{fcfa(activeRide.price)}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.activeVehicle}>
+              {VEHICLE_LABEL[activeRide.vehicleType]} · #{activeRide.id.slice(0, 6)}
+            </Text>
+
+            <View style={styles.routeRow}>
+              <MaterialIcons name="trip-origin" size={16} color={colors.primary} />
+              <Text style={styles.routeText} numberOfLines={1}>
+                {ridePlaces.origin ?? `${activeRide.originLat.toFixed(4)}, ${activeRide.originLng.toFixed(4)}`}
+              </Text>
+            </View>
+            <View style={styles.routeRow}>
+              <MaterialIcons name="place" size={16} color={colors.secondary} />
+              <Text style={styles.routeText} numberOfLines={1}>
+                {ridePlaces.destination ?? `${activeRide.destLat.toFixed(4)}, ${activeRide.destLng.toFixed(4)}`}
+              </Text>
+            </View>
+
+            {(activeRide.client?.fullName || activeRide.client?.phone) && (
+              <View style={styles.clientRow}>
+                <View style={styles.avatar}>
+                  <MaterialIcons name="person" size={22} color={colors.onSurfaceVariant} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.clientName}>{activeRide.client?.fullName ?? "Client AZƆ̀"}</Text>
+                  <Text style={styles.clientMeta}>Client · paiement AZƆ̀ Pay</Text>
+                </View>
+                {!!activeRide.client?.phone && (
+                  <Pressable
+                    style={styles.callBtn}
+                    onPress={() => Linking.openURL(`tel:${activeRide.client!.phone}`)}
+                    accessibilityLabel="Appeler le client"
+                  >
+                    <MaterialIcons name="call" size={20} color="#fff" />
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            {busy ? (
+              <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.sm }} />
+            ) : activeRide.status === "MATCHED" ? (
+              <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
+                <Pressable style={styles.primaryBtn} onPress={handleStart}>
+                  <MaterialIcons name="play-arrow" size={20} color="#fff" />
+                  <Text style={styles.primaryBtnText}>Démarrer la course</Text>
+                </Pressable>
+                <Pressable style={styles.ghostBtn} onPress={handleCancel}>
+                  <Text style={styles.ghostBtnText}>Annuler la course</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable style={styles.primaryBtn} onPress={handleComplete}>
+                <MaterialIcons name="check-circle" size={20} color="#fff" />
+                <Text style={styles.primaryBtnText}>Terminer et encaisser</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {/* --- Gains --- */}
+        <View style={styles.earningsCard}>
+          <Text style={styles.earningsLabel}>Gains du jour</Text>
+          <Text style={styles.earningsValue}>{fcfa(stats.gainsToday)}</Text>
+          <Text style={styles.progressLabel}>
+            {stats.countToday} course{stats.countToday > 1 ? "s" : ""} terminée{stats.countToday > 1 ? "s" : ""}
+            {balance !== null ? ` · solde AZƆ̀ Pay : ${fcfa(balance)}` : ""}
+          </Text>
         </View>
 
         <View style={styles.statsGrid}>
-          <StatTile icon="local-taxi" value="12" label="Courses" />
-          <StatTile icon="thumb-up" value="98%" label="Acceptation" />
-          <StatTile icon="star" value="4.95" label="Évaluation" />
+          <StatTile icon="local-taxi" value={String(stats.countToday)} label="Courses du jour" />
+          <StatTile icon="star" value={stats.rating ? stats.rating.toFixed(2) : "—"} label="Note moyenne" />
+          <StatTile icon="cancel" value={String(stats.refused)} label="Annulées" />
         </View>
 
-        <Pressable style={styles.withdrawBtn}>
+        <Pressable style={styles.withdrawBtn} onPress={handleWithdraw}>
           <MaterialIcons name="bolt" size={18} color={colors.onPrimary} />
-          <Text style={styles.withdrawText}>Retrait Express MoMo (+229 97 •• 42)</Text>
+          <Text style={styles.withdrawText}>Retrait Express MoMo</Text>
         </Pressable>
 
-        <Text style={styles.sectionTitle}>Radar affluence urbaine</Text>
-        <View style={{ gap: spacing.sm }}>
-          {ZONES.map((z) => (
-            <View key={z.name} style={styles.zoneRow}>
-              <View style={styles.zoneLeft}>
-                {z.hot && <MaterialIcons name="local-fire-department" size={16} color={colors.secondary} />}
-                <Text style={styles.zoneName}>{z.name}</Text>
-              </View>
-              <Text style={[styles.zoneLevel, z.hot && { color: colors.secondary, fontWeight: "700" }]}>
-                {z.level}
-              </Text>
+        {/* --- Demandes proches --- */}
+        {!activeRide && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Demandes proches</Text>
+              {online && pending.length > 0 && (
+                <Text style={styles.sectionBadge}>{pending.length}</Text>
+              )}
             </View>
-          ))}
-        </View>
 
-        <Text style={styles.sectionTitle}>Activité récente</Text>
-        <View style={styles.tripRow}>
-          <MaterialIcons name="two-wheeler" size={18} color={colors.onSurfaceVariant} />
-          <Text style={styles.tripText}>Haie Vive → Dantokpa · 10:42</Text>
-          <Text style={styles.tripAmount}>+650 F</Text>
-        </View>
+            {!online ? (
+              <Text style={styles.emptyText}>Passe en ligne pour voir les demandes autour de toi.</Text>
+            ) : loading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.md }} />
+            ) : requests.length === 0 ? (
+              <Text style={styles.emptyText}>
+                Aucune demande pour l'instant. Reste en ligne : la liste se met à jour toute seule.
+              </Text>
+            ) : (
+              <View style={{ gap: spacing.sm }}>
+                {requests.map(({ ride, km }) => (
+                  <View key={ride.id} style={styles.requestCard}>
+                    <View style={styles.requestIcon}>
+                      <MaterialIcons name={VEHICLE_ICON[ride.vehicleType]} size={22} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.requestTitle}>
+                        {VEHICLE_LABEL[ride.vehicleType]} · {fcfa(ride.price)}
+                      </Text>
+                      <Text style={styles.requestMeta}>
+                        {km !== null ? `${fmtKm(km)} de toi · ` : ""}
+                        demandée {relativeDay(ride.createdAt).toLowerCase()}
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={[styles.acceptBtn, busy && styles.acceptBtnDisabled]}
+                      onPress={() => handleAccept(ride)}
+                      disabled={busy}
+                    >
+                      <Text style={styles.acceptBtnText}>Accepter</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+
+        {/* --- Activité récente --- */}
+        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>Activité récente</Text>
+        {recent.length === 0 ? (
+          <Text style={styles.emptyText}>Tes courses terminées apparaîtront ici.</Text>
+        ) : (
+          <View style={{ gap: spacing.sm }}>
+            {recent.map((r) => (
+              <View key={r.id} style={styles.tripRow}>
+                <MaterialIcons name={VEHICLE_ICON[r.vehicleType]} size={18} color={colors.onSurfaceVariant} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tripText}>
+                    Course #{r.id.slice(0, 6)} · {relativeDay(r.createdAt)}
+                  </Text>
+                  <Text style={styles.tripMeta}>{r.status === "COMPLETED" ? "Payée" : r.status === "CANCELLED" ? "Annulée" : "En cours"}</Text>
+                </View>
+                <Text style={[styles.tripAmount, r.status !== "COMPLETED" && { color: colors.onSurfaceVariant }]}>
+                  {r.status === "COMPLETED" ? `+${fcfa(r.price - (r.commission ?? 0))}` : "—"}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -150,32 +537,56 @@ const styles = StyleSheet.create({
   header: { height: 56, paddingHorizontal: spacing.md, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   iconButton: { width: 40, height: 40, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
   headerTitle: { ...typography.headlineSm, color: colors.onSurface },
-  onlineToggle: { flexDirection: "row", alignItems: "center", gap: 6 },
-  onlineLabel: { ...typography.labelSm, fontWeight: "700" },
   scroll: { padding: spacing.md, paddingBottom: spacing.xl },
   statusCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   statusRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  motorcycleIcon: { width: 48, height: 48, borderRadius: radius.full, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  motorcycleIcon: { width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
   statusTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
   statusSubtitle: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  warningRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.sm, backgroundColor: colors.errorContainer, borderRadius: radius.md, padding: spacing.sm },
+  warningText: { ...typography.labelSm, color: colors.error, flex: 1 },
+  offlineBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.tertiaryFixed, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.md },
+  offlineText: { ...typography.labelSm, color: colors.onTertiaryFixed, flex: 1 },
+  activeCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1.5, borderColor: colors.primary, gap: 6 },
+  activeHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  activeTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  activeVehicle: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  pricePill: { backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 4 },
+  pricePillText: { ...typography.labelMd, color: colors.onPrimaryFixed, fontWeight: "800" },
+  routeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
+  routeText: { ...typography.bodySm, color: colors.onSurface, flex: 1 },
+  clientRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, padding: spacing.sm, marginTop: spacing.sm },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceContainerLow, alignItems: "center", justifyContent: "center" },
+  clientName: { ...typography.bodyMd, color: colors.onSurface, fontWeight: "700" },
+  clientMeta: { ...typography.labelSm, color: colors.onSurfaceVariant },
+  callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  primaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.primary, borderRadius: radius.full, paddingVertical: 14, marginTop: spacing.sm },
+  primaryBtnText: { ...typography.labelMd, color: "#fff", fontWeight: "800", fontSize: 15 },
+  ghostBtn: { alignItems: "center", paddingVertical: 10 },
+  ghostBtnText: { ...typography.labelMd, color: colors.error, fontWeight: "700" },
   earningsCard: { backgroundColor: colors.primaryFixed, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md },
   earningsLabel: { ...typography.labelMd, color: colors.onPrimaryFixed },
-  earningsValue: { ...typography.displayLgMobile, color: colors.onPrimaryFixed, marginTop: 2, marginBottom: spacing.sm },
-  progressTrack: { height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.5)", overflow: "hidden" },
-  progressFill: { height: "100%", backgroundColor: colors.primary },
-  progressLabel: { ...typography.labelSm, color: colors.onPrimaryFixed, marginTop: 6 },
+  earningsValue: { ...typography.displayLgMobile, color: colors.onPrimaryFixed, marginTop: 2 },
+  progressLabel: { ...typography.labelSm, color: colors.onPrimaryFixed, marginTop: 4 },
   statsGrid: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
   statTile: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.sm, alignItems: "center", gap: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   statValue: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
-  statLabel: { ...typography.labelSm, color: colors.onSurfaceVariant },
+  statLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, textAlign: "center" },
   withdrawBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.secondary, borderRadius: radius.md, paddingVertical: 12, marginBottom: spacing.md },
   withdrawText: { ...typography.labelMd, color: colors.onSecondary, fontWeight: "700" },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: spacing.sm, marginTop: spacing.sm },
   sectionTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "700", marginBottom: spacing.sm, marginTop: spacing.sm },
-  zoneRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  zoneLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
-  zoneName: { ...typography.labelMd, color: colors.onSurface, fontWeight: "600" },
-  zoneLevel: { ...typography.labelMd, color: colors.onSurfaceVariant },
+  sectionBadge: { ...typography.labelSm, color: colors.onPrimary, backgroundColor: colors.secondary, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2, fontWeight: "800", overflow: "hidden" },
+  emptyText: { ...typography.bodySm, color: colors.onSurfaceVariant, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, padding: spacing.md },
+  requestCard: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  requestIcon: { width: 44, height: 44, borderRadius: radius.full, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
+  requestTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
+  requestMeta: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  acceptBtn: { backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: 16, paddingVertical: 10 },
+  acceptBtnDisabled: { opacity: 0.5 },
+  acceptBtnText: { ...typography.labelMd, color: "#fff", fontWeight: "800" },
   tripRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.md, padding: spacing.md },
-  tripText: { ...typography.labelMd, color: colors.onSurface, flex: 1 },
+  tripText: { ...typography.labelMd, color: colors.onSurface },
+  tripMeta: { ...typography.labelSm, color: colors.onSurfaceVariant },
   tripAmount: { ...typography.labelMd, color: colors.primary, fontWeight: "800" },
 });

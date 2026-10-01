@@ -68,6 +68,13 @@ export class RidesController {
     return this.rides.rate(id, user.userId, dto.stars);
   }
 
+  // POST /rides/:id/cancel -> ouvert au client concerné ET au chauffeur assigné
+  // (le service vérifie qui a le droit d'annuler, et à quel moment).
+  @Post(":id/cancel")
+  cancel(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.cancel(id, user.userId);
+  }
+
   // GET /rides/:id  -> déclaré en DERNIER pour ne pas masquer /history et /pending
   @Get(":id")
   findOne(@Param("id") id: string, @CurrentUser() user) {
