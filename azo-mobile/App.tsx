@@ -72,19 +72,71 @@ function routeFor(
   }
 }
 
+type ErrorBoundaryState = { hasError: boolean; errorText: string };
+
+class RootErrorBoundary extends React.Component<
+  { children: React.ReactNode; onReset: () => void },
+  ErrorBoundaryState
+> {
+  state: ErrorBoundaryState = { hasError: false, errorText: "" };
+
+  static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
+    return {
+      hasError: true,
+      errorText: error instanceof Error ? error.message : "Erreur inattendue",
+    };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: colors.onSurface, marginBottom: 8 }}>
+            Oups, un affichage a été interrompu
+          </Text>
+          <Text style={{ fontSize: 13, color: colors.onSurfaceVariant, textAlign: "center", paddingHorizontal: 24, marginBottom: 16 }}>
+            {this.state.errorText}
+          </Text>
+          <Pressable
+            onPress={() => {
+              this.setState({ hasError: false, errorText: "" });
+              this.props.onReset();
+            }}
+            style={{
+              backgroundColor: colors.primary,
+              paddingHorizontal: 20,
+              paddingVertical: 12,
+              borderRadius: radius.full,
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "700" }}>Revenir à l'accueil</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [route, setRoute] = useState<Route>("splash");
   const [rideId, setRideId] = useState<string | undefined>();
   const [rideLabel, setRideLabel] = useState<string | undefined>();
   const [rideVehicle, setRideVehicle] = useState<string>("zem-express");
   const [isAuthRestoring, setIsAuthRestoring] = useState<boolean>(true);
+  const [forceReady, setForceReady] = useState<boolean>(false);
 
-  const [pjsLoaded] = usePJS({
+  const [pjsLoaded, pjsError] = usePJS({
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
     PlusJakartaSans_800ExtraBold,
   });
-  const [interLoaded] = useInter({ Inter_400Regular });
+  const [interLoaded, interError] = useInter({ Inter_400Regular });
+
+  useEffect(() => {
+    const t = setTimeout(() => setForceReady(true), 2500);
+    return () => clearTimeout(t);
+  }, []);
 
   const goTo = useCallback((r: Route) => {
     setRoute(r);
@@ -175,7 +227,9 @@ export default function App() {
     };
   }, []);
 
-  if (!pjsLoaded || !interLoaded || isAuthRestoring) {
+  const fontsReady = (pjsLoaded || !!pjsError) && (interLoaded || !!interError);
+
+  if ((!fontsReady || isAuthRestoring) && !forceReady) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator color={colors.primary} size="large" />
@@ -185,7 +239,8 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
+      <RootErrorBoundary onReset={() => goTo("splash")}>
+        <StatusBar style="dark" />
 
       {route === "splash" && <SplashScreen onStart={() => goTo("otp")} />}
 
@@ -334,6 +389,7 @@ export default function App() {
       {route === "notifications" && <NotificationsScreen onBack={() => goTo("home")} />}
 
       {route === "menu" && <DevMenuScreen onSelect={(id) => goTo(id)} />}
+      </RootErrorBoundary>
     </SafeAreaProvider>
   );
 }

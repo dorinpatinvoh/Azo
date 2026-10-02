@@ -1,11 +1,17 @@
 {
   "expo": {
-    "name": "AZƆ̀",
+    "name": "AZO",
     "slug": "azo-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "bj.azo.app"
@@ -19,31 +25,25 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyBnn5vGIFOomwLCjZhJbZ6pV9zMo-hHKzg"
-        }
-      }
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-status-bar",
       "expo-font",
       "expo-secure-store",
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "AZƆ̀ a besoin de ta position pour te trouver un chauffeur."
+          "locationAlwaysAndWhenInUsePermission": "AZO a besoin de ta position pour te trouver un chauffeur."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "AZƆ̀ utilise tes photos pour joindre tes pièces justificatives à ton dossier prestataire.",
-          "cameraPermission": "AZƆ̀ utilise l'appareil photo pour ton selfie de vérification et tes pièces justificatives."
+          "photosPermission": "AZO utilise tes photos pour joindre tes pieces justificatives a ton dossier prestataire.",
+          "cameraPermission": "AZO utilise l'appareil photo pour ton selfie de verification et tes pieces justificatives."
         }
       ]
     ]

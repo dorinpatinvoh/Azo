@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Linking, Alert } from "react-native";
-import MapView, { Marker, Polyline, UrlTile } from "react-native-maps";
+import OSMMapView, { OSMMarker } from "../components/OSMMapView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { io } from "socket.io-client";
@@ -46,7 +46,6 @@ function Pulse() {
 
 export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, onFinish }: Props) {
   const insets = useSafeAreaInsets();
-  const mapRef = useRef<MapView>(null);
   const [ride, setRide] = useState<Ride | null>(null);
   const [driverPos, setDriverPos] = useState<LatLng | null>(null);
   const [failures, setFailures] = useState(0);
@@ -101,12 +100,21 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
     return Math.max(1, Math.ceil(((distanceKm(driverPos, target) * 1.3) / 25) * 60));
   }, [driverPos, target?.latitude, target?.longitude, ride?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* Caméra : cadre chauffeur + cible (ou départ + destination) */
-  useEffect(() => {
-    if (!origin || !destination || !target) return;
-    const pts = driverPos ? [driverPos, target] : [origin, destination];
-    mapRef.current?.fitToCoordinates(pts, { edgePadding: { top: 120, right: 70, bottom: 360, left: 70 }, animated: true });
-  }, [driverPos?.latitude, driverPos?.longitude, target?.latitude, target?.longitude, !!ride]); // eslint-disable-line react-hooks/exhaustive-deps
+  const osmMarkers = useMemo<OSMMarker[]>(() => {
+    if (!origin || !destination) return [];
+    const list: OSMMarker[] = [
+      { coordinate: origin, title: "Départ", color: "green" },
+      { coordinate: destination, title: "Destination", color: "red" },
+    ];
+    if (driverPos) {
+      list.push({
+        coordinate: driverPos,
+        title: ride?.driver?.fullName ?? "Chauffeur",
+        color: "blue",
+      });
+    }
+    return list;
+  }, [origin, destination, driverPos, ride?.driver?.fullName]);
 
   if (!ride || !origin || !destination) {
     return (
@@ -168,34 +176,11 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   return (
     <View style={styles.root}>
-      <MapView
-        ref={mapRef}
-        style={StyleSheet.absoluteFill}
-        initialRegion={{ ...origin, latitudeDelta: 0.03, longitudeDelta: 0.03 }}
-        mapType="none" // <-- CRUCIAL : Désactive le moteur Google/Apple en dessous
-      >
-        {/* Les tuiles gratuites d'OpenStreetMap */}
-        <UrlTile
-          urlTemplate="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maximumZ={19}
-          flipY={false}
-        />
-
-        <Marker coordinate={origin} title="Départ" pinColor="green" />
-        <Marker coordinate={destination} title="Destination" pinColor="red" />
-        
-        {driverPos && target && (
-          <Polyline coordinates={[driverPos, target]} strokeColor={colors.primary} strokeWidth={4} />
-        )}
-        
-        {driverPos && (
-          <Marker coordinate={driverPos} anchor={{ x: 0.5, y: 0.5 }} title={ride.driver?.fullName ?? "Chauffeur"}>
-            <View style={styles.driverMarker}>
-              <MaterialIcons name={ride.vehicleType === "CAR" ? "directions-car" : "electric-moped"} size={20} color="#fff" />
-            </View>
-          </Marker>
-        )}
-      </MapView>
+      <OSMMapView
+        center={driverPos || origin}
+        markers={osmMarkers}
+        polyline={driverPos && target ? [driverPos, target] : [origin, destination]}
+      />
 
       {failures >= 2 && (
         <View style={[styles.offline, { top: insets.top + 8 }]}>
