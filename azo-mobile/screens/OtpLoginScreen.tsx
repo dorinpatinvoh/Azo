@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
+import Svg, { Rect } from "react-native-svg";
 import * as SecureStore from "expo-secure-store";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
@@ -23,72 +24,77 @@ import {
   ProfileRole,
   ProviderRef,
   authApi,
+  errorMessage,
   getApiUrl,
   setApiUrl,
 } from "../services/api";
 import {
-  BENIN_LOCAL_PHONE_LENGTH,
-  formatBeninLocalInput,
+  BENIN_PHONE_LENGTH,
+  cleanBeninDigits,
+  formatBeninPhoneInput,
   isValidBeninPhone,
   toBeninE164,
 } from "../utils/phone";
 
+type Step = "phone" | "code";
+
 type Props = {
-  onVerified: (role?: string | null, provider?: ProviderRef | null) => void;
+  onVerified: (role: string, provider?: ProviderRef | null) => void;
   onBack: () => void;
 };
 
-// Profils AZƆ̀ disponibles à l'inscription (aucun Artisan)
-const ROLES: {
+const PROFILES: {
   id: ProfileRole;
   label: string;
-  hint: string;
   icon: keyof typeof MaterialIcons.glyphMap;
   demoPhone: string;
 }[] = [
-  { id: "CLIENT", label: "Client", hint: "Courses & livraisons", icon: "person", demoPhone: "0197000042" },
-  { id: "DRIVER", label: "Zem / Chauffeur", hint: "Zem indépendant ou voiture", icon: "two-wheeler", demoPhone: "0197000001" },
-  { id: "COURIER", label: "Coursier / Livreur", hint: "Express, personnel & colis", icon: "local-shipping", demoPhone: "0197000004" },
-  { id: "AGENCY", label: "Agence", hint: "Gestion de flotte", icon: "apartment", demoPhone: "0197000010" },
+  { id: "CLIENT", label: "Client", icon: "person", demoPhone: "01 97 00 00 42" },
+  { id: "DRIVER", label: "Zem / Chauffeur", icon: "two-wheeler", demoPhone: "01 97 00 00 01" },
+  { id: "COURIER", label: "Coursier / Livreur", icon: "local-shipping", demoPhone: "01 97 00 00 04" },
+  { id: "AGENCY", label: "Agence", icon: "apartment", demoPhone: "01 97 00 00 10" },
 ];
 
-const DEMO_PHONES = new Set(["0197000042", "0197000001", "0197000004", "0197000010", "0197000000"]);
+const DEMO_DIGITS = new Set([
+  "",
+  "0197000042",
+  "0197000001",
+  "0197000004",
+  "0197000010",
+  "0197000000",
+]);
 
 const SMS_BANNER_DURATION_SEC = 5;
 
 export default function OtpLoginScreen({ onVerified, onBack }: Props) {
-  const [phoneDigits, setPhoneDigits] = useState("0197000042");
-  const [role, setRole] = useState<ProfileRole>("CLIENT");
-  const [step, setStep] = useState<"phone" | "otp">("phone");
-  const [otp, setOtp] = useState(["", "", "", ""]);
-  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<Step>("phone");
+  const [phone, setPhone] = useState("01 97 00 00 42");
+  const [code, setCode] = useState(["", "", "", ""]);
+  const [sending, setSending] = useState(false);
+  const [profile, setProfile] = useState<ProfileRole>("CLIENT");
+  const inputsRef = useRef<Array<TextInput | null>>([]);
 
   // Bannière SMS simulée (affichée 5 secondes puis disparaît automatiquement)
   const [simulatedOtp, setSimulatedOtp] = useState<string | null>(null);
   const [bannerSecondsLeft, setBannerSecondsLeft] = useState<number>(0);
-  const bannerAnim = useRef(new Animated.Value(-120)).current;
+  const bannerAnim = useRef(new Animated.Value(-140)).current;
 
-  // Configuration dynamique de l'URL du serveur pour tester l'APK sans recompiler
+  // Modale discrète pour configurer l'URL du serveur (Render / IP locale)
   const [serverModalOpen, setServerModalOpen] = useState(false);
   const [serverUrlDraft, setServerUrlDraft] = useState(getApiUrl());
 
-  const otpRefs = [
-    useRef<TextInput>(null),
-    useRef<TextInput>(null),
-    useRef<TextInput>(null),
-    useRef<TextInput>(null),
-  ];
+  const digits = cleanBeninDigits(phone);
+  const isPhoneValid = isValidBeninPhone(digits);
 
-  // Affiche la notification SMS pendant 5 secondes puis la cache
-  function triggerSimulatedSmsBanner(code: string) {
-    setSimulatedOtp(code);
+  function triggerSimulatedSmsBanner(otpCode: string) {
+    setSimulatedOtp(otpCode);
     setBannerSecondsLeft(SMS_BANNER_DURATION_SEC);
     Animated.spring(bannerAnim, {
       toValue: 0,
       useNativeDriver: true,
-      Speed: 14,
+      speed: 14,
       bounciness: 6,
-    } as any).start();
+    }).start();
   }
 
   useEffect(() => {
@@ -98,7 +104,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
         if (prev <= 1) {
           clearInterval(interval);
           Animated.timing(bannerAnim, {
-            toValue: -140,
+            toValue: -150,
             duration: 250,
             useNativeDriver: true,
           }).start(() => setSimulatedOtp(null));
@@ -110,59 +116,57 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
     return () => clearInterval(interval);
   }, [simulatedOtp, bannerAnim]);
 
-  const handlePhoneChange = (text: string) => {
-    const digits = text.replace(/\D/g, "").slice(0, BENIN_LOCAL_PHONE_LENGTH);
-    setPhoneDigits(digits);
-  };
+  function handlePhoneChange(raw: string) {
+    setPhone(formatBeninPhoneInput(raw));
+  }
 
-  const handleRequestOtp = async () => {
-    if (!isValidBeninPhone(phoneDigits)) {
+  function handleSelectProfile(p: (typeof PROFILES)[number]) {
+    setProfile(p.id);
+    if (DEMO_DIGITS.has(digits)) {
+      setPhone(p.demoPhone);
+    }
+  }
+
+  async function handleSendCode() {
+    if (!isPhoneValid) {
       Alert.alert(
         "Numéro à 10 chiffres requis",
-        "Au Bénin (+229), saisis les 10 chiffres de ton numéro en commençant par 01 (ex. 01 97 00 00 42)."
+        "Entre les 10 chiffres commençant par 01 (ex. 01 97 00 00 42)."
       );
       return;
     }
-
-    setLoading(true);
+    setSending(true);
     try {
-      const normalized = toBeninE164(phoneDigits);
+      const normalized = toBeninE164(digits);
       const res = await authApi.requestOtp(normalized);
-      setStep("otp");
-      setOtp(["", "", "", ""]);
+      setCode(["", "", "", ""]);
+      setStep("code");
       if (res?.otpCode) {
         triggerSimulatedSmsBanner(res.otpCode);
       }
-      setTimeout(() => otpRefs[0].current?.focus(), 150);
-    } catch (error: any) {
-      Alert.alert(
-        "Connexion au serveur",
-        error.message ||
-          "Impossible de contacter le serveur. Touche « Serveur » en haut à droite pour vérifier l'adresse IP du backend."
-      );
+      setTimeout(() => inputsRef.current[0]?.focus(), 150);
+    } catch (e) {
+      Alert.alert("Envoi impossible", errorMessage(e));
     } finally {
-      setLoading(false);
+      setSending(false);
     }
-  };
+  }
 
-  const handleVerifyOtp = async () => {
-    const code = otp.join("");
-    if (code.length < 4) {
-      Alert.alert("Code incomplet", "Saisis les 4 chiffres du code reçu par SMS.");
-      return;
-    }
+  async function handleVerify() {
+    const fullCode = code.join("");
+    if (fullCode.length < 4) return;
+    setSending(true);
 
-    setLoading(true);
     try {
-      const normalized = toBeninE164(phoneDigits);
-      const res = await authApi.verifyOtp(normalized, code, role);
-      const resolvedRole = (res?.user?.role || "CLIENT").toUpperCase().trim();
-      const provider = res?.provider ?? null;
+      const normalized = toBeninE164(digits);
+      const response = await authApi.verifyOtp(normalized, fullCode, profile);
 
-      await SecureStore.setItemAsync("userRole", resolvedRole);
-      if (res?.token) {
-        await SecureStore.setItemAsync("userToken", res.token);
-      }
+      await SecureStore.setItemAsync("userToken", response.token);
+
+      const role = String(response.user.role || "CLIENT").toUpperCase().trim();
+      await SecureStore.setItemAsync("userRole", role);
+
+      const provider = response.provider ?? null;
       if (provider?.status) {
         await SecureStore.setItemAsync("providerStatus", provider.status);
         await SecureStore.setItemAsync("providerType", provider.type);
@@ -171,30 +175,27 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
         await SecureStore.deleteItemAsync("providerType");
       }
 
-      onVerified(resolvedRole, provider);
-    } catch (error: any) {
-      Alert.alert("Erreur de vérification", error.message || "Code OTP invalide ou expiré.");
+      onVerified(role, provider);
+    } catch (e) {
+      Alert.alert("Connexion impossible", errorMessage(e));
     } finally {
-      setLoading(false);
+      setSending(false);
     }
-  };
+  }
 
-  const handleOtpChange = (val: string, idx: number) => {
-    const digit = val.replace(/\D/g, "").slice(-1);
-    const next = [...otp];
-    next[idx] = digit;
-    setOtp(next);
-    if (digit && idx < 3) {
-      otpRefs[idx + 1].current?.focus();
-    }
-  };
+  function updateDigit(value: string, index: number) {
+    const next = [...code];
+    next[index] = value.replace(/\D/g, "").slice(-1);
+    setCode(next);
+    if (value && index < 3) inputsRef.current[index + 1]?.focus();
+  }
 
-  const fillOtpFromBanner = (code: string) => {
-    const chars = code.slice(0, 4).split("");
+  function fillOtpFromBanner(otpCode: string) {
+    const chars = otpCode.slice(0, 4).split("");
     if (chars.length === 4) {
-      setOtp(chars);
+      setCode(chars);
     }
-  };
+  }
 
   async function saveCustomServerUrl() {
     const trimmed = serverUrlDraft.trim();
@@ -210,12 +211,12 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
     }
     setServerUrlDraft(getApiUrl());
     setServerModalOpen(false);
-    Alert.alert("Serveur mis à jour", `L'application communique maintenant avec :\n${getApiUrl()}`);
+    Alert.alert("Serveur configuré", `Connecté à :\n${getApiUrl()}`);
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* Bannière SMS simulée (visible pendant 5 secondes puis disparaît toute seule) */}
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+      {/* Bannière SMS simulée : apparaît 5 secondes puis disparaît automatiquement */}
       {simulatedOtp ? (
         <Animated.View
           style={[
@@ -238,162 +239,183 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
                 </View>
               </View>
               <Text style={styles.smsBody}>
-                Votre code de vérification AZƆ̀ est :{" "}
+                Code de vérification AZƆ̀ :{" "}
                 <Text style={styles.smsCodeHighlight}>{simulatedOtp}</Text>
               </Text>
-              <Text style={styles.smsTapHint}>Touche cette notification pour remplir automatiquement</Text>
+              <Text style={styles.smsTapHint}>Touche pour remplir automatiquement</Text>
             </View>
           </Pressable>
         </Animated.View>
       ) : null}
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.header}>
-          <Pressable
-            onPress={step === "otp" ? () => setStep("phone") : onBack}
-            style={styles.backBtn}
-          >
-            <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />
-          </Pressable>
-
-          <Pressable
-            style={styles.serverChip}
-            onPress={() => {
-              setServerUrlDraft(getApiUrl());
-              setServerModalOpen(true);
-            }}
-          >
-            <MaterialIcons name="dns" size={14} color={colors.primary} />
-            <Text style={styles.serverChipText}>Serveur</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-          <View style={styles.badge}>
-            <MaterialIcons name="verified-user" size={26} color={colors.primary} />
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* En-tête épuré : flèche retour à gauche, rien qui encombre à droite */}
+          <View style={styles.topRow}>
+            <Pressable
+              onPress={step === "phone" ? onBack : () => setStep("phone")}
+              style={styles.iconButton}
+              accessibilityLabel="Retour"
+            >
+              <MaterialIcons name="arrow-back" size={20} color={colors.onSurface} />
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setServerUrlDraft(getApiUrl());
+                setServerModalOpen(true);
+              }}
+              style={styles.iconButton}
+              accessibilityLabel="Paramètres serveur"
+            >
+              <MaterialIcons name="tune" size={19} color={colors.onSurfaceVariant} />
+            </Pressable>
           </View>
 
-          <Text style={styles.title}>
-            {step === "phone" ? "Bienvenue sur AZƆ̀" : "Vérification SMS"}
-          </Text>
-          <Text style={styles.subtitle}>
-            {step === "phone"
-              ? "Entre ton numéro béninois à 10 chiffres (01…) pour recevoir un code de sécurité."
-              : `Nous avons envoyé un code à 4 chiffres au +229 ${formatBeninLocalInput(phoneDigits)}.`}
-          </Text>
+          {/* Titre aéré (sans le sous-titre sur l'étape téléphone) */}
+          <View style={styles.headerBlock}>
+            <Pressable
+              onLongPress={() => {
+                setServerUrlDraft(getApiUrl());
+                setServerModalOpen(true);
+              }}
+            >
+              <Text style={styles.brand}>AZƆ̀</Text>
+            </Pressable>
+            <Text style={styles.headline}>
+              {step === "phone" ? "Bienvenue sur AZƆ̀" : "Vérifie ton téléphone"}
+            </Text>
+            {step === "code" ? (
+              <Text style={styles.subtitle}>
+                Code à 4 chiffres envoyé au +229 {phone || "01 •• •• •• ••"}
+              </Text>
+            ) : null}
+          </View>
+
+          {step === "phone" && (
+            <View style={styles.profileGrid}>
+              {PROFILES.map((p) => {
+                const active = profile === p.id;
+                return (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => handleSelectProfile(p)}
+                    style={[styles.profileChip, active && styles.profileChipActive]}
+                  >
+                    <MaterialIcons
+                      name={p.icon}
+                      size={16}
+                      color={active ? "#fff" : colors.onSurfaceVariant}
+                    />
+                    <Text
+                      style={[styles.profileText, active && styles.profileTextActive]}
+                      numberOfLines={1}
+                    >
+                      {p.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {step === "phone" && profile !== "CLIENT" && (
+            <View style={styles.profileHint}>
+              <MaterialIcons name="shield" size={16} color={colors.primary} />
+              <Text style={styles.profileHintText}>
+                {profile === "DRIVER"
+                  ? "Zem / Conducteur indépendant : tu déposeras un dossier (identité, véhicule, photos) validé par un administrateur AZƆ̀."
+                  : profile === "COURIER"
+                    ? "Coursier / Coursier personnel / Livreur : dépose ton dossier (identité, moto/véhicule, photos) pour activer tes missions."
+                    : "Agence : dépose le dossier de ta flotte (raison sociale, formule, pièces) pour validation par un administrateur AZƆ̀."}
+              </Text>
+            </View>
+          )}
 
           {step === "phone" ? (
-            <>
-              <Text style={styles.fieldLabel}>Numéro de téléphone (10 chiffres)</Text>
-              <View style={styles.phoneRow}>
-                <View style={styles.countryBox}>
-                  <Text style={styles.flag}>🇧🇯</Text>
-                  <Text style={styles.prefix}>+229</Text>
+            <View style={styles.card}>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>Numéro de mobile (10 chiffres)</Text>
+                <Text style={styles.digitCount}>
+                  {digits.length}/{BENIN_PHONE_LENGTH}
+                </Text>
+              </View>
+
+              <View style={[styles.phoneRow, isPhoneValid && styles.phoneRowValid]}>
+                <View style={styles.flagBadge}>
+                  <Svg width={20} height={14} viewBox="0 0 450 300">
+                    <Rect fill="#008751" width="180" height="300" />
+                    <Rect fill="#FCD116" x="180" width="270" height="150" />
+                    <Rect fill="#E8112D" x="180" y="150" width="270" height="150" />
+                  </Svg>
+                  <Text style={styles.flagCode}>+229</Text>
                 </View>
                 <TextInput
                   style={styles.phoneInput}
-                  value={formatBeninLocalInput(phoneDigits)}
-                  onChangeText={handlePhoneChange}
-                  keyboardType="phone-pad"
                   placeholder="01 97 00 00 42"
                   placeholderTextColor={colors.outline}
+                  keyboardType="phone-pad"
+                  value={phone}
+                  onChangeText={handlePhoneChange}
                   maxLength={14}
                 />
+                {isPhoneValid && (
+                  <MaterialIcons name="check-circle" size={22} color={colors.primary} />
+                )}
               </View>
-              <Text style={styles.phoneHint}>
-                Format national à 10 chiffres (01 XX XX XX XX) — {phoneDigits.length}/10 chiffres
-              </Text>
 
-              <Text style={[styles.fieldLabel, { marginTop: spacing.lg }]}>
-                Je me connecte comme
-              </Text>
-              <View style={styles.roleGrid}>
-                {ROLES.map((r) => {
-                  const active = r.id === role;
-                  return (
-                    <Pressable
-                      key={r.id}
-                      style={[styles.roleChip, active && styles.roleChipActive]}
-                      onPress={() => {
-                        setRole(r.id);
-                        if (DEMO_PHONES.has(phoneDigits)) {
-                          setPhoneDigits(r.demoPhone);
-                        }
-                      }}
-                    >
-                      <MaterialIcons
-                        name={r.icon}
-                        size={20}
-                        color={active ? colors.onPrimary : colors.onSurfaceVariant}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[styles.roleLabel, active && { color: colors.onPrimary }]}
-                          numberOfLines={1}
-                        >
-                          {r.label}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.roleHint,
-                            active && { color: "rgba(255,255,255,0.82)" },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {r.hint}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
+              <View style={styles.operatorsRow}>
+                <Text style={styles.operatorsLabel}>Réseaux certifiés :</Text>
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  <OperatorPill label="MTN" bg={colors.tertiaryFixed} fg={colors.onTertiaryFixed} />
+                  <OperatorPill label="Moov" bg={colors.secondaryFixed} fg={colors.onSecondaryFixed} />
+                  <OperatorPill label="Celtiis" bg={colors.primaryFixed} fg={colors.onPrimaryFixed} />
+                </View>
               </View>
-              {role !== "CLIENT" && (
-                <Text style={styles.roleNote}>
-                  Les comptes Zem, Coursier / Livreur et Agence sont ouverts après vérification
-                  de ton dossier par l'équipe AZƆ̀.
-                </Text>
-              )}
-            </>
+            </View>
           ) : (
-            <>
-              <View style={styles.otpRow}>
-                {otp.map((digit, i) => (
-                  <TextInput
-                    key={i}
-                    ref={otpRefs[i]}
-                    style={[styles.otpBox, digit ? styles.otpBoxFilled : null]}
-                    value={digit}
-                    onChangeText={(val) => handleOtpChange(val, i)}
-                    keyboardType="number-pad"
-                    maxLength={1}
-                    textAlign="center"
-                  />
-                ))}
-              </View>
-              <Pressable onPress={handleRequestOtp} disabled={loading}>
-                <Text style={styles.resend}>
-                  Tu n'as pas vu le code ?{" "}
-                  <Text style={styles.resendLink}>Renvoyer le code (5s)</Text>
-                </Text>
-              </Pressable>
-            </>
+            <View style={styles.codeRow}>
+              {code.map((digit, i) => (
+                <TextInput
+                  key={i}
+                  ref={(el) => {
+                    inputsRef.current[i] = el;
+                  }}
+                  style={[styles.codeBox, digit ? styles.codeBoxFilled : null]}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  value={digit}
+                  onChangeText={(v) => updateDigit(v, i)}
+                />
+              ))}
+            </View>
           )}
 
           <View style={{ flex: 1, minHeight: spacing.xl }} />
 
           <PrimaryButton
-            label={step === "phone" ? "Recevoir mon code OTP" : "Vérifier et continuer"}
-            icon="arrow-forward"
-            onPress={step === "phone" ? handleRequestOtp : handleVerifyOtp}
-            loading={loading}
+            label={step === "phone" ? "Recevoir mon code" : "Vérifier et continuer"}
+            onPress={step === "phone" ? handleSendCode : handleVerify}
+            loading={sending}
+            disabled={step === "phone" ? !isPhoneValid : code.join("").length < 4}
+            icon={step === "phone" ? "sms" : "check"}
           />
+
+          {step === "code" && (
+            <Pressable style={styles.resend} onPress={handleSendCode}>
+              <Text style={styles.resendText}>Renvoyer le code (5s)</Text>
+            </Pressable>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Modal de configuration de l'URL du serveur pour les tests APK */}
+      {/* Modale de configuration Serveur (Render / IP) & accès rapide Admin */}
       <Modal
         visible={serverModalOpen}
         transparent
@@ -402,10 +424,10 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Adresse du serveur Backend</Text>
+            <Text style={styles.modalTitle}>Connexion au serveur AZƆ̀</Text>
             <Text style={styles.modalHint}>
-              Pratique pour tester l'APK sur téléphone : indique l'IP locale de ton ordinateur
-              (même Wi-Fi / partage de connexion) ou ton URL publique (ngrok / Cloudflare Tunnel / Render).
+              Colle ici ton adresse Render (ex. https://azo-backend.onrender.com) ou l'IP locale de
+              ton ordinateur.
             </Text>
             <TextInput
               style={styles.modalInput}
@@ -417,26 +439,22 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
               autoCorrect={false}
               keyboardType="url"
             />
-            <Text style={[styles.modalHint, { marginTop: 4, fontWeight: "700" }]}>
-              Accès rapide compte Administrateur :
-            </Text>
             <Pressable
-              style={styles.modalCancelBtn}
+              style={styles.adminQuickBtn}
               onPress={() => {
-                setPhoneDigits("0197000000");
+                setPhone("01 97 00 00 00");
                 setServerModalOpen(false);
               }}
             >
-              <Text style={[styles.modalCancelText, { color: colors.primary }]}>
-                Remplir n° Admin (+229 01 97 00 00 00)
+              <MaterialIcons name="admin-panel-settings" size={18} color={colors.primary} />
+              <Text style={styles.adminQuickText}>
+                Se connecter en Administrateur (01 97 00 00 00)
               </Text>
             </Pressable>
             <View style={styles.modalActions}>
               <Pressable
                 style={styles.modalCancelBtn}
-                onPress={() => {
-                  setServerUrlDraft(DEFAULT_API_URL);
-                }}
+                onPress={() => setServerUrlDraft(DEFAULT_API_URL)}
               >
                 <Text style={styles.modalCancelText}>Par défaut</Text>
               </Pressable>
@@ -457,16 +475,19 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
   );
 }
 
+function OperatorPill({ label, bg, fg }: { label: string; bg: string; fg: string }) {
+  return (
+    <View style={[styles.operatorPill, { backgroundColor: bg }]}>
+      <Text style={[styles.operatorText, { color: fg }]}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  header: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  backBtn: {
+  content: { flexGrow: 1, padding: spacing.md },
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  iconButton: {
     width: 40,
     height: 40,
     borderRadius: radius.full,
@@ -474,18 +495,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  serverChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    height: 34,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceContainerLow,
-    borderWidth: 1,
-    borderColor: colors.surfaceContainer,
+  headerBlock: { alignItems: "center", marginTop: spacing.lg, marginBottom: spacing.xl },
+  brand: {
+    ...typography.headlineLg,
+    color: colors.primary,
+    fontWeight: "800",
+    marginBottom: spacing.xs,
   },
-  serverChipText: { ...typography.labelSm, color: colors.primary, fontWeight: "700" },
+  headline: { ...typography.headlineXl, color: colors.onSurface, textAlign: "center" },
+  subtitle: {
+    ...typography.bodyMd,
+    color: colors.onSurfaceVariant,
+    textAlign: "center",
+    marginTop: spacing.xs,
+    maxWidth: 320,
+  },
 
   // Bannière SMS simulée (5 secondes)
   smsBanner: {
@@ -545,107 +569,112 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  body: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl },
-  badge: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.lg,
-    backgroundColor: colors.primaryFixed,
+  profileGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: spacing.md,
+  },
+  profileChip: {
+    width: "48.2%",
+    height: 46,
+    flexDirection: "row",
+    gap: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceContainerLow,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: spacing.lg,
+    paddingHorizontal: 12,
   },
-  title: { ...typography.headlineLg, color: colors.onSurface, fontWeight: "800" },
-  subtitle: {
-    ...typography.bodyMd,
-    color: colors.onSurfaceVariant,
-    marginTop: spacing.xs,
-    marginBottom: spacing.xl,
+  profileChipActive: { backgroundColor: colors.primary },
+  profileText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
+  profileTextActive: { color: "#fff" },
+  profileHint: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    backgroundColor: colors.primaryFixed,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
-  fieldLabel: {
-    ...typography.labelMd,
-    color: colors.onSurfaceVariant,
-    marginBottom: spacing.xs,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
+  profileHintText: { ...typography.labelSm, color: colors.onPrimaryFixed, flex: 1, lineHeight: 18 },
+  card: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md + 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  phoneRow: { flexDirection: "row", gap: spacing.sm },
-  countryBox: {
+  labelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  label: { ...typography.labelMd, color: colors.onSurfaceVariant },
+  digitCount: { ...typography.labelSm, color: colors.primary, fontWeight: "700" },
+  phoneRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 56,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceContainerLow,
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xs,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+  },
+  phoneRowValid: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceContainerLowest,
+  },
+  flagBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: spacing.md,
-    height: 56,
+    backgroundColor: colors.surfaceContainerLowest,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: radius.md,
-    backgroundColor: colors.surfaceContainerLow,
   },
-  flag: { fontSize: 20 },
-  prefix: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
+  flagCode: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
   phoneInput: {
     flex: 1,
-    height: 56,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceContainerLow,
-    paddingHorizontal: spacing.md,
     ...typography.headlineSm,
     color: colors.onSurface,
-    letterSpacing: 1.2,
+    paddingHorizontal: 4,
+    letterSpacing: 0.5,
   },
-  phoneHint: {
-    ...typography.labelSm,
-    color: colors.onSurfaceVariant,
-    marginTop: 6,
-  },
-  roleGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  roleChip: {
-    width: "48%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceContainerLow,
-  },
-  roleChipActive: { backgroundColor: colors.primary },
-  roleLabel: { ...typography.labelMd, color: colors.onSurfaceVariant, fontWeight: "700" },
-  roleHint: { ...typography.labelSm, color: colors.outline, fontSize: 10 },
-  roleNote: {
-    ...typography.bodySm,
-    color: colors.onSurfaceVariant,
-    marginTop: spacing.sm,
-  },
-  otpRow: {
+  operatorsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: spacing.sm,
-    marginVertical: spacing.md,
+    alignItems: "center",
+    marginTop: spacing.md,
+    paddingHorizontal: 4,
   },
-  otpBox: {
-    flex: 1,
+  operatorsLabel: { ...typography.labelSm, color: colors.onSurfaceVariant },
+  operatorPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },
+  operatorText: { fontSize: 10, fontWeight: "700" },
+  codeRow: { flexDirection: "row", justifyContent: "center", gap: spacing.sm, marginTop: spacing.md },
+  codeBox: {
+    width: 56,
     height: 64,
     borderRadius: radius.md,
     backgroundColor: colors.surfaceContainerLow,
-    ...typography.displayLg,
-    fontSize: 26,
+    textAlign: "center",
+    ...typography.headlineLg,
     color: colors.onSurface,
   },
-  otpBoxFilled: {
-    backgroundColor: colors.primaryFixed,
+  codeBoxFilled: {
     borderWidth: 2,
     borderColor: colors.primary,
+    backgroundColor: colors.surfaceContainerLowest,
   },
-  resend: {
-    ...typography.bodySm,
-    color: colors.onSurfaceVariant,
-    textAlign: "center",
-    marginTop: spacing.md,
-  },
-  resendLink: { color: colors.primary, fontWeight: "700" },
+  resend: { alignSelf: "center", marginTop: spacing.md },
+  resendText: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
 
   modalBackdrop: {
     flex: 1,
@@ -670,6 +699,21 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     borderWidth: 1,
     borderColor: colors.surfaceContainerHigh,
+  },
+  adminQuickBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+    backgroundColor: colors.primaryFixed,
+  },
+  adminQuickText: {
+    ...typography.labelMd,
+    color: colors.primary,
+    fontWeight: "700",
+    flex: 1,
   },
   modalActions: {
     flexDirection: "row",

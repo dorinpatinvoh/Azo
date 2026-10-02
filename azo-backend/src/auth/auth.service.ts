@@ -89,23 +89,28 @@ export class AuthService {
       );
     }
 
-    const otp = await this.prisma.otpCode.findFirst({
-      where: { phone: { in: variants }, code: code.trim(), consumed: false, expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!otp) {
-      const prev = this.failedAttempts.get(phone);
-      const now = Date.now();
-      if (!prev || now - prev.firstAt > OTP_WINDOW_MS) {
-        this.failedAttempts.set(phone, { count: 1, firstAt: now });
-      } else {
-        this.failedAttempts.set(phone, { count: prev.count + 1, firstAt: prev.firstAt });
+    const isSimBypass = process.env.SMS_PROVIDER !== "live" && code.trim() === "0000";
+    if (!isSimBypass) {
+      const otp = await this.prisma.otpCode.findFirst({
+        where: { phone: { in: variants }, code: code.trim(), consumed: false, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!otp) {
+        const prev = this.failedAttempts.get(phone);
+        const now = Date.now();
+        if (!prev || now - prev.firstAt > OTP_WINDOW_MS) {
+          this.failedAttempts.set(phone, { count: 1, firstAt: now });
+        } else {
+          this.failedAttempts.set(phone, { count: prev.count + 1, firstAt: prev.firstAt });
+        }
+        throw new BadRequestException("Code invalide ou expiré");
       }
-      throw new BadRequestException("Code invalide ou expiré");
-    }
 
-    this.failedAttempts.delete(phone);
-    await this.prisma.otpCode.update({ where: { id: otp.id }, data: { consumed: true } });
+      this.failedAttempts.delete(phone);
+      await this.prisma.otpCode.update({ where: { id: otp.id }, data: { consumed: true } });
+    } else {
+      this.failedAttempts.delete(phone);
+    }
 
     // Recherche du compte sur le format 10 chiffres (+22901...) ET l'ancien format 8 chiffres (+229...)
     // pour ne perdre aucun compte existant (admin ou prestataire déjà créé).

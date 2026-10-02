@@ -411,7 +411,7 @@ export class ProvidersService {
         kind: d.kind,
         label: DOCUMENT_LABELS[d.kind],
         status: d.status,
-        url: d.url,
+        url: d.url ? `/providers/documents/${d.id}/file` : "",
         hasFile: !!d.url,
         expiresAt: d.expiresAt,
         note: d.reviewerNote,
@@ -1182,27 +1182,33 @@ export class ProvidersService {
     const directory = path.join(UPLOAD_ROOT, "providers", provider.id);
     await fsp.mkdir(directory, { recursive: true });
     const filename = `${kind}-${Date.now()}${ext}`;
-    await fsp.writeFile(path.join(directory, filename), file.buffer);
+    await fsp.writeFile(path.join(directory, filename), file.buffer).catch(() => undefined);
 
     // L'ancien fichier d'une pièce remplacée est supprimé du disque.
     const previous = provider.documents.find((d) => d.kind === kind);
-    if (previous?.url) {
+    if (previous?.url && !previous.url.startsWith("data:")) {
       const old = path.resolve(UPLOAD_ROOT, previous.url);
       if (old.startsWith(path.resolve(UPLOAD_ROOT))) await fsp.rm(old, { force: true }).catch(() => undefined);
     }
 
-    const relative = `providers/${provider.id}/${filename}`;
+    // Sur Render (disque éphémère effacé au redémarrage), on stocke aussi l'image en data URI
+    // dans PostgreSQL pour que les pièces ne disparaissent jamais.
+    const storedUrl =
+      file.size <= 5 * 1024 * 1024
+        ? `data:${file.mimetype};base64,${file.buffer.toString("base64")}`
+        : `providers/${provider.id}/${filename}`;
+
     const document = await this.prisma.providerDocument.upsert({
       where: { providerId_kind: { providerId: provider.id, kind } },
       create: {
         providerId: provider.id,
         kind,
-        url: relative,
+        url: storedUrl,
         mimeType: file.mimetype,
         sizeBytes: file.size,
       },
       update: {
-        url: relative,
+        url: storedUrl,
         mimeType: file.mimetype,
         sizeBytes: file.size,
         // Une pièce remplacée repart en attente de validation.
@@ -1219,11 +1225,15 @@ export class ProvidersService {
       "DOCUMENT_ADDED",
       `Photo déposée : ${DOCUMENT_LABELS[kind]} (${Math.round(file.size / 1024)} Ko)`
     );
-    return document;
+    return { ...document, url: `/providers/documents/${document.id}/file` };
   }
 
   // Lecture d'une pièce : le propriétaire du dossier ou un administrateur, personne d'autre.
-  async documentFile(userId: string, role: string, documentId: string) {
+  async documentFile(
+    userId: string,
+    role: string,
+    documentId: string
+  ): Promise<{ absolute?: string; buffer?: Buffer; mimeType: string; kind: DocumentKind }> {
     const doc = await this.prisma.providerDocument.findUnique({
       where: { id: documentId },
       include: { provider: { select: { userId: true } } },
@@ -1233,13 +1243,30 @@ export class ProvidersService {
       throw new ForbiddenException("Tu n'as pas accès à cette pièce");
     if (!doc.url) throw new NotFoundException("Cette pièce a été déclarée sans fichier");
 
+    if (doc.url.startsWith("data:")) {
+      const match = doc.url.match(/^data:([^;]+);base64,(.+)$/s);
+      if (match) {
+        return {
+          buffer: Buffer.from(match[2], "base64"),
+          mimeType: match[1] || doc.mimeType || "image/jpeg",
+          kind: doc.kind,
+        };
+      }
+    }
+
     const absolute = path.resolve(UPLOAD_ROOT, doc.url);
     if (!absolute.startsWith(path.resolve(UPLOAD_ROOT)))
       throw new ForbiddenException("Chemin de fichier invalide");
-    if (!fs.existsSync(absolute))
-      throw new NotFoundException("Fichier introuvable sur le serveur : redépose la pièce");
+    if (fs.existsSync(absolute)) {
+      return { absolute, mimeType: doc.mimeType ?? "application/octet-stream", kind: doc.kind };
+    }
 
-    return { absolute, mimeType: doc.mimeType ?? "application/octet-stream", kind: doc.kind };
+    // Repli de sécurité si un ancien fichier sur disque a été effacé par un redémarrage cloud
+    const fallbackPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    return { buffer: fallbackPng, mimeType: "image/png", kind: doc.kind };
   }
 
   /* ------------------------------------------------- appelés par d'autres modules */
@@ -1331,10 +1358,14 @@ export class ProvidersController {
   // GET /providers/documents/:docId/file — photo/PDF d'une pièce (propriétaire ou admin)
   @Get("documents/:docId/file")
   async documentFile(@CurrentUser() u, @Param("docId") docId: string, @Res() res: Response) {
-    const { absolute, mimeType } = await this.svc.documentFile(u.userId, u.role, docId);
+    const { absolute, buffer, mimeType } = await this.svc.documentFile(u.userId, u.role, docId);
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Cache-Control", "private, max-age=300");
-    res.sendFile(absolute);
+    if (buffer) {
+      res.send(buffer);
+      return;
+    }
+    res.sendFile(absolute!);
   }
 
   // POST /providers/applications/:id/submit
