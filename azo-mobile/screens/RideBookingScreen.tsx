@@ -25,6 +25,14 @@ const VEHICLES: Record<VehicleType, { label: string; icon: keyof typeof Material
   ZEM: { label: "Zem", icon: "two-wheeler" },
   ZEM_ELECTRIC: { label: "Zem électrique", icon: "electric-moped" },
 };
+const POPULAR_PLACES: Place[] = [
+  { id: "etoile", title: "Place de l'Étoile Rouge", subtitle: "Cotonou Centre", latitude: 6.3725, longitude: 2.4061 },
+  { id: "dantokpa", title: "Marché Dantokpa", subtitle: "St Michel, Cotonou", latitude: 6.3728, longitude: 2.4339 },
+  { id: "aeroport", title: "Aéroport de Cotonou", subtitle: "Cadjèhoun", latitude: 6.3572, longitude: 2.3844 },
+  { id: "ganhi", title: "Ganhi Quartier des Affaires", subtitle: "Cotonou", latitude: 6.3556, longitude: 2.4398 },
+  { id: "haievive", title: "Les Cocotiers / Haie Vive", subtitle: "Cotonou", latitude: 6.3589, longitude: 2.3976 },
+  { id: "calavi", title: "Carrefour IITA Calavi", subtitle: "Abomey-Calavi", latitude: 6.4225, longitude: 2.3397 },
+];
 const ERROR_COLOR = "#B3261B";
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} FCFA`;
 const fmtKm = (n: number) => `${n.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`;
@@ -312,6 +320,7 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
           },
         ]}
       >
+        <View style={styles.sheetHandle} />
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.sheetTitle}>Où allons-nous ?</Text>
 
@@ -331,6 +340,29 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
 
           {renderField("origin")}
           {renderField("destination")}
+
+          {!destination && suggestions.length === 0 && (
+            <View style={{ marginBottom: 8 }}>
+              <Text style={styles.quickDestLabel}>Destinations populaires en 1 clic</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.quickDestRow}
+              >
+                {POPULAR_PLACES.map((p) => (
+                  <Pressable
+                    key={p.id}
+                    style={styles.quickDestChip}
+                    onPress={() => applyPlace(focus ?? "destination", p)}
+                  >
+                    <MaterialIcons name="place" size={15} color={colors.primary} />
+                    <Text style={styles.quickDestText}>{p.title}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           {focus && searchError && (
             <View style={styles.banner}>
@@ -461,8 +493,13 @@ const styles = StyleSheet.create({
   backBtn: { position: "absolute", left: spacing.md, width: 44, height: 44, borderRadius: 22, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", elevation: 4, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 6 },
   pickHint: { position: "absolute", left: 72, right: spacing.md, backgroundColor: colors.onSurface, borderRadius: radius.lg, padding: spacing.sm },
   pickHintText: { ...typography.labelMd, color: "#fff", textAlign: "center" },
-  sheet: { position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "68%", backgroundColor: colors.surfaceContainerLowest, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, paddingTop: spacing.md, elevation: 12, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 12 },
+  sheet: { position: "absolute", left: 0, right: 0, bottom: 0, maxHeight: "68%", backgroundColor: colors.surfaceContainerLowest, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, paddingTop: 10, elevation: 12, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 12 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.surfaceContainerHigh, alignSelf: "center", marginBottom: 10 },
   sheetTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", marginBottom: spacing.sm },
+  quickDestLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 2 },
+  quickDestRow: { gap: 8, paddingBottom: 4 },
+  quickDestChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.primaryFixed, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.full },
+  quickDestText: { ...typography.labelMd, color: colors.primary, fontWeight: "700", fontSize: 12 },
   field: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: 4, marginBottom: 8, borderWidth: 1, borderColor: "transparent" },
   fieldFocused: { borderColor: colors.primary },
   dot: { width: 10, height: 10, borderRadius: 5 },

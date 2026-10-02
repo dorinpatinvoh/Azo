@@ -327,19 +327,19 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        <View style={styles.statusCard}>
+        <View style={[styles.statusCard, online && { borderColor: colors.primary, borderWidth: 1.5 }]}>
           <View style={styles.statusRow}>
             <View style={[styles.motorcycleIcon, { backgroundColor: online ? colors.primary : colors.outline }]}>
               <MaterialIcons name="two-wheeler" size={26} color={colors.onPrimary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.statusTitle}>{online ? "Prêt à rouler" : "Hors ligne"}</Text>
+              <Text style={styles.statusTitle}>{online ? "EN LIGNE · Radar actif" : "Hors ligne"}</Text>
               <Text style={styles.statusSubtitle}>
                 {online
                   ? position
                     ? `GPS actif · ${position.latitude.toFixed(4)}, ${position.longitude.toFixed(4)}`
                     : "Recherche de ta position…"
-                  : "Passe en ligne pour recevoir des courses"}
+                  : "Appuie ci-dessous pour recevoir des courses"}
               </Text>
             </View>
             <Switch
@@ -349,6 +349,27 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
               thumbColor="#fff"
             />
           </View>
+          <Pressable
+            style={[
+              styles.giantToggleBtn,
+              { backgroundColor: online ? colors.surfaceContainerHigh : colors.primary },
+            ]}
+            onPress={() => handleToggleOnline(!online)}
+          >
+            <MaterialIcons
+              name={online ? "pause-circle-filled" : "play-circle-filled"}
+              size={20}
+              color={online ? colors.onSurface : "#fff"}
+            />
+            <Text
+              style={[
+                styles.giantToggleText,
+                { color: online ? colors.onSurface : "#fff" },
+              ]}
+            >
+              {online ? "PASSER EN PAUSE (HORS LIGNE)" : "PASSER EN LIGNE MAINTENANT"}
+            </Text>
+          </Pressable>
           {gpsWarning && (
             <View style={styles.warningRow}>
               <MaterialIcons name="location-off" size={16} color={colors.error} />
@@ -435,13 +456,29 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
           </View>
         )}
 
-        {/* --- Gains --- */}
+        {/* --- Gains & Objectif journalier --- */}
         <View style={styles.earningsCard}>
-          <Text style={styles.earningsLabel}>Gains du jour</Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={styles.earningsLabel}>Gains nets du jour</Text>
+            <View style={styles.goalBadge}>
+              <MaterialIcons name="emoji-events" size={14} color={colors.primary} />
+              <Text style={styles.goalBadgeText}>
+                Objectif : {Math.min(100, Math.round((stats.gainsToday / 15000) * 100))}%
+              </Text>
+            </View>
+          </View>
           <Text style={styles.earningsValue}>{fcfa(stats.gainsToday)}</Text>
+          <View style={styles.goalTrack}>
+            <View
+              style={[
+                styles.goalFill,
+                { width: `${Math.min(100, Math.round((stats.gainsToday / 15000) * 100))}%` },
+              ]}
+            />
+          </View>
           <Text style={styles.progressLabel}>
             {stats.countToday} course{stats.countToday > 1 ? "s" : ""} terminée{stats.countToday > 1 ? "s" : ""}
-            {balance !== null ? ` · solde AZƆ̀ Pay : ${fcfa(balance)}` : ""}
+            {balance !== null ? ` · Solde AZƆ̀ Pay : ${fcfa(balance)}` : " · Objectif 15 000 FCFA"}
           </Text>
         </View>
 
@@ -552,6 +589,8 @@ const styles = StyleSheet.create({
   motorcycleIcon: { width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
   statusTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
   statusSubtitle: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  giantToggleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: radius.full, paddingVertical: 12, marginTop: spacing.sm },
+  giantToggleText: { ...typography.labelMd, fontWeight: "800", letterSpacing: 0.4 },
   warningRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.sm, backgroundColor: colors.errorContainer, borderRadius: radius.md, padding: spacing.sm },
   warningText: { ...typography.labelSm, color: colors.error, flex: 1 },
   offlineBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.tertiaryFixed, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.md },
@@ -574,8 +613,12 @@ const styles = StyleSheet.create({
   ghostBtn: { alignItems: "center", paddingVertical: 10 },
   ghostBtnText: { ...typography.labelMd, color: colors.error, fontWeight: "700" },
   earningsCard: { backgroundColor: colors.primaryFixed, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md },
-  earningsLabel: { ...typography.labelMd, color: colors.onPrimaryFixed },
+  earningsLabel: { ...typography.labelMd, color: colors.onPrimaryFixed, fontWeight: "700" },
   earningsValue: { ...typography.displayLgMobile, color: colors.onPrimaryFixed, marginTop: 2 },
+  goalBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#fff", paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full },
+  goalBadgeText: { ...typography.labelSm, color: colors.primary, fontWeight: "800" },
+  goalTrack: { height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.55)", overflow: "hidden", marginTop: 8, marginBottom: 4 },
+  goalFill: { height: "100%", backgroundColor: colors.primary, borderRadius: 4 },
   progressLabel: { ...typography.labelSm, color: colors.onPrimaryFixed, marginTop: 4 },
   statsGrid: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
   statTile: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.sm, alignItems: "center", gap: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },

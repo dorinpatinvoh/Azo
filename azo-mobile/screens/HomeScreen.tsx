@@ -20,25 +20,51 @@ type Props = {
   onNavigateTab?: (tabId: "home" | "courses" | "wallet" | "profile") => void;
 };
 
-// Séparation des services principaux et secondaires
+// Services principaux mis en avant avec sous-titre d'accroche
 const MAIN_SERVICES = [
-  { id: "transport", label: "Voiture", icon: "directions-car" as const, bg: colors.primaryFixed, fg: colors.primary },
-  { id: "zem", label: "Zem", icon: "electric-moped" as const, bg: colors.secondaryFixed, fg: colors.secondary },
+  {
+    id: "zem",
+    label: "Zem Rapide",
+    sub: "Dès 250 F • ~3 min",
+    badge: "Populaire",
+    icon: "two-wheeler" as const,
+    bg: colors.secondaryFixed,
+    fg: colors.secondary,
+  },
+  {
+    id: "transport",
+    label: "Voiture",
+    sub: "Confort & Clim",
+    badge: "Sécurisé",
+    icon: "directions-car" as const,
+    bg: colors.primaryFixed,
+    fg: colors.primary,
+  },
 ];
 
+// Grille symétrique 3 × 2 (6 services complémentaires bien alignés)
 const OTHER_SERVICES = [
-  { id: "livraison", label: "Livraison", icon: "local-shipping" as const, bg: colors.tertiaryFixed, fg: colors.tertiary },
-  { id: "coursier", label: "Coursier", icon: "directions-run" as const, bg: colors.secondaryFixed, fg: colors.secondary },
-  { id: "courses", label: "Courses", icon: "shopping-bag" as const, bg: colors.primaryFixed, fg: colors.primary },
-  { id: "agence", label: "Agence", icon: "apartment" as const, bg: colors.primaryFixed, fg: colors.primary },
-  { id: "location", label: "Location", icon: "key" as const, bg: colors.tertiaryFixed, fg: colors.tertiary },
-  { id: "marketplace", label: "Boutique", icon: "storefront" as const, bg: colors.secondaryFixed, fg: colors.secondary },
+  { id: "livraison", label: "Envoyer Colis", icon: "local-shipping" as const, bg: colors.tertiaryFixed, fg: colors.tertiary },
+  { id: "coursier", label: "Coursier Pro", icon: "directions-run" as const, bg: colors.secondaryFixed, fg: colors.secondary },
+  { id: "location", label: "Louer Auto", icon: "key" as const, bg: colors.tertiaryFixed, fg: colors.tertiary },
+  { id: "marketplace", label: "Boutique AZƆ̀", icon: "storefront" as const, bg: colors.secondaryFixed, fg: colors.secondary },
+  { id: "agence", label: "Espace Agence", icon: "apartment" as const, bg: colors.primaryFixed, fg: colors.primary },
+  { id: "courses", label: "Mes Trajets", icon: "receipt-long" as const, bg: colors.primaryFixed, fg: colors.primary },
+];
+
+// Lieux favoris de Cotonou en 1 clic
+const QUICK_DESTINATIONS = [
+  { id: "etoile", label: "Étoile Rouge", icon: "place" as const, service: "zem" },
+  { id: "dantokpa", label: "Marché Dantokpa", icon: "shopping-bag" as const, service: "zem" },
+  { id: "aeroport", label: "Aéroport Cotonou", icon: "flight" as const, service: "transport" },
+  { id: "ganhi", label: "Ganhi Centre", icon: "business" as const, service: "transport" },
+  { id: "calavi", label: "Campus Calavi", icon: "school" as const, service: "zem" },
 ];
 
 const NAV_ITEMS = [
   { id: "home", label: "Accueil", icon: "home" as const },
   { id: "courses", label: "Courses", icon: "receipt-long" as const },
-  { id: "wallet", label: "Wallet", icon: "account-balance-wallet" as const },
+  { id: "wallet", label: "AZƆ̀ Pay", icon: "account-balance-wallet" as const },
   { id: "profile", label: "Profil", icon: "person" as const },
 ] as const;
 
@@ -64,78 +90,151 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
   }, []);
 
   return (
-    // CORRECTION : edges "bottom" ajouté pour que la barre d'onglets ne passe pas
-    // sous la barre système (Android / iPhone) et reste cliquable.
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        
-        {/* En-tête */}
+        {/* En-tête aéré avec badge ville + profil */}
         <View style={styles.headerRow}>
-          <View>
+          <View style={{ flex: 1 }}>
+            <View style={styles.cityPill}>
+              <View style={styles.liveDot} />
+              <Text style={styles.cityPillText}>Cotonou & Grand Nokoué</Text>
+            </View>
             <Text style={styles.greeting}>Bonjour{name ? `, ${name}` : ""} 👋</Text>
             <Text style={styles.question}>Où allons-nous aujourd'hui ?</Text>
           </View>
-          {/* CORRECTION : l'avatar ouvre maintenant le profil */}
-          <Pressable style={styles.avatar} onPress={() => onNavigateTab?.("profile")} accessibilityLabel="Profil">
-            <MaterialIcons name="person" size={24} color={colors.onSurfaceVariant} />
+          <Pressable
+            style={styles.avatar}
+            onPress={() => onNavigateTab?.("profile")}
+            accessibilityLabel="Profil"
+          >
+            <MaterialIcons name="person" size={24} color={colors.primary} />
           </Pressable>
         </View>
 
-        {/* Carte Portefeuille (Wallet) - Plus compacte et élégante */}
+        {/* Carte Portefeuille AZƆ̀ Pay (Point focal financier) */}
         <View style={styles.walletCard}>
           <View style={styles.walletInfo}>
-            <MaterialIcons name="account-balance-wallet" size={20} color={colors.primary} />
+            <View style={styles.walletIconBox}>
+              <MaterialIcons name="account-balance-wallet" size={22} color={colors.primary} />
+            </View>
             <View>
-              <Text style={styles.walletLabel}>Solde AZƆ̀ Pay</Text>
+              <View style={styles.walletTitleRow}>
+                <Text style={styles.walletLabel}>Solde AZƆ̀ Pay</Text>
+                <View style={styles.walletZeroCashBadge}>
+                  <Text style={styles.walletZeroCashText}>100% Sans Cash</Text>
+                </View>
+              </View>
               {loadingWallet ? (
-                <ActivityIndicator size="small" color={colors.primary} />
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 4 }} />
               ) : (
                 <Text style={styles.walletBalance}>
-                  {balance !== null ? balance.toLocaleString("fr-FR") : "---"} <Text style={styles.currency}>FCFA</Text>
+                  {balance !== null ? balance.toLocaleString("fr-FR") : "---"}{" "}
+                  <Text style={styles.currency}>FCFA</Text>
                 </Text>
               )}
             </View>
           </View>
           <Pressable style={styles.rechargeBtn} onPress={() => onNavigateTab?.("wallet")}>
-            <MaterialIcons name="add" size={20} color="#fff" />
+            <MaterialIcons name="add" size={18} color="#fff" />
             <Text style={styles.rechargeBtnText}>Recharger</Text>
           </Pressable>
         </View>
 
-        {/* Services Principaux (Grosses cartes) */}
+        {/* Barre de recherche rapide + Destinations en 1 clic */}
+        <Pressable style={styles.quickSearchBox} onPress={() => onSelectService("zem")}>
+          <View style={styles.quickSearchIcon}>
+            <MaterialIcons name="search" size={22} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.quickSearchTitle}>Chercher une destination…</Text>
+            <Text style={styles.quickSearchSub}>Tarif connu à l'avance • Chauffeur vérifié</Text>
+          </View>
+          <MaterialIcons name="arrow-forward-ios" size={16} color={colors.onSurfaceVariant} />
+        </Pressable>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickChipsRow}
+        >
+          {QUICK_DESTINATIONS.map((d) => (
+            <Pressable
+              key={d.id}
+              style={styles.quickChip}
+              onPress={() => onSelectService(d.service)}
+            >
+              <MaterialIcons name={d.icon} size={15} color={colors.primary} />
+              <Text style={styles.quickChipText}>{d.label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        {/* Section 1 : Déplacement immédiat (2 grandes cartes côte à côte) */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Commander une course</Text>
+          <Text style={styles.sectionHint}>Départ immédiat</Text>
+        </View>
         <View style={styles.mainServicesRow}>
           {MAIN_SERVICES.map((s) => (
-            <Pressable key={s.id} style={[styles.mainServiceCard, { backgroundColor: s.bg }]} onPress={() => onSelectService(s.id)}>
-              <MaterialIcons name={s.icon} size={42} color={s.fg} style={{ marginBottom: 8 }} />
+            <Pressable
+              key={s.id}
+              style={[styles.mainServiceCard, { backgroundColor: s.bg }]}
+              onPress={() => onSelectService(s.id)}
+            >
+              <View style={styles.mainServiceTop}>
+                <View style={styles.mainServiceBadge}>
+                  <Text style={[styles.mainServiceBadgeText, { color: s.fg }]}>{s.badge}</Text>
+                </View>
+                <MaterialIcons name="arrow-outward" size={18} color={s.fg} />
+              </View>
+              <MaterialIcons name={s.icon} size={40} color={s.fg} style={{ marginVertical: 6 }} />
               <Text style={styles.mainServiceText}>{s.label}</Text>
+              <Text style={styles.mainServiceSub}>{s.sub}</Text>
             </Pressable>
           ))}
         </View>
 
-        {/* Autres Services (Petite grille à 4 colonnes) */}
+        {/* Section 2 : Tous les services AZƆ̀ (Grille symétrique 3 × 2) */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Services & Partenaires</Text>
+          <Text style={styles.sectionHint}>Tout l'écosystème AZƆ̀</Text>
+        </View>
         <View style={styles.otherServicesGrid}>
           {OTHER_SERVICES.map((s) => (
-            <Pressable key={s.id} style={styles.smallTile} onPress={() => onSelectService(s.id)}>
+            <Pressable
+              key={s.id}
+              style={styles.smallTile}
+              onPress={() => onSelectService(s.id)}
+            >
               <View style={[styles.smallTileIcon, { backgroundColor: s.bg }]}>
                 <MaterialIcons name={s.icon} size={24} color={s.fg} />
               </View>
-              <Text style={styles.smallTileLabel} numberOfLines={1}>{s.label}</Text>
+              <Text style={styles.smallTileLabel} numberOfLines={1}>
+                {s.label}
+              </Text>
             </Pressable>
           ))}
         </View>
 
-        {/* Bannière promo */}
+        {/* Bannière promo Zem Électrique */}
         <LinearGradient
-          colors={["#008751", "#005a36"]} 
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          colors={["#008751", "#005a36"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
           style={styles.promoBanner}
         >
           <View style={{ flex: 1 }}>
+            <View style={styles.promoTag}>
+              <MaterialIcons name="bolt" size={14} color="#008751" />
+              <Text style={styles.promoTagText}>ZÉRO ÉMISSION • -50 FCFA</Text>
+            </View>
             <Text style={styles.promoTitle}>Écologique & Économique</Text>
-            <Text style={styles.promoSubtitle}>Essayez nos nouveaux Zem électriques</Text>
+            <Text style={styles.promoSubtitle}>
+              Essaie nos nouveaux Zem électriques silencieux dans tout Cotonou
+            </Text>
           </View>
           <Pressable style={styles.promoCta} onPress={() => onSelectService("zem")}>
-            <Text style={styles.promoCtaText}>Go</Text>
+            <Text style={styles.promoCtaText}>Réserver</Text>
             <MaterialIcons name="arrow-forward" size={16} color="#008751" />
           </Pressable>
         </LinearGradient>
@@ -146,11 +245,31 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
         {NAV_ITEMS.map((item) => {
           const isActive = item.id === "home";
           return (
-            <Pressable key={item.id} style={styles.navItem} onPress={() => onNavigateTab?.(item.id)}>
-              <View style={[styles.navIconWrapper, isActive && { backgroundColor: colors.primaryFixed }]}>
-                <MaterialIcons name={item.icon} size={24} color={isActive ? colors.primary : colors.outline} />
+            <Pressable
+              key={item.id}
+              style={styles.navItem}
+              onPress={() => onNavigateTab?.(item.id)}
+            >
+              <View
+                style={[
+                  styles.navIconWrapper,
+                  isActive && { backgroundColor: colors.primaryFixed },
+                ]}
+              >
+                <MaterialIcons
+                  name={item.icon}
+                  size={24}
+                  color={isActive ? colors.primary : colors.outline}
+                />
               </View>
-              <Text style={[styles.navLabel, isActive && { color: colors.primary, fontWeight: "700" }]}>{item.label}</Text>
+              <Text
+                style={[
+                  styles.navLabel,
+                  isActive && { color: colors.primary, fontWeight: "700" },
+                ]}
+              >
+                {item.label}
+              </Text>
             </Pressable>
           );
         })}
@@ -162,43 +281,300 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: spacing.md, paddingBottom: spacing.xl },
-  
+
   // Header
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.lg, paddingTop: spacing.sm },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  cityPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    backgroundColor: colors.primaryFixed,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    marginBottom: 6,
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+  },
+  cityPillText: {
+    ...typography.labelSm,
+    color: colors.primary,
+    fontWeight: "700",
+    fontSize: 11,
+  },
   greeting: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
   question: { ...typography.bodyMd, color: colors.onSurfaceVariant, marginTop: 2 },
-  avatar: { width: 44, height: 44, borderRadius: radius.full, backgroundColor: colors.surfaceContainer, alignItems: "center", justifyContent: "center" },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryFixed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   // Wallet
-  walletCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.xl, borderWidth: 1, borderColor: colors.surfaceContainerLow, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 8 },
-  walletInfo: { flexDirection: "row", alignItems: "center", gap: 12 },
-  walletLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, textTransform: "uppercase", letterSpacing: 0.5 },
-  walletBalance: { ...typography.headlineMd, color: colors.onSurface, fontWeight: "800", marginTop: 2 },
+  walletCard: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainer,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+  },
+  walletInfo: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  walletIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primaryFixed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  walletTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  walletLabel: {
+    ...typography.labelSm,
+    color: colors.onSurfaceVariant,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  walletZeroCashBadge: {
+    backgroundColor: colors.secondaryFixed,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  walletZeroCashText: {
+    ...typography.labelSm,
+    color: colors.secondary,
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  walletBalance: {
+    ...typography.headlineMd,
+    color: colors.onSurface,
+    fontWeight: "800",
+    marginTop: 2,
+  },
   currency: { ...typography.labelMd, color: colors.onSurfaceVariant, fontWeight: "600" },
-  rechargeBtn: { backgroundColor: colors.primary, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.full, gap: 4 },
+  rechargeBtn: {
+    backgroundColor: colors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.full,
+    gap: 4,
+  },
   rechargeBtnText: { ...typography.labelMd, color: "#fff", fontWeight: "700" },
 
-  // Main Services
-  mainServicesRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.lg },
-  mainServiceCard: { flex: 1, height: 110, borderRadius: radius.xl, padding: spacing.md, justifyContent: "center" },
-  mainServiceText: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "700" },
+  // Quick Search + Chips
+  quickSearchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: colors.primaryFixed,
+    marginBottom: spacing.sm,
+  },
+  quickSearchIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.full,
+    backgroundColor: colors.primaryFixed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickSearchTitle: {
+    ...typography.bodyMd,
+    color: colors.onSurface,
+    fontWeight: "700",
+  },
+  quickSearchSub: {
+    ...typography.bodySm,
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+  },
+  quickChipsRow: {
+    gap: 8,
+    paddingBottom: spacing.md,
+  },
+  quickChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainerHigh,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+  },
+  quickChipText: {
+    ...typography.labelMd,
+    color: colors.onSurface,
+    fontWeight: "600",
+    fontSize: 12,
+  },
 
-  // Other Services
-  otherServicesGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", gap: spacing.md, marginBottom: spacing.xl },
-  smallTile: { width: "21%", alignItems: "center", gap: 6, marginBottom: spacing.sm },
-  smallTileIcon: { width: 52, height: 52, borderRadius: radius.lg, alignItems: "center", justifyContent: "center" },
-  smallTileLabel: { ...typography.labelSm, color: colors.onSurface, textAlign: "center" },
+  // Section Headers
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  sectionTitle: {
+    ...typography.labelLg,
+    color: colors.onSurface,
+    fontWeight: "800",
+  },
+  sectionHint: {
+    ...typography.bodySm,
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+  },
+
+  // Main Services (2 hero cards)
+  mainServicesRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.lg },
+  mainServiceCard: {
+    flex: 1,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    justifyContent: "space-between",
+    minHeight: 138,
+  },
+  mainServiceTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  mainServiceBadge: {
+    backgroundColor: "rgba(255,255,255,0.75)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+  },
+  mainServiceBadgeText: {
+    ...typography.labelSm,
+    fontWeight: "800",
+    fontSize: 10,
+  },
+  mainServiceText: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  mainServiceSub: { ...typography.bodySm, color: colors.onSurfaceVariant, fontWeight: "600", marginTop: 2 },
+
+  // Symmetrical 3x2 Grid for Other Services
+  otherServicesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  smallTile: {
+    width: "31.5%",
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.lg,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainer,
+  },
+  smallTileIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  smallTileLabel: {
+    ...typography.labelSm,
+    color: colors.onSurface,
+    fontWeight: "700",
+    textAlign: "center",
+  },
 
   // Promo Banner
-  promoBanner: { borderRadius: radius.xl, padding: spacing.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
-  promoTitle: { ...typography.headlineSm, color: "#fff", marginBottom: 4 },
-  promoSubtitle: { ...typography.bodySm, color: "rgba(255,255,255,0.85)" },
-  promoCta: { backgroundColor: "#fff", flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.full },
+  promoBanner: {
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  promoTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    backgroundColor: "#fff",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    marginBottom: 6,
+  },
+  promoTagText: {
+    ...typography.labelSm,
+    color: "#008751",
+    fontWeight: "800",
+    fontSize: 9,
+  },
+  promoTitle: { ...typography.headlineSm, color: "#fff", fontWeight: "800", marginBottom: 4 },
+  promoSubtitle: { ...typography.bodySm, color: "rgba(255,255,255,0.9)" },
+  promoCta: {
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.full,
+  },
   promoCtaText: { ...typography.labelMd, color: "#008751", fontWeight: "800" },
 
   // Bottom Nav
-  bottomNav: { flexDirection: "row", justifyContent: "space-around", paddingTop: 8, paddingBottom: spacing.md, borderTopWidth: 1, borderTopColor: colors.surfaceContainer, backgroundColor: colors.surfaceContainerLowest },
+  bottomNav: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingTop: 8,
+    paddingBottom: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.surfaceContainer,
+    backgroundColor: colors.surfaceContainerLowest,
+  },
   navItem: { alignItems: "center", gap: 4, flex: 1 },
-  navIconWrapper: { width: 44, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  navIconWrapper: {
+    width: 44,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   navLabel: { ...typography.labelSm, color: colors.outline, fontSize: 10 },
 });

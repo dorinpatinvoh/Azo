@@ -298,6 +298,64 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
                 {PACKAGE_META[activeDelivery.packageType]?.label ?? "Mission de livraison"}
               </Text>
 
+              {/* Barre de progression visuelle en 3 étapes */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginVertical: 4 }}>
+                <View
+                  style={{
+                    flex: 1,
+                    paddingVertical: 6,
+                    paddingHorizontal: 8,
+                    borderRadius: radius.md,
+                    backgroundColor: colors.primary,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ ...typography.labelSm, color: "#fff", fontWeight: "800", fontSize: 10 }}>
+                    1. Ramassage
+                  </Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={16} color={colors.primary} />
+                <View
+                  style={{
+                    flex: 1,
+                    paddingVertical: 6,
+                    paddingHorizontal: 8,
+                    borderRadius: radius.md,
+                    backgroundColor:
+                      activeDelivery.status === "IN_PROGRESS"
+                        ? colors.primary
+                        : colors.surfaceContainerLow,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      ...typography.labelSm,
+                      color: activeDelivery.status === "IN_PROGRESS" ? "#fff" : colors.onSurfaceVariant,
+                      fontWeight: "800",
+                      fontSize: 10,
+                    }}
+                  >
+                    2. En route
+                  </Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={16} color={colors.outline} />
+                <View
+                  style={{
+                    flex: 1,
+                    paddingVertical: 6,
+                    paddingHorizontal: 8,
+                    borderRadius: radius.md,
+                    backgroundColor: colors.surfaceContainerLow,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "700", fontSize: 10 }}>
+                    3. Encaissement
+                  </Text>
+                </View>
+              </View>
+
               <View style={styles.routeBox}>
                 <View style={styles.routeStep}>
                   <MaterialIcons name="trip-origin" size={16} color={colors.primary} />
