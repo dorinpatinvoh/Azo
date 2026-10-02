@@ -334,12 +334,6 @@ export default function App() {
       {route === "notifications" && <NotificationsScreen onBack={() => goTo("home")} />}
 
       {route === "menu" && <DevMenuScreen onSelect={(id) => goTo(id)} />}
-
-      {route !== "menu" && route !== "ride-request" && route !== "ride-tracking" && (
-        <Pressable style={styles.devFab} onPress={() => goTo("menu")}>
-          <Text style={styles.devFabText}>⋮⋮</Text>
-        </Pressable>
-      )}
     </SafeAreaProvider>
   );
 }
@@ -351,17 +345,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.background,
   },
-  devFab: {
-    position: "absolute",
-    bottom: 150,
-    right: spacing.md,
-    width: 44,
-    height: 44,
-    borderRadius: radius.full,
-    backgroundColor: colors.onSurface,
-    alignItems: "center",
-    justifyContent: "center",
-    opacity: 0.75,
-  },
-  devFabText: { color: "#fff", fontWeight: "800" },
 });

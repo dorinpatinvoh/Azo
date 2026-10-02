@@ -44,12 +44,15 @@ const ROLES: {
   label: string;
   hint: string;
   icon: keyof typeof MaterialIcons.glyphMap;
+  demoPhone: string;
 }[] = [
-  { id: "CLIENT", label: "Client", hint: "Courses & livraisons", icon: "person" },
-  { id: "DRIVER", label: "Zem / Chauffeur", hint: "Zem indépendant ou voiture", icon: "two-wheeler" },
-  { id: "COURIER", label: "Coursier / Livreur", hint: "Express, personnel & colis", icon: "local-shipping" },
-  { id: "AGENCY", label: "Agence", hint: "Gestion de flotte", icon: "apartment" },
+  { id: "CLIENT", label: "Client", hint: "Courses & livraisons", icon: "person", demoPhone: "0197000042" },
+  { id: "DRIVER", label: "Zem / Chauffeur", hint: "Zem indépendant ou voiture", icon: "two-wheeler", demoPhone: "0197000001" },
+  { id: "COURIER", label: "Coursier / Livreur", hint: "Express, personnel & colis", icon: "local-shipping", demoPhone: "0197000004" },
+  { id: "AGENCY", label: "Agence", hint: "Gestion de flotte", icon: "apartment", demoPhone: "0197000010" },
 ];
+
+const DEMO_PHONES = new Set(["0197000042", "0197000001", "0197000004", "0197000010", "0197000000"]);
 
 const SMS_BANNER_DURATION_SEC = 5;
 
@@ -314,7 +317,12 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
                     <Pressable
                       key={r.id}
                       style={[styles.roleChip, active && styles.roleChipActive]}
-                      onPress={() => setRole(r.id)}
+                      onPress={() => {
+                        setRole(r.id);
+                        if (DEMO_PHONES.has(phoneDigits)) {
+                          setPhoneDigits(r.demoPhone);
+                        }
+                      }}
                     >
                       <MaterialIcons
                         name={r.icon}
@@ -409,6 +417,20 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
               autoCorrect={false}
               keyboardType="url"
             />
+            <Text style={[styles.modalHint, { marginTop: 4, fontWeight: "700" }]}>
+              Accès rapide compte Administrateur :
+            </Text>
+            <Pressable
+              style={styles.modalCancelBtn}
+              onPress={() => {
+                setPhoneDigits("0197000000");
+                setServerModalOpen(false);
+              }}
+            >
+              <Text style={[styles.modalCancelText, { color: colors.primary }]}>
+                Remplir n° Admin (+229 01 97 00 00 00)
+              </Text>
+            </Pressable>
             <View style={styles.modalActions}>
               <Pressable
                 style={styles.modalCancelBtn}

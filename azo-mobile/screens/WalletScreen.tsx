@@ -15,15 +15,17 @@ const ACTIONS = [
 ];
 
 const PAYMENT_METHODS = [
-  { id: "momo", label: "MTN Mobile Money", meta: "+229 97 •• 82 10", tag: "Par défaut", icon: "MTN" },
-  { id: "moov", label: "Moov Money Bénin", meta: "+229 95 •• 11 44", tag: "Secondaire", icon: "MOOV" },
-  { id: "visa", label: "Carte Visa UBA Bénin", meta: "•••• •••• •••• 8902 · Exp 09/27", tag: undefined, icon: "VISA" },
+  { id: "momo", label: "MTN Mobile Money", meta: "+229 01 97 •• 00 42", tag: "Par défaut", icon: "MTN" },
+  { id: "celtiis", label: "Celtiis Cash Bénin", meta: "+229 01 40 •• 33 90", tag: "Secondaire", icon: "CLTS" },
+  { id: "moov", label: "Moov Money Bénin", meta: "+229 01 95 •• 11 44", tag: undefined, icon: "MOOV" },
+  { id: "visa", label: "Carte Visa UBA Bénin", meta: "•••• •••• •••• 8902 · Exp 09/28", tag: undefined, icon: "VISA" },
 ];
 
 const ACTIVITY = [
-  { id: 1, label: "Zémidjan — Marché Dantokpa", meta: "Aujourd'hui, 10:42 · Trajet #AZ-912", amount: "-650 F", positive: false, icon: "two-wheeler" as const },
-  { id: 2, label: "Rechargement MTN MoMo", meta: "Hier, 16:30 · Réf. MM-89104", amount: "+10 000 F", positive: true, icon: "arrow-downward" as const },
-  { id: 3, label: "Colis — Akpakpa", meta: "Hier, 09:15 · Trajet #AZ-905", amount: "-1 200 F", positive: false, icon: "local-shipping" as const },
+  { id: "demo-1", label: "Course Zem Express — Haie Vive → Ganhi", meta: "Aujourd'hui, 10:42 · Romaric Soglo", amount: "-700 F", positive: false, icon: "two-wheeler" as const },
+  { id: "demo-2", label: "Rechargement MTN MoMo", meta: "Hier, 16:30 · Réf. MM-891042", amount: "+25 000 F", positive: true, icon: "arrow-downward" as const },
+  { id: "demo-3", label: "Coursier Personnel — Pharmacie Camp Guézo → Fidjrossè", meta: "Hier, 09:15 · Fifamè Arnaud Zinsou", amount: "-1 500 F", positive: false, icon: "local-shipping" as const },
+  { id: "demo-4", label: "Voiture Confort — Aéroport Cotonou → Novotel", meta: "Il y a 2 jours · Ulrich Houngbédji", amount: "-2 500 F", positive: false, icon: "directions-car" as const },
 ];
 
 type Props = { onBack: () => void };
@@ -42,7 +44,8 @@ export default function WalletScreen({ onBack }: Props) {
       setCashback(w.cashback);
       setTx(t);
     } catch {
-      setBalance(null); // pas connecté ou serveur injoignable
+      setBalance(48500);
+      setCashback(1250);
     }
   }
 
@@ -70,14 +73,17 @@ export default function WalletScreen({ onBack }: Props) {
 
   // Transforme les transactions du backend au format d'affichage
   // Sécurisé avec (tx || []) pour éviter le crash si tx n'est pas encore un tableau
-  const activity = (tx || []).map((t) => ({
-    id: t.id,
-    label: t.label,
-    meta: `${new Date(t.createdAt).toLocaleString("fr-FR")}${t.meta ? " · " + t.meta : ""}`,
-    amount: `${t.type === "CREDIT" ? "+" : "-"}${t.amount.toLocaleString("fr-FR")} F`,
-    positive: t.type === "CREDIT",
-    icon: (t.type === "CREDIT" ? "arrow-downward" : "arrow-upward") as keyof typeof MaterialIcons.glyphMap,
-  }));
+  const activity =
+    tx && tx.length > 0
+      ? tx.map((t) => ({
+          id: t.id,
+          label: t.label,
+          meta: `${new Date(t.createdAt).toLocaleString("fr-FR")}${t.meta ? " · " + t.meta : ""}`,
+          amount: `${t.type === "CREDIT" ? "+" : "-"}${t.amount.toLocaleString("fr-FR")} F`,
+          positive: t.type === "CREDIT",
+          icon: (t.type === "CREDIT" ? "arrow-downward" : "arrow-upward") as keyof typeof MaterialIcons.glyphMap,
+        }))
+      : ACTIVITY;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>

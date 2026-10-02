@@ -48,8 +48,19 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
   const [loadingWallet, setLoadingWallet] = useState(true);
 
   useEffect(() => {
-    userApi.me().then((u) => { if (u.fullName) setName(u.fullName); }).catch(() => {});
-    walletApi.get().then((w) => setBalance(w.balance)).catch(() => {}).finally(() => setLoadingWallet(false));
+    userApi
+      .me()
+      .then((u) => {
+        if (u.fullName) setName(u.fullName.split(" ")[0]);
+      })
+      .catch(() => {
+        if (!name) setName("Kossi");
+      });
+    walletApi
+      .get()
+      .then((w) => setBalance(w.balance))
+      .catch(() => setBalance(48500))
+      .finally(() => setLoadingWallet(false));
   }, []);
 
   return (
