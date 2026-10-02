@@ -7,7 +7,8 @@
 //   - Émulateur Android         : http://10.0.2.2:3000
 //   - Navigateur (expo web)     : http://localhost:3000
 
-export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.100.10:3000";
+export const DEFAULT_API_URL =
+  process.env.EXPO_PUBLIC_API_URL || "https://azo-backend.onrender.com";
 export let API_URL = DEFAULT_API_URL;
 
 export const setApiUrl = (url: string | null | undefined) => {
@@ -43,7 +44,7 @@ async function request<T>(
   options: RequestInit & { timeoutMs?: number } = {}
 ): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 15000);
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 45000);
   try {
     const res = await fetch(`${API_URL}${path}`, {
       ...options,
