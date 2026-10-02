@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -16,16 +17,28 @@ import * as SecureStore from "expo-secure-store";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
-import { ProviderRef, authApi, errorMessage } from "../services/api";
+import { ProfileRole, ProviderRef, authApi, errorMessage } from "../services/api";
+import {
+  BENIN_PHONE_LENGTH,
+  cleanBeninDigits,
+  formatBeninPhoneInput,
+  isValidBeninPhone,
+} from "../utils/phone";
 
 type Step = "phone" | "code";
-type ProfileRole = "CLIENT" | "DRIVER" | "AGENCY";
 
 type Props = {
   // `provider` = le dossier prestataire ouvert par le profil choisi (null si simple client).
   onVerified: (role: string, provider?: ProviderRef | null) => void;
   onBack: () => void;
 };
+
+const PROFILES: { id: ProfileRole; label: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
+  { id: "CLIENT", label: "Client", icon: "person" },
+  { id: "DRIVER", label: "Zem / Chauffeur", icon: "two-wheeler" },
+  { id: "COURIER", label: "Coursier / Livreur", icon: "local-shipping" },
+  { id: "AGENCY", label: "Agence", icon: "apartment" },
+];
 
 export default function OtpLoginScreen({ onVerified, onBack }: Props) {
   const [step, setStep] = useState<Step>("phone");
@@ -35,17 +48,33 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
   const [profile, setProfile] = useState<ProfileRole>("CLIENT");
   const inputsRef = useRef<Array<TextInput | null>>([]);
 
-  const isPhoneValid = phone.replace(/\D/g, "").length >= 8;
+  const digits = cleanBeninDigits(phone);
+  const isPhoneValid = isValidBeninPhone(digits);
+  const needsPrefix01 = digits.length > 0 && !digits.startsWith("01");
+
+  function handlePhoneChange(raw: string) {
+    setPhone(formatBeninPhoneInput(raw));
+  }
+
+  function handleAddPrefix01() {
+    const withoutPrefix = digits.replace(/^01/, "").slice(0, 8);
+    setPhone(formatBeninPhoneInput(`01${withoutPrefix}`));
+  }
 
   async function handleSendCode() {
-    if (!isPhoneValid) return;
+    if (!isPhoneValid) {
+      Alert.alert(
+        "Numéro à 10 chiffres requis",
+        "Au Bénin (+229), entre les 10 chiffres commençant par 01 (ex. 01 97 00 00 42)."
+      );
+      return;
+    }
     setSending(true);
     try {
-      await authApi.requestOtp(phone.replace(/\D/g, ""));
+      await authApi.requestOtp(digits);
       setCode(["", "", "", ""]);
       setStep("code");
     } catch (e) {
-      // Sans code envoyé, l'étape suivante ne sert à rien : on prévient et on reste ici.
       Alert.alert("Envoi impossible", errorMessage(e));
     } finally {
       setSending(false);
@@ -58,13 +87,10 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
     setSending(true);
 
     try {
-      const response = await authApi.verifyOtp(phone.replace(/\D/g, ""), fullCode, profile);
+      const response = await authApi.verifyOtp(digits, fullCode, profile);
 
       await SecureStore.setItemAsync("userToken", response.token);
 
-      // Le rôle qui compte est celui du serveur : il est signé dans le jeton JWT.
-      // Choisir « Conducteur » ou « Agence » n'accorde plus aucun rôle : cela ouvre un
-      // dossier prestataire qu'un administrateur AZƆ̀ doit valider.
       const role = String(response.user.role || "CLIENT").toUpperCase().trim();
       await SecureStore.setItemAsync("userRole", role);
 
@@ -72,10 +98,8 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
       await SecureStore.setItemAsync("providerStatus", provider?.status ?? "");
       await SecureStore.setItemAsync("providerType", provider?.type ?? "");
 
-      // Déclenchement de la redirection dans App.tsx
       onVerified(role, provider);
     } catch (e) {
-      // Code faux, expiré, ou serveur injoignable : on NE connecte PAS l'utilisateur.
       Alert.alert("Connexion impossible", errorMessage(e));
     } finally {
       setSending(false);
@@ -95,7 +119,11 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.topRow}>
             <Pressable
               onPress={step === "phone" ? onBack : () => setStep("phone")}
@@ -106,7 +134,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
             </Pressable>
             <View style={styles.countryPill}>
               <View style={styles.liveDot} />
-              <Text style={styles.countryText}>BÉNIN (+229)</Text>
+              <Text style={styles.countryText}>BÉNIN (+229 · 10 CHIFFRES)</Text>
             </View>
           </View>
 
@@ -117,30 +145,35 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
             </Text>
             <Text style={styles.subtitle}>
               {step === "phone"
-                ? "Entre ton numéro pour recevoir ton code de vérification instantané par SMS ou WhatsApp."
-                : `Code envoyé au +229 ${phone || "•• •• •• ••"}`}
+                ? "Entre ton numéro béninois à 10 chiffres (01 + 8 chiffres) pour recevoir ton code SMS."
+                : `Code à 4 chiffres envoyé au +229 ${phone || "01 •• •• •• ••"}`}
             </Text>
           </View>
 
           {step === "phone" && (
-            <View style={styles.profileRow}>
-              {(
-                [
-                  ["CLIENT", "Client"],
-                  ["DRIVER", "Conducteur"],
-                  ["AGENCY", "Agence"],
-                ] as const
-              ).map(([id, label]) => (
-                <Pressable
-                  key={id}
-                  onPress={() => setProfile(id as ProfileRole)}
-                  style={[styles.profileChip, profile === id && styles.profileChipActive]}
-                >
-                  <Text style={[styles.profileText, profile === id && styles.profileTextActive]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              ))}
+            <View style={styles.profileGrid}>
+              {PROFILES.map((p) => {
+                const active = profile === p.id;
+                return (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => setProfile(p.id)}
+                    style={[styles.profileChip, active && styles.profileChipActive]}
+                  >
+                    <MaterialIcons
+                      name={p.icon}
+                      size={16}
+                      color={active ? "#fff" : colors.onSurfaceVariant}
+                    />
+                    <Text
+                      style={[styles.profileText, active && styles.profileTextActive]}
+                      numberOfLines={1}
+                    >
+                      {p.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
@@ -149,16 +182,24 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
               <MaterialIcons name="shield" size={16} color={colors.primary} />
               <Text style={styles.profileHintText}>
                 {profile === "DRIVER"
-                  ? "Conducteur : tu déposeras un dossier (identité, véhicule, photos). Un administrateur AZƆ̀ le valide avant l'ouverture de ton espace."
-                  : "Agence : tu déposeras un dossier (raison sociale, formule, pièces). Un administrateur AZƆ̀ le valide avant la création de ta flotte."}
+                  ? "Zem / Conducteur indépendant : tu déposeras un dossier (identité, véhicule, photos) validé par un administrateur AZƆ̀."
+                  : profile === "COURIER"
+                    ? "Coursier / Coursier personnel / Livreur : dépose ton dossier (identité, moto/véhicule, photos) pour activer tes missions."
+                    : "Agence : dépose le dossier de ta flotte (raison sociale, formule, pièces) pour validation par un administrateur AZƆ̀."}
               </Text>
             </View>
           )}
 
           {step === "phone" ? (
             <View style={styles.card}>
-              <Text style={styles.label}>Numéro de mobile</Text>
-              <View style={styles.phoneRow}>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>Numéro de mobile (10 chiffres)</Text>
+                <Text style={styles.digitCount}>
+                  {digits.length}/{BENIN_PHONE_LENGTH}
+                </Text>
+              </View>
+
+              <View style={[styles.phoneRow, isPhoneValid && styles.phoneRowValid]}>
                 <View style={styles.flagBadge}>
                   <Svg width={20} height={14} viewBox="0 0 450 300">
                     <Rect fill="#008751" width="180" height="300" />
@@ -169,17 +210,30 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
                 </View>
                 <TextInput
                   style={styles.phoneInput}
-                  placeholder="97 00 00 42"
+                  placeholder="01 97 00 00 42"
                   placeholderTextColor={colors.outline}
                   keyboardType="phone-pad"
                   value={phone}
-                  onChangeText={setPhone}
-                  maxLength={12}
+                  onChangeText={handlePhoneChange}
+                  maxLength={14}
                 />
                 {isPhoneValid && (
                   <MaterialIcons name="check-circle" size={22} color={colors.primary} />
                 )}
               </View>
+
+              {needsPrefix01 ? (
+                <Pressable style={styles.prefixHelper} onPress={handleAddPrefix01}>
+                  <MaterialIcons name="auto-fix-high" size={15} color={colors.primary} />
+                  <Text style={styles.prefixHelperText}>
+                    Le numéro doit commencer par 01 — appuyer pour préfixer en 01
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.formatHint}>
+                  Plan national Bénin : <Text style={{ fontWeight: "700" }}>01</Text> suivi des 8 chiffres de ton numéro
+                </Text>
+              )}
 
               <View style={styles.operatorsRow}>
                 <Text style={styles.operatorsLabel}>Réseaux certifiés :</Text>
@@ -195,7 +249,9 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
               {code.map((digit, i) => (
                 <TextInput
                   key={i}
-                  ref={(el) => { inputsRef.current[i] = el; }}
+                  ref={(el) => {
+                    inputsRef.current[i] = el;
+                  }}
                   style={[styles.codeBox, digit ? styles.codeBoxFilled : null]}
                   keyboardType="number-pad"
                   maxLength={1}
@@ -206,7 +262,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
             </View>
           )}
 
-          <View style={{ flex: 1 }} />
+          <View style={{ flex: 1, minHeight: spacing.lg }} />
 
           <PrimaryButton
             label={step === "phone" ? "Recevoir mon code" : "Vérifier et continuer"}
@@ -221,7 +277,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
               <Text style={styles.resendText}>Renvoyer le code</Text>
             </Pressable>
           )}
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -237,7 +293,7 @@ function OperatorPill({ label, bg, fg }: { label: string; bg: string; fg: string
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, padding: spacing.md },
+  content: { flexGrow: 1, padding: spacing.md },
   topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   iconButton: {
     width: 40,
@@ -258,7 +314,7 @@ const styles = StyleSheet.create({
   },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.secondary },
   countryText: { ...typography.labelSm, color: colors.onSurface, fontWeight: "700" },
-  headerBlock: { alignItems: "center", marginTop: spacing.md, marginBottom: spacing.lg },
+  headerBlock: { alignItems: "center", marginTop: spacing.md, marginBottom: spacing.md },
   brand: { ...typography.headlineLg, color: colors.primary, fontWeight: "800", marginBottom: spacing.xs },
   headline: { ...typography.headlineXl, color: colors.onSurface, textAlign: "center" },
   subtitle: {
@@ -266,8 +322,38 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
     textAlign: "center",
     marginTop: spacing.xs,
-    maxWidth: 300,
+    maxWidth: 320,
   },
+  profileGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: spacing.sm,
+  },
+  profileChip: {
+    width: "48.5%",
+    height: 42,
+    flexDirection: "row",
+    gap: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceContainerLow,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  profileChipActive: { backgroundColor: colors.primary },
+  profileText: { ...typography.labelSm, color: colors.onSurface, fontWeight: "700" },
+  profileTextActive: { color: "#fff" },
+  profileHint: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    backgroundColor: colors.primaryFixed,
+    borderRadius: radius.lg,
+    padding: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  profileHintText: { ...typography.labelSm, color: colors.onPrimaryFixed, flex: 1, lineHeight: 18 },
   card: {
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.lg,
@@ -277,7 +363,14 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  label: { ...typography.labelMd, color: colors.onSurfaceVariant, marginBottom: spacing.xs },
+  labelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.xs,
+  },
+  label: { ...typography.labelMd, color: colors.onSurfaceVariant },
+  digitCount: { ...typography.labelSm, color: colors.primary, fontWeight: "700" },
   phoneRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -286,6 +379,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerLow,
     paddingHorizontal: spacing.sm,
     gap: spacing.xs,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+  },
+  phoneRowValid: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceContainerLowest,
   },
   flagBadge: {
     flexDirection: "row",
@@ -297,7 +396,25 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   flagCode: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
-  phoneInput: { flex: 1, ...typography.headlineSm, color: colors.onSurface, paddingHorizontal: 4 },
+  phoneInput: {
+    flex: 1,
+    ...typography.headlineSm,
+    color: colors.onSurface,
+    paddingHorizontal: 4,
+    letterSpacing: 0.5,
+  },
+  prefixHelper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primaryFixed,
+    borderRadius: radius.md,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 8,
+  },
+  prefixHelperText: { ...typography.labelSm, color: colors.primary, fontWeight: "700", flex: 1 },
+  formatHint: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 8, paddingHorizontal: 2 },
   operatorsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -319,28 +436,6 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
   },
   codeBoxFilled: { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.surfaceContainerLowest },
-  profileRow: { flexDirection: "row", gap: spacing.xs, marginBottom: spacing.sm },
-  profileHint: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "flex-start",
-    backgroundColor: colors.primaryFixed,
-    borderRadius: radius.lg,
-    padding: spacing.sm + 2,
-    marginBottom: spacing.sm,
-  },
-  profileHintText: { ...typography.labelSm, color: colors.onPrimaryFixed, flex: 1, lineHeight: 18 },
-  profileChip: {
-    flex: 1,
-    height: 44,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceContainerLow,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profileChipActive: { backgroundColor: colors.primary },
-  profileText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
-  profileTextActive: { color: "#fff" },
   resend: { alignSelf: "center", marginTop: spacing.md },
   resendText: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
 });

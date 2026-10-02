@@ -8,8 +8,9 @@ export class VerifyOtpDto {
   @Length(4, 4, { message: "Le code doit contenir 4 chiffres" })
   code: string;
 
-  // Profil choisi à l'inscription. ADMIN est volontairement absent de la liste.
+  // Profil choisi à l'inscription (ouvre un brouillon de dossier prestataire).
+  // ADMIN n'est jamais attribuable par l'API ; ARTISAN n'existe pas sur AZƆ̀.
   @IsOptional()
-  @IsIn(["CLIENT", "DRIVER", "AGENCY"])
-  profile?: string;
+  @IsIn(["CLIENT", "DRIVER", "COURIER", "AGENCY"])
+  profile?: "CLIENT" | "DRIVER" | "COURIER" | "AGENCY";
 }

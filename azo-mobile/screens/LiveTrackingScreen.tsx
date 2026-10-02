@@ -6,7 +6,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { io } from "socket.io-client";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { API_URL, Ride, RideStatus, VehicleType, errorMessage, rideApi } from "../services/api";
+import { API_URL, Ride, RideStatus, VehicleType, errorMessage, getToken, rideApi } from "../services/api";
 
 type Props = { rideId: string; destinationLabel?: string; onClose: () => void; onFinish?: () => void };
 type LatLng = { latitude: number; longitude: number };
@@ -78,7 +78,10 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   /* Position du chauffeur en direct (socket.io de ton backend) */
   useEffect(() => {
-    const socket = io(API_URL, { transports: ["websocket"] });
+    const socket = io(API_URL, {
+      transports: ["websocket"],
+      auth: { token: getToken() },
+    });
     socket.on("connect", () => socket.emit("ride:join", { rideId }));
     socket.on("driver:location", (p: { lat: number; lng: number }) =>
       setDriverPos({ latitude: p.lat, longitude: p.lng })

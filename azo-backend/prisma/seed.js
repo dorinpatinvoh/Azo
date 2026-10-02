@@ -20,11 +20,29 @@ const prisma = new PrismaClient();
 // Rôle applicatif accordé à l'approbation d'un dossier (même table que providers.module.ts)
 const ROLE_FOR_TYPE = { DRIVER: "DRIVER", COURIER: "DRIVER", AGENCY: "AGENCY", ARTISAN: "ARTISAN" };
 
-function normalizePhone(raw) {
+function extractLocalDigits(raw) {
   const digits = String(raw || "").replace(/\D/g, "");
-  if (!digits) return null;
-  const local = digits.startsWith("229") ? digits.slice(3) : digits;
+  if (!digits) return "";
+  if (digits.startsWith("00229") && digits.length > 5) return digits.slice(5);
+  if (digits.startsWith("229") && digits.length >= 11) return digits.slice(3);
+  return digits;
+}
+
+function normalizePhone(raw) {
+  const local = extractLocalDigits(raw);
+  if (!local) return null;
+  if (local.length === 8 && !local.startsWith("01")) return `+22901${local}`;
   return `+229${local}`;
+}
+
+function phoneVariants(raw) {
+  const local = extractLocalDigits(raw);
+  if (!local) return [];
+  const canonical = normalizePhone(raw);
+  const set = new Set([canonical, `+229${local}`]);
+  if (local.length === 10 && local.startsWith("01")) set.add(`+229${local.slice(2)}`);
+  else if (local.length === 8) set.add(`+22901${local}`);
+  return Array.from(set);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -35,16 +53,17 @@ async function ensureAdmin() {
     console.warn(
       "\n⚠️  ADMIN_PHONE n'est pas défini dans azo-backend/.env : aucun administrateur créé.\n" +
         "   Sans compte ADMIN, personne ne peut valider les dossiers prestataires.\n" +
-        "   Exemple :  ADMIN_PHONE=\"+22997000000\"\n"
+        "   Exemple :  ADMIN_PHONE=\"+2290197000000\"\n"
     );
     return null;
   }
 
-  const existing = await prisma.user.findUnique({ where: { phone } });
+  const variants = phoneVariants(process.env.ADMIN_PHONE);
+  const existing = await prisma.user.findFirst({ where: { phone: { in: variants } } });
   if (existing) {
     const admin = await prisma.user.update({
-      where: { phone },
-      data: { role: "ADMIN", status: "ACTIVE", fullName: existing.fullName ?? "Administrateur AZƆ̀" },
+      where: { id: existing.id },
+      data: { phone, role: "ADMIN", status: "ACTIVE", fullName: existing.fullName ?? "Administrateur AZƆ̀" },
     });
     if (!(await prisma.wallet.findUnique({ where: { userId: admin.id } }))) {
       await prisma.wallet.create({ data: { userId: admin.id } });

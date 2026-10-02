@@ -24,12 +24,17 @@ import {
   ProviderChecklistItem,
   ProviderDecision,
   ProviderStatus,
+  ProviderType,
   errorMessage,
   adminProvidersApi,
   providersApi,
 } from "../services/api";
+import { formatBeninPhoneDisplay } from "../utils/phone";
 
-type Props = { onBack: () => void };
+type Props = {
+  onBack: () => void;
+  onOpenDashboard?: () => void;
+};
 
 type Filter = { id: ProviderStatus | "ALL"; label: string };
 
@@ -41,6 +46,13 @@ const FILTERS: Filter[] = [
   { id: "SUSPENDED", label: "Suspendus" },
   { id: "REJECTED", label: "Refusés" },
   { id: "ALL", label: "Tous" },
+];
+
+const TYPE_FILTERS: { id: ProviderType | "ALL"; label: string }[] = [
+  { id: "ALL", label: "Toutes activités" },
+  { id: "DRIVER", label: "Zem / Chauffeur" },
+  { id: "COURIER", label: "Coursier / Livreur" },
+  { id: "AGENCY", label: "Agence" },
 ];
 
 const STATUS_LABEL: Record<ProviderStatus, string> = {
@@ -82,9 +94,8 @@ const EVENT_LABELS: Record<string, string> = {
 
 const TYPE_ICON: Record<string, keyof typeof MaterialIcons.glyphMap> = {
   DRIVER: "two-wheeler",
-  COURIER: "delivery-dining",
+  COURIER: "local-shipping",
   AGENCY: "apartment",
-  ARTISAN: "build",
 };
 
 function fmtDate(iso: string | null | undefined) {
@@ -99,6 +110,14 @@ function hoursLabel(hours: number | null) {
   if (hours < 1) return "à l'instant";
   if (hours < 48) return `il y a ${hours} h`;
   return `il y a ${Math.round(hours / 24)} j`;
+}
+
+function submissionMetaLabel(waitingHours: number | null, status: ProviderStatus) {
+  if (status === "DRAFT") return "Brouillon non déposé";
+  if (waitingHours == null) {
+    return status === "APPROVED" ? "Compte régularisé" : "Non déposé";
+  }
+  return `Déposé ${hoursLabel(waitingHours)}`;
 }
 
 /** Dialogue de motif : Alert.prompt n'existe pas sur Android, d'où cette modale. */
@@ -150,8 +169,9 @@ function ReasonModal(props: {
   );
 }
 
-export default function AdminProvidersScreen({ onBack }: Props) {
+export default function AdminProvidersScreen({ onBack, onOpenDashboard }: Props) {
   const [filter, setFilter] = useState<ProviderStatus | "ALL">("SUBMITTED");
+  const [typeFilter, setTypeFilter] = useState<ProviderType | "ALL">("ALL");
   const [queue, setQueue] = useState<AdminProviderQueue | null>(null);
   const [stats, setStats] = useState<AdminProviderStats | null>(null);
   const [detail, setDetail] = useState<AdminProviderDetail | null>(null);
@@ -161,18 +181,26 @@ export default function AdminProvidersScreen({ onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [override, setOverride] = useState(false);
   const [viewer, setViewer] = useState<{ kind: DocumentKind; label: string; documentId: string } | null>(null);
-  const [reason, setReason] = useState<{ action: ProviderDecision | "DOCUMENT_INVALID"; documentId?: string; title: string; placeholder: string } | null>(null);
+  const [reason, setReason] = useState<{
+    action: ProviderDecision | "DOCUMENT_INVALID";
+    documentId?: string;
+    title: string;
+    placeholder: string;
+  } | null>(null);
 
   const selectedId = detail?.id ?? null;
 
   const loadQueue = useCallback(async () => {
     const [q, s] = await Promise.all([
-      adminProvidersApi.queue(filter === "ALL" ? {} : { status: filter }),
+      adminProvidersApi.queue({
+        ...(filter === "ALL" ? {} : { status: filter }),
+        ...(typeFilter === "ALL" ? {} : { type: typeFilter }),
+      }),
       adminProvidersApi.stats(),
     ]);
     setQueue(q);
     setStats(s);
-  }, [filter]);
+  }, [filter, typeFilter]);
 
   const loadDetail = useCallback(async (id: string) => {
     const d = await adminProvidersApi.detail(id);
@@ -221,7 +249,10 @@ export default function AdminProvidersScreen({ onBack }: Props) {
     }
   }
 
-  function askReason(action: ProviderDecision | "DOCUMENT_INVALID", opts: { title: string; placeholder: string; documentId?: string }) {
+  function askReason(
+    action: ProviderDecision | "DOCUMENT_INVALID",
+    opts: { title: string; placeholder: string; documentId?: string }
+  ) {
     setReason({ action, title: opts.title, placeholder: opts.placeholder, documentId: opts.documentId });
   }
 
@@ -243,7 +274,21 @@ export default function AdminProvidersScreen({ onBack }: Props) {
     await run(() => adminProvidersApi.decide(selectedId, action, text));
   }
 
+  function confirmExit() {
+    Alert.alert("Quitter la console admin", "Que souhaites-tu faire ?", [
+      { text: "Annuler", style: "cancel" },
+      ...(onOpenDashboard
+        ? [{ text: "Tableau de bord", onPress: onOpenDashboard }]
+        : []),
+      { text: "Se déconnecter", style: "destructive", onPress: onBack },
+    ]);
+  }
+
   const counts = useMemo(() => stats?.byStatus ?? {}, [stats]);
+  const totalAll = useMemo(
+    () => Object.values(counts).reduce((sum, n) => sum + (n || 0), 0),
+    [counts]
+  );
 
   /* ------------------------------------------------------------ vue liste */
 
@@ -251,33 +296,91 @@ export default function AdminProvidersScreen({ onBack }: Props) {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.header}>
-          <Pressable onPress={onBack} style={styles.iconBtn} accessibilityLabel="Retour">
+          <Pressable onPress={confirmExit} style={styles.iconBtn} accessibilityLabel="Menu ou déconnexion">
             <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Validation des prestataires</Text>
-            <Text style={styles.headerSub}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              Validation des prestataires
+            </Text>
+            <Text style={styles.headerSub} numberOfLines={1}>
               {stats ? `${stats.pending} en attente · ${stats.overdue} hors délai` : "Console administrateur"}
             </Text>
           </View>
+          {onOpenDashboard ? (
+            <Pressable
+              onPress={onOpenDashboard}
+              style={styles.dashboardBtn}
+              accessibilityLabel="Tableau de bord admin"
+            >
+              <MaterialIcons name="dashboard" size={16} color={colors.primary} />
+              <Text style={styles.dashboardBtnText}>Pilotage</Text>
+            </Pressable>
+          ) : null}
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {FILTERS.map((f) => {
-            const active = filter === f.id;
-            const count = f.id === "ALL" ? queue?.total : counts[f.id] ?? 0;
-            return (
-              <Pressable key={f.id} style={[styles.chip, active && styles.chipActive]} onPress={() => setFilter(f.id)}>
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
-                {count ? <Text style={[styles.chipCount, active && styles.chipCountActive]}>{count}</Text> : null}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {/* Barre de filtres par statut — conteneur à hauteur fixe pour empêcher l'étirement vertical */}
+        <View style={styles.filterBarWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
+            contentContainerStyle={styles.chips}
+          >
+            {FILTERS.map((f) => {
+              const active = filter === f.id;
+              const count = f.id === "ALL" ? totalAll || queue?.total || 0 : counts[f.id] ?? 0;
+              return (
+                <Pressable
+                  key={f.id}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setFilter(f.id)}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
+                    {f.label}
+                  </Text>
+                  {count > 0 ? (
+                    <View style={[styles.chipCountBadge, active && styles.chipCountBadgeActive]}>
+                      <Text style={[styles.chipCount, active && styles.chipCountActive]}>{count}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Filtre secondaire par activité (Zem, Coursier, Agence) */}
+        <View style={styles.subFilterWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
+            contentContainerStyle={styles.subChips}
+          >
+            {TYPE_FILTERS.map((tf) => {
+              const active = typeFilter === tf.id;
+              return (
+                <Pressable
+                  key={tf.id}
+                  style={[styles.subChip, active && styles.subChipActive]}
+                  onPress={() => setTypeFilter(tf.id)}
+                >
+                  <Text style={[styles.subChipText, active && styles.subChipTextActive]} numberOfLines={1}>
+                    {tf.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {stats ? (
           <View style={styles.statsRow}>
-            <Stat label="Délai moyen" value={stats.averageReviewHours != null ? `${stats.averageReviewHours} h` : "—"} />
+            <Stat
+              label="Délai moyen"
+              value={stats.averageReviewHours != null ? `${stats.averageReviewHours} h` : "—"}
+            />
             <Stat label="Approuvés" value={String(stats.approved)} />
             <Stat label="Suspendus" value={String(stats.suspended)} />
             <Stat label="SLA" value={`${stats.slaHours} h`} />
@@ -290,14 +393,20 @@ export default function AdminProvidersScreen({ onBack }: Props) {
           </View>
         ) : (
           <ScrollView
+            style={styles.listScroll}
             contentContainerStyle={styles.scroll}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
           >
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
             {(queue?.items ?? []).length === 0 && !error ? (
               <View style={styles.empty}>
-                <MaterialIcons name="task-alt" size={40} color={colors.outlineVariant} />
-                <Text style={styles.muted}>Aucun dossier dans cette file.</Text>
+                <View style={styles.emptyIconCircle}>
+                  <MaterialIcons name="task-alt" size={32} color={colors.primary} />
+                </View>
+                <Text style={styles.emptyTitle}>Aucun dossier dans cette file</Text>
+                <Text style={styles.muted}>
+                  Change d'onglet ci-dessus (ex. « Tous » ou « Actifs ») ou tire vers le bas pour actualiser.
+                </Text>
               </View>
             ) : null}
 
@@ -307,13 +416,16 @@ export default function AdminProvidersScreen({ onBack }: Props) {
                   <MaterialIcons name={TYPE_ICON[item.type] ?? "person"} size={20} color={colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.rowTitle}>{item.identity.fullName ?? item.user.fullName ?? item.user.phone}</Text>
-                  <Text style={styles.rowMeta}>
-                    {item.typeLabel}
-                    {item.identity.city ? ` · ${item.identity.city}` : ""} · {item.user.phone}
+                  <Text style={styles.rowTitle} numberOfLines={1}>
+                    {item.identity.fullName ?? item.user.fullName ?? formatBeninPhoneDisplay(item.user.phone)}
                   </Text>
-                  <Text style={styles.rowMeta}>
-                    Déposé {hoursLabel(item.review.waitingHours)} · pièces {item.checklist.filter((c) => c.hasFile).length}/
+                  <Text style={styles.rowMeta} numberOfLines={1}>
+                    {item.typeLabel}
+                    {item.identity.city ? ` · ${item.identity.city}` : ""} · {formatBeninPhoneDisplay(item.user.phone)}
+                  </Text>
+                  <Text style={styles.rowMeta} numberOfLines={1}>
+                    {submissionMetaLabel(item.review.waitingHours, item.status)} · pièces{" "}
+                    {item.checklist.filter((c) => c.hasFile).length}/
                     {item.checklist.filter((c) => c.required).length} · KYC {item.activation.kycScore}/100
                   </Text>
                 </View>
@@ -351,10 +463,10 @@ export default function AdminProvidersScreen({ onBack }: Props) {
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {d.identity.fullName ?? d.user.phone}
+            {d.identity.fullName ?? formatBeninPhoneDisplay(d.user.phone)}
           </Text>
-          <Text style={styles.headerSub}>
-            {d.user.phone} · {d.typeLabel}
+          <Text style={styles.headerSub} numberOfLines={1}>
+            {formatBeninPhoneDisplay(d.user.phone)} · {d.typeLabel}
             {d.identity.city ? ` · ${d.identity.city}` : ""}
           </Text>
         </View>
@@ -371,6 +483,7 @@ export default function AdminProvidersScreen({ onBack }: Props) {
       ) : null}
 
       <ScrollView
+        style={styles.listScroll}
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
       >
@@ -380,9 +493,15 @@ export default function AdminProvidersScreen({ onBack }: Props) {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Candidature</Text>
           <Info label="Statut du compte" value={`${d.user.role} · ${d.user.status}`} />
+          <Info label="Téléphone" value={formatBeninPhoneDisplay(d.user.phone)} />
           <Info label="Inscrit le" value={fmtDate(d.user.createdAt)} />
           <Info label="Déposé le" value={fmtDate(d.review.submittedAt)} />
-          <Info label="Ancienneté" value={hoursLabel(d.review.waitingHours)} warn={d.review.overdue} />
+          <Info
+            label="Ancienneté"
+            value={submissionMetaLabel(d.review.waitingHours, d.status)}
+            warn={d.review.overdue}
+          />
+          {d.activity.categoryId ? <Info label="Spécialité" value={d.activity.categoryId} /> : null}
           {d.activity.vehicleType ? <Info label="Véhicule" value={d.activity.vehicleType} /> : null}
           {d.activity.plateNumber ? <Info label="Immatriculation" value={d.activity.plateNumber} /> : null}
           {d.activity.vehicleModel ? <Info label="Modèle" value={d.activity.vehicleModel} /> : null}
@@ -390,12 +509,16 @@ export default function AdminProvidersScreen({ onBack }: Props) {
           {d.activity.planLabel ? (
             <Info
               label="Formule"
-              value={`${d.activity.planLabel} · ${d.activity.planFee?.toLocaleString("fr-FR") ?? 0} F (non débités) · commission ${((d.activity.planCommissionRate ?? 0) * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %`}
+              value={`${d.activity.planLabel} · ${d.activity.planFee?.toLocaleString("fr-FR") ?? 0} F · commission ${((d.activity.planCommissionRate ?? 0) * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %`}
             />
           ) : null}
           {d.identity.zones?.length ? <Info label="Zones" value={d.identity.zones.join(", ")} /> : null}
-          {d.identity.experienceYears != null ? <Info label="Expérience" value={`${d.identity.experienceYears} an(s)`} /> : null}
-          {d.missingFields.length ? <Info label="Champs manquants" value={d.missingFields.join(", ")} warn /> : null}
+          {d.identity.experienceYears != null ? (
+            <Info label="Expérience" value={`${d.identity.experienceYears} an(s)`} />
+          ) : null}
+          {d.missingFields.length ? (
+            <Info label="Champs manquants" value={d.missingFields.join(", ")} warn />
+          ) : null}
         </View>
 
         {/* Pièces */}
@@ -437,13 +560,17 @@ export default function AdminProvidersScreen({ onBack }: Props) {
           <Text style={styles.cardTitle}>Décision</Text>
 
           {decidable && d.status !== "UNDER_REVIEW" ? (
-            <Pressable style={styles.actionGhost} onPress={() => run(() => adminProvidersApi.startReview(d.id))} disabled={busy}>
+            <Pressable
+              style={styles.actionGhost}
+              onPress={() => run(() => adminProvidersApi.startReview(d.id))}
+              disabled={busy}
+            >
               <MaterialIcons name="touch-app" size={18} color={colors.onSurface} />
               <Text style={styles.actionGhostText}>Prendre en charge le dossier</Text>
             </Pressable>
           ) : null}
 
-          {decidable ? (
+          {decidable || d.status === "DRAFT" ? (
             <>
               {hasMissing ? (
                 <Pressable style={styles.overrideRow} onPress={() => setOverride((o) => !o)}>
@@ -458,32 +585,55 @@ export default function AdminProvidersScreen({ onBack }: Props) {
                 </Pressable>
               ) : null}
 
-              <Pressable
-                style={[styles.actionPrimary, busy && styles.disabled]}
-                disabled={busy}
-                onPress={() => run(() => adminProvidersApi.decide(d.id, "APPROVE", undefined, override || undefined), "Dossier approuvé : le rôle est accordé.")}
-              >
-                <MaterialIcons name="verified" size={18} color="#fff" />
-                <Text style={styles.actionPrimaryText}>Approuver et activer le compte</Text>
-              </Pressable>
+              {decidable ? (
+                <>
+                  <Pressable
+                    style={[styles.actionPrimary, busy && styles.disabled]}
+                    disabled={busy}
+                    onPress={() =>
+                      run(
+                        () => adminProvidersApi.decide(d.id, "APPROVE", undefined, override || undefined),
+                        "Dossier approuvé : le rôle est accordé."
+                      )
+                    }
+                  >
+                    <MaterialIcons name="verified" size={18} color="#fff" />
+                    <Text style={styles.actionPrimaryText}>Approuver et activer le compte</Text>
+                  </Pressable>
 
-              <Pressable
-                style={styles.actionGhost}
-                disabled={busy}
-                onPress={() => askReason("NEED_INFO", { title: "Demander une information", placeholder: "Ex. renvoie une photo lisible de ton permis" })}
-              >
-                <MaterialIcons name="help-outline" size={18} color={colors.onSurface} />
-                <Text style={styles.actionGhostText}>Demander une pièce / information</Text>
-              </Pressable>
+                  <Pressable
+                    style={styles.actionGhost}
+                    disabled={busy}
+                    onPress={() =>
+                      askReason("NEED_INFO", {
+                        title: "Demander une information",
+                        placeholder: "Ex. renvoie une photo lisible de ton permis",
+                      })
+                    }
+                  >
+                    <MaterialIcons name="help-outline" size={18} color={colors.onSurface} />
+                    <Text style={styles.actionGhostText}>Demander une pièce / information</Text>
+                  </Pressable>
 
-              <Pressable
-                style={styles.actionDangerGhost}
-                disabled={busy}
-                onPress={() => askReason("REJECT", { title: "Refuser le dossier", placeholder: "Motif du refus (visible par le candidat)" })}
-              >
-                <MaterialIcons name="cancel" size={18} color={colors.error} />
-                <Text style={styles.actionDangerText}>Refuser le dossier</Text>
-              </Pressable>
+                  <Pressable
+                    style={styles.actionDangerGhost}
+                    disabled={busy}
+                    onPress={() =>
+                      askReason("REJECT", {
+                        title: "Refuser le dossier",
+                        placeholder: "Motif du refus (visible par le candidat)",
+                      })
+                    }
+                  >
+                    <MaterialIcons name="cancel" size={18} color={colors.error} />
+                    <Text style={styles.actionDangerText}>Refuser le dossier</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Text style={styles.muted}>
+                  Ce dossier est encore en brouillon : le candidat ne l'a pas encore soumis pour validation.
+                </Text>
+              )}
             </>
           ) : null}
 
@@ -491,7 +641,12 @@ export default function AdminProvidersScreen({ onBack }: Props) {
             <Pressable
               style={styles.actionDangerGhost}
               disabled={busy}
-              onPress={() => askReason("SUSPEND", { title: "Suspendre le compte", placeholder: "Motif de la suspension (visible par le prestataire)" })}
+              onPress={() =>
+                askReason("SUSPEND", {
+                  title: "Suspendre le compte",
+                  placeholder: "Motif de la suspension (visible par le prestataire)",
+                })
+              }
             >
               <MaterialIcons name="block" size={18} color={colors.error} />
               <Text style={styles.actionDangerText}>Suspendre ce prestataire</Text>
@@ -499,15 +654,25 @@ export default function AdminProvidersScreen({ onBack }: Props) {
           ) : null}
 
           {d.status === "SUSPENDED" ? (
-            <Pressable style={[styles.actionPrimary, busy && styles.disabled]} disabled={busy} onPress={() => run(() => adminProvidersApi.reinstate(d.id), "Suspension levée.")}>
+            <Pressable
+              style={[styles.actionPrimary, busy && styles.disabled]}
+              disabled={busy}
+              onPress={() => run(() => adminProvidersApi.reinstate(d.id), "Suspension levée.")}
+            >
               <MaterialIcons name="restart-alt" size={18} color="#fff" />
               <Text style={styles.actionPrimaryText}>Lever la suspension</Text>
             </Pressable>
           ) : null}
 
-          {d.status === "REJECTED" ? <Text style={styles.muted}>Dossier refusé : {d.review.rejectReason ?? "—"}</Text> : null}
-          {d.status === "NEED_INFO" ? <Text style={styles.muted}>Attendu du candidat : {d.review.infoRequested ?? "—"}</Text> : null}
-          {d.status === "SUSPENDED" ? <Text style={styles.muted}>Motif : {d.review.suspensionReason ?? "—"}</Text> : null}
+          {d.status === "REJECTED" ? (
+            <Text style={styles.muted}>Dossier refusé : {d.review.rejectReason ?? "—"}</Text>
+          ) : null}
+          {d.status === "NEED_INFO" ? (
+            <Text style={styles.muted}>Attendu du candidat : {d.review.infoRequested ?? "—"}</Text>
+          ) : null}
+          {d.status === "SUSPENDED" ? (
+            <Text style={styles.muted}>Motif : {d.review.suspensionReason ?? "—"}</Text>
+          ) : null}
         </View>
 
         {/* Journal */}
@@ -534,7 +699,13 @@ export default function AdminProvidersScreen({ onBack }: Props) {
               <MaterialIcons name="close" size={22} color="#fff" />
             </Pressable>
           </View>
-          {viewer ? <Image source={providersApi.fileSource(viewer.documentId)} style={styles.viewerImage} resizeMode="contain" /> : null}
+          {viewer ? (
+            <Image
+              source={providersApi.fileSource(viewer.documentId)}
+              style={styles.viewerImage}
+              resizeMode="contain"
+            />
+          ) : null}
           <Text style={styles.viewerHint}>
             Compare la pièce au selfie et au nom déclaré avant de valider.
           </Text>
@@ -559,8 +730,12 @@ export default function AdminProvidersScreen({ onBack }: Props) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+        {value}
+      </Text>
+      <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -576,7 +751,12 @@ function Info({ label, value, warn }: { label: string; value: string; warn?: boo
   );
 }
 
-function DocumentRow(props: { item: ProviderChecklistItem; onOpen: () => void; onValidate: () => void; onReject: () => void }) {
+function DocumentRow(props: {
+  item: ProviderChecklistItem;
+  onOpen: () => void;
+  onValidate: () => void;
+  onReject: () => void;
+}) {
   const { item } = props;
   const state =
     item.status === "VALID"
@@ -600,7 +780,7 @@ function DocumentRow(props: { item: ProviderChecklistItem; onOpen: () => void; o
       )}
       <View style={{ flex: 1 }}>
         <Text style={styles.docLabel}>
-          {item.label}
+          {item.label.charAt(0).toUpperCase() + item.label.slice(1)}
           {item.required ? <Text style={{ color: colors.error }}> *</Text> : null}
           {item.photoRequired ? <Text style={styles.photoTag}> photo</Text> : null}
         </Text>
@@ -627,45 +807,234 @@ function DocumentRow(props: { item: ProviderChecklistItem; onOpen: () => void; o
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.lg },
-  header: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xs },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceContainer },
-  iconBtnDark: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.18)" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceContainer,
+  },
+  iconBtnDark: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
   headerTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
   headerSub: { ...typography.labelSm, color: colors.onSurfaceVariant },
-  chips: { gap: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  chip: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.outlineVariant, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: colors.surfaceContainerLowest },
+  dashboardBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.primaryFixed,
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: radius.full,
+  },
+  dashboardBtnText: { ...typography.labelSm, color: colors.primary, fontWeight: "800" },
+
+  // Conteneur à taille fixe (flexGrow: 0, flexShrink: 0) : les boutons de filtre gardent
+  // exactement la même hauteur (36px) même quand la liste en dessous est vide.
+  filterBarWrapper: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 48,
+    justifyContent: "center",
+  },
+  subFilterWrapper: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 38,
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  chipsScroll: {
+    flexGrow: 0,
+  },
+  chips: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: spacing.md,
+  },
+  chip: {
+    height: 36,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.outlineVariant,
+    paddingHorizontal: 14,
+    backgroundColor: colors.surfaceContainerLowest,
+  },
   chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryFixed },
   chipText: { ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "700" },
-  chipTextActive: { color: colors.primary },
-  chipCount: { ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "800" },
-  chipCountActive: { color: colors.primary },
-  statsRow: { flexDirection: "row", gap: 8, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
-  stat: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.sm, alignItems: "center" },
-  statValue: { ...typography.labelLg, color: colors.primary, fontWeight: "800" },
-  statLabel: { ...typography.labelSm, color: colors.onSurfaceVariant },
-  scroll: { padding: spacing.md, gap: spacing.md, paddingBottom: 40 },
+  chipTextActive: { color: colors.primary, fontWeight: "800" },
+  chipCountBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    backgroundColor: colors.surfaceContainer,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipCountBadgeActive: {
+    backgroundColor: colors.primary,
+  },
+  chipCount: { fontSize: 11, color: colors.onSurfaceVariant, fontWeight: "800" },
+  chipCountActive: { color: "#fff" },
+
+  subChips: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: spacing.md,
+  },
+  subChip: {
+    height: 30,
+    alignSelf: "center",
+    justifyContent: "center",
+    borderRadius: radius.full,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceContainerLow,
+  },
+  subChipActive: {
+    backgroundColor: colors.onSurface,
+  },
+  subChipText: { ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "600" },
+  subChipTextActive: { color: "#fff", fontWeight: "700" },
+
+  statsRow: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  stat: {
+    flex: 1,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.lg,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.surfaceContainer,
+  },
+  statValue: { ...typography.labelLg, color: colors.primary, fontWeight: "800", textAlign: "center" },
+  statLabel: {
+    ...typography.labelSm,
+    color: colors.onSurfaceVariant,
+    textAlign: "center",
+    marginTop: 2,
+  },
+
+  listScroll: { flex: 1 },
+  scroll: { padding: spacing.md, gap: spacing.sm, paddingBottom: 100 },
   errorText: { ...typography.bodySm, color: colors.error, textAlign: "center" },
-  muted: { ...typography.bodySm, color: colors.onSurfaceVariant, lineHeight: 20 },
+  muted: { ...typography.bodySm, color: colors.onSurfaceVariant, lineHeight: 20, textAlign: "center" },
   warnText: { ...typography.labelSm, color: colors.error, marginTop: 6 },
-  empty: { alignItems: "center", gap: 8, paddingVertical: 40 },
-  busyBar: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  empty: {
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 48,
+    paddingHorizontal: spacing.lg,
+  },
+  emptyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.primaryFixed,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  emptyTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "700" },
+  busyBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+  },
   busyText: { ...typography.labelSm, color: "#fff", fontWeight: "700" },
 
-  row: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, marginBottom: spacing.sm },
-  rowIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainer,
+  },
+  rowIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.primaryFixed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   rowTitle: { ...typography.bodyMd, color: colors.onSurface, fontWeight: "700" },
   rowMeta: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
   statusPill: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 },
   statusPillText: { ...typography.labelSm, fontWeight: "700" },
   overdueText: { ...typography.labelSm, color: colors.error, fontWeight: "700" },
 
-  card: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, gap: 6 },
+  card: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainer,
+  },
   cardTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700", marginBottom: 4 },
-  infoRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, paddingVertical: 5, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceContainer },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.surfaceContainer,
+  },
   infoLabel: { ...typography.labelMd, color: colors.onSurfaceVariant },
-  infoValue: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700", flexShrink: 1, textAlign: "right" },
+  infoValue: {
+    ...typography.labelMd,
+    color: colors.onSurface,
+    fontWeight: "700",
+    flexShrink: 1,
+    textAlign: "right",
+  },
 
-  docRow: { flexDirection: "row", gap: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceContainer },
+  docRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.surfaceContainer,
+  },
   docThumb: { width: 62, height: 62, borderRadius: radius.md, backgroundColor: colors.surfaceContainer },
   docThumbEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceContainerLow },
   docLabel: { ...typography.bodySm, color: colors.onSurface, fontWeight: "700" },
@@ -673,39 +1042,120 @@ const styles = StyleSheet.create({
   docState: { ...typography.labelSm, marginTop: 2 },
   docNote: { ...typography.labelSm, color: colors.error, marginTop: 2 },
   docActions: { flexDirection: "row", gap: 8, marginTop: 6 },
-  miniBtn: { borderRadius: radius.full, borderWidth: 1.5, borderColor: "#146C2E", paddingHorizontal: 12, paddingVertical: 5 },
+  miniBtn: {
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: "#146C2E",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
   miniBtnDanger: { borderColor: colors.error },
   miniBtnText: { ...typography.labelSm, color: "#146C2E", fontWeight: "700" },
 
-  actionPrimary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.primary, borderRadius: radius.full, paddingVertical: 13, marginTop: 4 },
+  actionPrimary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingVertical: 13,
+    marginTop: 4,
+  },
   actionPrimaryText: { ...typography.labelMd, color: "#fff", fontWeight: "800" },
-  actionGhost: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.outline, paddingVertical: 12, marginTop: 4 },
+  actionGhost: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.outline,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
   actionGhostText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
-  actionDangerGhost: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.error, paddingVertical: 12, marginTop: 4 },
+  actionDangerGhost: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.error,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
   actionDangerText: { ...typography.labelMd, color: colors.error, fontWeight: "700" },
   disabled: { opacity: 0.6 },
-  overrideRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", backgroundColor: colors.secondaryFixed, borderRadius: radius.lg, padding: spacing.sm + 2 },
+  overrideRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    backgroundColor: colors.secondaryFixed,
+    borderRadius: radius.lg,
+    padding: spacing.sm + 2,
+  },
   overrideText: { ...typography.labelSm, color: colors.onSecondaryFixed, flex: 1, fontWeight: "600" },
 
-  eventRow: { paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceContainer },
+  eventRow: {
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.surfaceContainer,
+  },
   eventTitle: { ...typography.bodySm, color: colors.onSurface, fontWeight: "700" },
   eventComment: { ...typography.labelSm, color: colors.onSurfaceVariant },
   eventDate: { ...typography.labelSm, color: colors.outline, marginTop: 1 },
 
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: spacing.lg },
-  modalCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, gap: spacing.sm },
+  modalCard: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
   modalTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
-  modalInput: { minHeight: 90, textAlignVertical: "top", backgroundColor: colors.surfaceContainerLow, borderRadius: radius.lg, padding: spacing.sm + 2, ...typography.bodySm, color: colors.onSurface },
+  modalInput: {
+    minHeight: 90,
+    textAlignVertical: "top",
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: radius.lg,
+    padding: spacing.sm + 2,
+    ...typography.bodySm,
+    color: colors.onSurface,
+  },
   modalHint: { ...typography.labelSm, color: colors.onSurfaceVariant },
   modalActions: { flexDirection: "row", gap: 10, justifyContent: "flex-end" },
-  modalCancel: { borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.outline, paddingHorizontal: 16, paddingVertical: 10 },
+  modalCancel: {
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.outline,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
   modalCancelText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
-  modalConfirm: { borderRadius: radius.full, backgroundColor: colors.primary, paddingHorizontal: 18, paddingVertical: 10 },
+  modalConfirm: {
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
   modalConfirmText: { ...typography.labelMd, color: "#fff", fontWeight: "800" },
 
   viewerBackdrop: { flex: 1, backgroundColor: "#000", paddingTop: 50 },
-  viewerBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  viewerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
   viewerTitle: { ...typography.labelLg, color: "#fff", fontWeight: "700", flex: 1 },
   viewerImage: { flex: 1, width: "100%" },
-  viewerHint: { ...typography.labelSm, color: "rgba(255,255,255,0.75)", textAlign: "center", padding: spacing.md },
+  viewerHint: {
+    ...typography.labelSm,
+    color: "rgba(255,255,255,0.75)",
+    textAlign: "center",
+    padding: spacing.md,
+  },
 });

@@ -10,12 +10,12 @@ import { io, Socket } from "socket.io-client";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import {
-  API_URL, Ride, errorMessage, placesApi, ridesApi, walletApi,
+  API_URL, Ride, errorMessage, getToken, placesApi, ridesApi, walletApi,
 } from "../services/api";
 import { fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
 import { distanceKm, fmtKm } from "../utils/geo";
 
-type Props = { onLogout: () => void };
+type Props = { onLogout: () => void; onOpenDossier?: () => void };
 type LatLng = { latitude: number; longitude: number };
 type GpsStatus = "idle" | "ok" | "denied" | "error";
 
@@ -28,7 +28,7 @@ const isToday = (iso: string) => {
   return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 };
 
-export default function DriverHomeScreen({ onLogout }: Props) {
+export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState<Ride[]>([]);
   const [history, setHistory] = useState<Ride[]>([]);
@@ -102,7 +102,10 @@ export default function DriverHomeScreen({ onLogout }: Props) {
       socketRef.current = null;
       return;
     }
-    const socket = io(API_URL, { transports: ["websocket"] });
+    const socket = io(API_URL, {
+      transports: ["websocket"],
+      auth: { token: getToken() },
+    });
     socketRef.current = socket;
     socket.on("connect_error", () => console.warn("Socket AZƆ̀ injoignable :", API_URL));
     return () => { socket.disconnect(); socketRef.current = null; };
@@ -307,7 +310,13 @@ export default function DriverHomeScreen({ onLogout }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <View style={{ width: 40 }} />
+        {onOpenDossier ? (
+          <Pressable onPress={onOpenDossier} style={styles.iconButton} accessibilityLabel="Mon dossier">
+            <MaterialIcons name="verified-user" size={20} color={colors.primary} />
+          </Pressable>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
         <Text style={styles.headerTitle}>Zém Radar</Text>
         <Pressable onPress={handleLogout} style={styles.iconButton} accessibilityLabel="Se déconnecter">
           <MaterialIcons name="logout" size={20} color={colors.onSurfaceVariant} />

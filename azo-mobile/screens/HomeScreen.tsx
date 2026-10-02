@@ -28,10 +28,11 @@ const MAIN_SERVICES = [
 
 const OTHER_SERVICES = [
   { id: "livraison", label: "Livraison", icon: "local-shipping" as const, bg: colors.tertiaryFixed, fg: colors.tertiary },
-  { id: "courses", label: "Courses", icon: "shopping-bag" as const, bg: colors.primaryFixed, fg: colors.primary },
   { id: "coursier", label: "Coursier", icon: "directions-run" as const, bg: colors.secondaryFixed, fg: colors.secondary },
+  { id: "courses", label: "Courses", icon: "shopping-bag" as const, bg: colors.primaryFixed, fg: colors.primary },
+  { id: "agence", label: "Agence", icon: "apartment" as const, bg: colors.primaryFixed, fg: colors.primary },
   { id: "location", label: "Location", icon: "key" as const, bg: colors.tertiaryFixed, fg: colors.tertiary },
-  { id: "marketplace", label: "Boutique", icon: "storefront" as const, bg: colors.primaryFixed, fg: colors.primary },
+  { id: "marketplace", label: "Boutique", icon: "storefront" as const, bg: colors.secondaryFixed, fg: colors.secondary },
 ];
 
 const NAV_ITEMS = [

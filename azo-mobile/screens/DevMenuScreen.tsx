@@ -8,30 +8,30 @@ import { typography } from "../theme/typography";
 export type ScreenId =
   | "splash" | "otp" | "home" | "ride-request" | "ride-tracking" | "ride-rating"
   | "delivery" | "rental" | "wallet" | "courses" | "profile"
-  | "driver-home" | "agency-dashboard"
+  | "driver-home" | "courier-home" | "agency-dashboard"
   | "provider-onboarding" | "provider-status" | "admin-providers"
-  | "admin-dashboard" | "marketplace" | "artisans" | "notifications";
+  | "admin-dashboard" | "marketplace" | "notifications";
 
 const SCREENS: { id: ScreenId; label: string; group: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
   { id: "splash", label: "1. Splash / Onboarding", group: "Client", icon: "rocket-launch" },
-  { id: "otp", label: "2. Connexion OTP", group: "Client", icon: "sms" },
+  { id: "otp", label: "2. Connexion OTP (10 chiffres)", group: "Client", icon: "sms" },
   { id: "home", label: "3. Accueil client", group: "Client", icon: "home" },
   { id: "ride-request", label: "4. Demande de course", group: "Client", icon: "map" },
   { id: "ride-tracking", label: "5. Suivi de course", group: "Client", icon: "near-me" },
   { id: "ride-rating", label: "6. Fin de trajet & notation", group: "Client", icon: "star" },
-  { id: "delivery", label: "7. Livraison colis", group: "Client", icon: "local-shipping" },
+  { id: "delivery", label: "7. Coursier & Livraison colis", group: "Client", icon: "local-shipping" },
   { id: "rental", label: "8. Location de véhicules", group: "Client", icon: "directions-car" },
   { id: "wallet", label: "9. Portefeuille / Paiement", group: "Client", icon: "account-balance-wallet" },
   { id: "courses", label: "9b. Mes courses (historique)", group: "Client", icon: "receipt-long" },
   { id: "profile", label: "9c. Mon profil", group: "Client", icon: "person" },
   { id: "marketplace", label: "10. Courses au marché (Marketplace)", group: "V2", icon: "storefront" },
-  { id: "artisans", label: "11. Espace Artisans", group: "V2", icon: "build" },
-  { id: "provider-onboarding", label: "12a. Inscription prestataire (wizard)", group: "Professionnel", icon: "how-to-reg" },
+  { id: "provider-onboarding", label: "12a. Inscription prestataire (Zem, Coursier, Agence)", group: "Professionnel", icon: "how-to-reg" },
   { id: "provider-status", label: "12b. Mon dossier prestataire", group: "Professionnel", icon: "fact-check" },
-  { id: "driver-home", label: "12. Accueil conducteur", group: "Professionnel", icon: "two-wheeler" },
-  { id: "agency-dashboard", label: "13. Mon agence", group: "Agence", icon: "apartment" },
+  { id: "driver-home", label: "12. Espace Zem / Chauffeur", group: "Professionnel", icon: "two-wheeler" },
+  { id: "courier-home", label: "12c. Espace Coursier / Livreur", group: "Professionnel", icon: "local-shipping" },
+  { id: "agency-dashboard", label: "13. Mon agence & flotte", group: "Agence", icon: "apartment" },
   { id: "admin-providers", label: "14a. Validation des prestataires", group: "Admin", icon: "verified-user" },
-  { id: "admin-dashboard", label: "14. Tableau de bord admin", group: "Admin", icon: "admin-panel-settings" },
+  { id: "admin-dashboard", label: "14. Pilotage administrateur", group: "Admin", icon: "admin-panel-settings" },
   { id: "notifications", label: "15. Notifications", group: "Commun", icon: "notifications" },
 ];
 

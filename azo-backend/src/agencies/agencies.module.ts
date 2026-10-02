@@ -20,6 +20,7 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { NotificationsModule, NotificationsService } from "../notifications/notifications.module";
 import { PLANS, PLAN_LABELS } from "./plans";
+import { beninPhoneVariants, normalizeBeninPhone } from "../common/phone";
 
 // Les formules (tarif, plafond de comptes, commission) vivent dans ./plans :
 // le module Prestataires s'en sert aussi pour créer l'agence à l'approbation du dossier.
@@ -61,19 +62,23 @@ export class AgenciesService {
           "Passe à la formule supérieure pour ajouter des chauffeurs."
       );
 
-    const digits = phone.replace(/\D/g, "");
-    const normalized = `+229${digits.startsWith("229") ? digits.slice(3) : digits}`;
-    const driver = await this.prisma.user.findUnique({
-      where: { phone: normalized },
+    const normalized = normalizeBeninPhone(phone);
+    const variants = beninPhoneVariants(phone);
+    const driver = await this.prisma.user.findFirst({
+      where: { phone: { in: variants } },
       include: { provider: true },
     });
     if (!driver)
       throw new NotFoundException(
-        `Aucun compte AZƆ̀ pour le ${normalized} : ce chauffeur doit d'abord s'inscrire`
+        `Aucun compte AZƆ̀ pour le ${normalized} : ce conducteur ou coursier doit d'abord s'inscrire`
       );
-    if (!driver.provider || driver.provider.status !== "APPROVED" || driver.provider.type !== "DRIVER")
+    if (
+      !driver.provider ||
+      driver.provider.status !== "APPROVED" ||
+      !["DRIVER", "COURIER"].includes(driver.provider.type)
+    )
       throw new BadRequestException(
-        "Ce compte n'a pas de dossier chauffeur validé par AZƆ̀ : il doit déposer un dossier prestataire et être approuvé"
+        "Ce compte n'a pas de dossier conducteur ou coursier validé par AZƆ̀ : il doit déposer un dossier prestataire et être approuvé"
       );
     if (driver.agencyId === agency.id)
       throw new BadRequestException("Ce chauffeur fait déjà partie de ton agence");

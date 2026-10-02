@@ -74,36 +74,53 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 export const api = {
   get: <T>(path: string, opts?: { timeoutMs?: number }) => request<T>(path, opts),
-  post: <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: json(body) }),
+  post: <T>(path: string, body?: unknown, opts?: { timeoutMs?: number }) =>
+    request<T>(path, { method: "POST", body: json(body), ...opts }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body: json(body) }),
+  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
-/** Envoi d'un fichier (photo de pièce d'identité, selfie…). Délai plus long qu'un appel JSON. */
-async function upload<T>(path: string, form: FormData, timeoutMs = 90000): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(`${API_URL}${path}`, {
-      method: "POST",
-      // Pas de Content-Type : React Native pose la frontière multipart tout seul.
-      headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-      body: form,
-      signal: controller.signal,
-    });
-    return await handleResponse<T>(res);
-  } catch (e) {
-    if (e instanceof ApiError) throw e;
-    if ((e as Error)?.name === "AbortError")
-      throw new ApiError("L'envoi de la photo prend trop de temps. Réessaie avec une meilleure connexion.", 0);
-    throw new ApiError("Impossible d'envoyer la photo. Vérifie ta connexion.", 0);
-  } finally {
-    clearTimeout(timer);
-  }
+/**
+ * Envoi multipart via XMLHttpRequest (plus fiable sur React Native Android que fetch +
+ * AbortController, qui échoue parfois sur les URI locales file:// / content://).
+ */
+function upload<T>(path: string, form: FormData, timeoutMs = 90000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}${path}`);
+    xhr.timeout = timeoutMs;
+    xhr.setRequestHeader("Accept", "application/json");
+    if (authToken) {
+      xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
+    }
+    xhr.onload = () => {
+      let data: any = {};
+      try {
+        data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+      } catch {
+        data = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data as T);
+      } else {
+        const raw = data?.message ?? data?.error;
+        const msg = Array.isArray(raw) ? raw.join("\n") : raw;
+        reject(new ApiError(msg || `Erreur ${xhr.status}`, xhr.status, data));
+      }
+    };
+    xhr.onerror = () => {
+      reject(new ApiError("Impossible d'envoyer la photo. Vérifie ta connexion et redémarre le backend.", 0));
+    };
+    xhr.ontimeout = () => {
+      reject(new ApiError("L'envoi de la photo prend trop de temps. Réessaie avec une meilleure connexion.", 0));
+    };
+    xhr.send(form);
+  });
 }
 
 /* ==================== AUTHENTIFICATION (SMS OTP) ==================== */
 
-export type ProfileRole = "CLIENT" | "DRIVER" | "AGENCY";
+export type ProfileRole = "CLIENT" | "DRIVER" | "COURIER" | "AGENCY";
 
 export const authApi = {
   requestOtp: (phone: string) => api.post<{ message: string; phone: string }>("/auth/request-otp", { phone }),
@@ -225,22 +242,30 @@ export const ridesApi = {
 // Alias historique : les écrans plus anciens importent `rideApi`.
 export const rideApi = ridesApi;
 
-/* ==================== LIVRAISON DE COLIS ==================== */
+/* ==================== LIVRAISON DE COLIS & COURSIER ==================== */
+
+export type DeliveryStatus = "PENDING" | "MATCHED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 export type Delivery = {
   id: string;
-  status: string;
+  clientId?: string;
+  courierId?: string | null;
+  status: DeliveryStatus;
   packageType: string;
   pickupAddress: string;
   dropAddress: string;
   payer: "SENDER" | "RECIPIENT";
   price: number;
+  commission?: number;
   pickupCode: string;
   deliveryCode: string;
   createdAt: string;
+  client?: RidePerson | null;
+  courier?: RidePerson | null;
 };
 
 export const deliveryApi = {
+  /* --- Client --- */
   create: (body: {
     packageType: string;
     pickupAddress: string;
@@ -249,6 +274,12 @@ export const deliveryApi = {
     price: number;
   }) => api.post<Delivery>(`${P}/deliveries`, body),
   mine: () => api.get<Delivery[]>(`${P}/deliveries`),
+  cancel: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/cancel`),
+
+  /* --- Coursier / Livreur --- */
+  pending: () => api.get<Delivery[]>(`${P}/deliveries/pending`),
+  courierHistory: () => api.get<Delivery[]>(`${P}/deliveries/courier`),
+  accept: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/accept`),
   confirmPickup: (id: string, code: string) =>
     api.post<Delivery>(`${P}/deliveries/${id}/confirm-pickup`, { code }),
   confirmDelivery: (id: string, code: string) =>
@@ -416,6 +447,7 @@ export type ProviderRequirements = {
     description: string;
     enabled: boolean;
     vehicleChoices: { value: VehicleType; label: string; hint: string }[];
+    specialties?: { id: string; label: string; hint: string }[];
     requiredFields: { field: string; label: string }[];
     requiredDocuments: { kind: DocumentKind; label: string; photoRequired: boolean }[];
     optionalDocuments: { kind: DocumentKind; label: string; photoRequired: boolean }[];
@@ -442,7 +474,7 @@ export type ProviderApplicationDraft = {
 };
 
 /** Fichier choisi sur le téléphone (expo-image-picker). */
-export type PickedFile = { uri: string; name: string; type: string };
+export type PickedFile = { uri: string; name: string; type: string; base64?: string | null };
 
 export const providersApi = {
   requirements: () => api.get<ProviderRequirements>(`${P}/providers/requirements`),
@@ -454,19 +486,158 @@ export const providersApi = {
       kind,
       ...(expiresAt ? { expiresAt } : {}),
     }),
-  /** Dépôt de la photo d'une pièce. */
-  uploadDocument: (id: string, kind: DocumentKind, file: PickedFile) => {
+  /**
+   * Dépôt de la photo d'une pièce :
+   * 1) Envoie d'abord en JSON base64 (utilise le même canal JSON fiable que le reste de l'app,
+   *    sans échec multipart file:// sur Android).
+   * 2) Si le serveur ne connaît pas encore la route base64 ou si base64 est absent,
+   *    bascule sur XMLHttpRequest multipart.
+   */
+  uploadDocument: async (id: string, kind: DocumentKind, file: PickedFile) => {
+    if (file.base64) {
+      try {
+        return await api.post<ProviderDocumentView>(
+          `${P}/providers/applications/${id}/documents/${kind}/base64`,
+          {
+            base64: file.base64,
+            mimeType: file.type,
+            fileName: file.name,
+          },
+          { timeoutMs: 60000 }
+        );
+      } catch (err) {
+        // Si le serveur renvoie une erreur métier explicite (dossier non modifiable, format...), on la remonte
+        if (err instanceof ApiError && err.status >= 400 && err.status !== 404 && err.status !== 413) {
+          throw err;
+        }
+        // Sinon (ex: ancien backend non redémarré), on tente l'envoi multipart XHR
+      }
+    }
     const form = new FormData();
-    // React Native accepte { uri, name, type } comme corps de fichier.
-    form.append("file", file as unknown as Blob);
+    form.append("file", {
+      uri: file.uri,
+      name: file.name,
+      type: file.type,
+    } as unknown as Blob);
     return upload<ProviderDocumentView>(`${P}/providers/applications/${id}/documents/${kind}/file`, form);
   },
   submit: (id: string) => api.post<ProviderDossier>(`${P}/providers/applications/${id}/submit`),
-  /** Source prête pour <Image> : la pièce est protégée, l'en-tête Authorization est requis. */
+  /**
+   * Source prête pour <Image> : passe le jeton à la fois dans ?token= (pour le chargeur
+   * d'images Android Fresco) et dans l'en-tête Authorization.
+   */
   fileSource: (documentId: string) => ({
-    uri: `${API_URL}${P}/providers/documents/${documentId}/file`,
+    uri: `${API_URL}${P}/providers/documents/${documentId}/file${
+      authToken ? `?token=${encodeURIComponent(authToken)}` : ""
+    }`,
     headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
   }),
+};
+
+/* ==================== ESPACE AGENCE DE FLOTTE ==================== */
+
+export type AgencyRosterMember = {
+  id: string;
+  fullName: string | null;
+  phone: string;
+  status: string;
+  activeRides: number;
+  state: "EN_COURSE" | "DISPONIBLE";
+  rating: number;
+  jobsCompleted: number;
+};
+
+export type AgencyDashboardData = {
+  agency: {
+    id: string;
+    name: string;
+    plan: AgencyPlanChoice;
+    planLabel: string;
+    commissionRate: number;
+    maxAccounts: number;
+    activationFee: number;
+    feePaidAt: string | null;
+    createdAt: string;
+  };
+  drivers: number;
+  completedRides: number;
+  netRevenue: number;
+  grossRevenue: number;
+  commissionsPaid: number;
+  averageRating: number | null;
+  seatsUsed: number;
+  seatsTotal: number;
+  activeRides: number;
+  roster: AgencyRosterMember[];
+};
+
+export const agenciesApi = {
+  dashboard: () => api.get<AgencyDashboardData>(`${P}/agencies/dashboard`),
+  attachDriver: (phone: string) =>
+    api.post<{ driver: { id: string; phone: string; fullName: string | null }; agencyId: string }>(
+      `${P}/agencies/drivers`,
+      { phone }
+    ),
+  detachDriver: (userId: string) =>
+    api.delete<{ detached: string; agencyId: string }>(`${P}/agencies/drivers/${userId}`),
+};
+
+/* ==================== TABLEAU DE BORD ADMINISTRATEUR ==================== */
+
+export type AdminGlobalStats = {
+  users: number;
+  rides: number;
+  completedRides: number;
+  deliveries?: number;
+  completedDeliveries?: number;
+  commissionsRevenue: number;
+  agencies: number;
+  providersPending?: number;
+  providersApproved?: number;
+  blockedUsers?: number;
+};
+
+export type AdminUserItem = {
+  id: string;
+  phone: string;
+  fullName: string | null;
+  role: string;
+  status: "ACTIVE" | "PENDING_VALIDATION" | "BLOCKED";
+  createdAt: string;
+  wallet?: { balance: number } | null;
+  provider?: { id: string; type: ProviderType; status: ProviderStatus; kycScore: number } | null;
+  agency?: { id: string; name: string; plan: string } | null;
+};
+
+export type AdminAuditEvent = {
+  id: string;
+  type: string;
+  comment: string | null;
+  actorId: string | null;
+  createdAt: string;
+  provider: {
+    id: string;
+    type: ProviderType;
+    name: string;
+    phone: string;
+  };
+};
+
+export const adminApi = {
+  stats: () => api.get<AdminGlobalStats>(`${P}/admin/stats`),
+  users: (params: { q?: string; role?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.role) qs.set("role", params.role);
+    const query = qs.toString();
+    return api.get<AdminUserItem[]>(`${P}/admin/users${query ? `?${query}` : ""}`);
+  },
+  setUserStatus: (userId: string, status: "ACTIVE" | "BLOCKED", reason?: string) =>
+    api.post<AdminUserItem>(`${P}/admin/users/${userId}/status`, {
+      status,
+      ...(reason ? { reason } : {}),
+    }),
+  auditLog: () => api.get<AdminAuditEvent[]>(`${P}/admin/audit-log`),
 };
 
 /* ---- Console administrateur (validation des dossiers) ---- */

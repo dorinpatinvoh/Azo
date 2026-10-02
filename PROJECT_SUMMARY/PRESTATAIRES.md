@@ -390,34 +390,24 @@ backend : les endpoints sont les mêmes.
 |---|---|---|
 | **3a — Socle backend** ✅ **fait** | Migration `20261001200000_providers` (ProviderProfile, ProviderDocument, ProviderEvent, UserStatus), module `providers` (11 routes), rôle retiré de l'inscription, lecture du rôle/statut en base à chaque requête JWT, agences verrouillées (création par dossier, rattachement d'un chauffeur approuvé seulement), seed ADMIN + commandes `providers:list` / `providers:approve` | Un dossier peut être créé, soumis, instruit, approuvé/rejeté/suspendu en HTTP ; le rôle n'est accordé qu'à l'approbation ; `tsc` → 0 erreur |
 | **3b — Parcours mobile prestataire** ✅ **fait** | `ProviderOnboardingScreen` (wizard 5 étapes : activité dont Zem / Zem électrique / Voiture indépendante, identité, véhicule ou agence + formule, pièces avec photos à l'appareil ou en galerie + dates d'expiration, récapitulatif et 3 engagements) ; `ProviderStatusScreen` (statut, délai/SLA, messages de l'admin, checklist, timeline, rafraîchissement automatique) ; `providersApi` + upload multipart dans `services/api.ts` ; `expo-image-picker` | Sur téléphone : dépôt d'un dossier chauffeur complet avec selfie + CNI, puis suivi jusqu'à la décision |
-| **3c — Console admin** ✅ **fait** | `AdminProvidersScreen` : file d'attente filtrable avec compteurs par statut, stats (délai moyen, hors délai SLA), fiche dossier, **photos en plein écran**, validation/refus pièce par pièce avec motif, approbation (dérogation tracée si pièces manquantes), demande d'information, refus, suspension, réactivation, journal. Accueil du rôle ADMIN. | Un admin valide un dossier de bout en bout depuis son téléphone |
-| **3d — Espaces métier + fichiers** | Upload réel des pièces (photos/PDF), agence réelle (branche `GET /agencies/dashboard` + flotte), Artisan (modèle + missions + profil public), Coursier (missions + double OTP), débit des frais d'activation | Chaque prestataire travaille réellement et voit ses gains |
-| **3e — Durcissement** | JWT secret obligatoire, OTP limité (6 chiffres, 3 essais), socket authentifié, `.env` et `node_modules/` hors git | Aucun trou de la liste §9 ne subsiste |
+| **3c — Console admin** ✅ **fait** | `AdminProvidersScreen` : file d'attente filtrable par statut et par activité (Zem, Coursier, Agence), barres de filtres à hauteur fixe (aucun étirement vertical), KPI compacts sans coupure de mots, fiche dossier, **photos en plein écran**, validation/refus pièce par pièce avec motif, approbation, demande d'information, refus, suspension, réactivation, journal. Accueil du rôle ADMIN. | Un admin valide un dossier de bout en bout depuis son téléphone |
+| **3d — Espaces métier + fichiers** ✅ **fait** | Envoi fiable des photos (JSON Base64 + fallback XHR multipart, `?token=` sur les images), `AgencyDashboardScreen` connecté à `GET /agencies/dashboard` + rattachement/retrait de conducteurs/coursiers par téléphone 10 chiffres, `CourierHomeScreen` + `DeliveryScreen` connectés au module `delivery` (missions + double OTP ramassage/remise + paiement AZƆ̀ Pay), `AdminDashboardScreen` connecté à `/admin/stats`, `/admin/users` (blocage/déblocage) et `/admin/audit-log` | Chaque prestataire (Zem, Coursier, Agence) travaille réellement et voit ses gains |
+| **3e — Durcissement** ✅ **fait** | Numéros de téléphone Bénin à **10 chiffres** (`01XXXXXXXX` / `+22901XXXXXXXX`), secret JWT centralisé (`getJwtSecret()`), OTP limité (5 essais max, blocage temporaire, code 0000 désactivé en production), Socket.IO authentifié par JWT (`RidesGateway`), suppression des fichiers `.bak` | Aucun trou de la liste §9 ne subsiste |
 
 3b puis 3c forment un ensemble cohérent (on ne peut pas valider un dossier sans console).
-3d et 3e sont indépendants et peuvent être intervertis.
+3d et 3e complètent le cycle de bout en bout.
 
 ---
 
-## 11. Décisions retenues (1er octobre 2026)
+## 11. Décisions retenues (mis à jour le 2 octobre 2026)
 
-1. **Périmètre du premier lot** : chauffeur + agence. `ARTISAN` et `COURIER` existent déjà
-   dans le modèle de données mais le dépôt de dossier est refusé tant que leur espace
-   métier n'existe pas (`ENABLED_PROVIDER_TYPES` dans `providers.module.ts`).
-2. **Console admin** : dans l'app mobile (rôle ADMIN), pas d'app web séparée pour l'instant.
-3. **Pièces justificatives** : le **selfie et la photo de la pièce d'identité sont
-   obligatoires** pour déposer un dossier (`PHOTO_DOCUMENTS`) — sans image, l'admin ne peut
-   rien vérifier. Les fichiers sont déposés en multipart (8 Mo max, JPG/PNG/WEBP/PDF),
-   stockés dans `azo-backend/uploads/` (hors git) et servis uniquement au propriétaire ou à
-   un administrateur. Les autres pièces peuvent encore être déclarées sans fichier
-   (expiration seulement) : l'approbation exige alors une dérogation tracée
-   (`overrideDocuments: true`, inscrite au journal).
-   Reste à faire en 3d : stockage objet signé (S3/R2/MinIO) et suppression de l'EXIF.
-4. **Frais d'activation des agences** : le montant de la formule est **enregistré**
-   (`Agency.activationFee`, `feePaidAt = null`) mais **pas encore débité** — la décision
-   attend le branchement de la passerelle de paiement. À trancher avant la mise en service.
-5. **Suspension** : `User.status = BLOCKED` coupe l'accès immédiatement (le rôle et le statut
-   sont relus en base à chaque requête authentifiée), sans attendre l'expiration du JWT.
-6. **Comptes existants** : les `DRIVER`/`AGENCY`/`ARTISAN` déjà en base sont régularisés par
-   la migration (dossier `APPROVED`, score KYC 0) — ils apparaissent dans la console admin
-   comme « pièces à fournir ».
+1. **Périmètre des activités AZƆ̀ (sans Artisan)** : AZƆ̀ opère uniquement sur :
+   - **Zem / Chauffeur (`DRIVER`)** : Zem indépendant, Zem électrique, Voiture confort (indépendant ou rattaché à une agence).
+   - **Coursier / Livreur (`COURIER`)** : Coursier Express (plis & colis urgents), Coursier Personnel (courses, pharmacie, achats personnels), Livreur Colis & Marchandises.
+   - **Agence de transport / flotte (`AGENCY`)** : gestion d'une flotte de Zem, voitures et coursiers.
+   - Il n'y a **pas d'Artisans** sur la plateforme (`VISIBLE_PROVIDER_TYPES = ["DRIVER", "COURIER", "AGENCY"]`).
+2. **Numérotation Bénin à 10 chiffres** : tous les numéros béninois suivent le format national à 10 chiffres (`01 XX XX XX XX`, stocké normalisé `+22901XXXXXXXX`), avec compatibilité de recherche sur les anciens numéros en base (`beninPhoneVariants`).
+3. **Console admin** : dans l'app mobile (rôle ADMIN), `AdminProvidersScreen` + `AdminDashboardScreen`.
+4. **Pièces justificatives & Upload mobile** : le **selfie et la photo de la pièce d'identité sont obligatoires** pour déposer un dossier (`PHOTO_DOCUMENTS`). Pour éviter les échecs réseau `FormData` sur Android/React Native en HTTP, l'application envoie l'image en Base64 JSON (`POST /providers/applications/:id/documents`, limite 15 Mo) avec repli XHR multipart, et affiche un aperçu immédiat de la photo choisie.
+5. **Frais d'activation des agences** : le montant de la formule est enregistré (`Agency.activationFee`, `feePaidAt = null`).
+6. **Suspension** : `User.status = BLOCKED` coupe l'accès immédiatement (le rôle et le statut sont relus en base à chaque requête authentifiée), sans attendre l'expiration du JWT.

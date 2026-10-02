@@ -38,6 +38,7 @@ type Props = {
 type Form = {
   type: ProviderType | null;
   vehicleType: VehicleType | null;
+  categoryId: string;
   fullName: string;
   city: string;
   zones: string;
@@ -51,6 +52,7 @@ type Form = {
 const EMPTY_FORM: Form = {
   type: null,
   vehicleType: null,
+  categoryId: "LIVREUR_COLIS",
   fullName: "",
   city: "",
   zones: "",
@@ -60,6 +62,24 @@ const EMPTY_FORM: Form = {
   agencyName: "",
   plan: null,
 };
+
+const DEFAULT_COURIER_SPECIALTIES = [
+  { id: "COURSIER_EXPRESS", label: "Coursier express", hint: "Plis urgents, documents et petits paquets" },
+  { id: "COURSIER_PERSONNEL", label: "Coursier personnel", hint: "Courses personnelles, marché, pharmacie & achats" },
+  { id: "LIVREUR_COLIS", label: "Livreur de colis", hint: "Livraison de colis et marchandises avec double OTP" },
+];
+
+const DEFAULT_DRIVER_VEHICLES: { value: VehicleType; label: string; hint: string }[] = [
+  { value: "ZEM", label: "Zem indépendant (Moto-taxi)", hint: "Courses rapides en ville — commission 15 %" },
+  { value: "ZEM_ELECTRIC", label: "Zem électrique indépendant", hint: "Moto électrique écologique — commission 15 %" },
+  { value: "CAR", label: "Voiture — Conducteur indépendant", hint: "Courses confort & climatisées — commission 15 %" },
+];
+
+const DEFAULT_COURIER_VEHICLES: { value: VehicleType; label: string; hint: string }[] = [
+  { value: "ZEM", label: "Moto / Zem (Coursier & Livreur)", hint: "Plis, courses personnelles et colis en ville" },
+  { value: "ZEM_ELECTRIC", label: "Moto électrique (Coursier & Livreur)", hint: "Livraisons rapides & écologiques" },
+  { value: "CAR", label: "Voiture / Fourgonnette (Livreur)", hint: "Colis moyens, achats et marchandises" },
+];
 
 // Pièces dont la date d'expiration a du sens (permis, assurance, visite technique, CNI).
 const EXPIRY_KINDS: DocumentKind[] = ["CNI", "PERMIS", "ASSURANCE", "VISITE_TECHNIQUE"];
@@ -95,15 +115,51 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const [localThumbs, setLocalThumbs] = useState<Record<string, string>>({});
   const [expiryDraft, setExpiryDraft] = useState<Record<string, string>>({});
   const [consents, setConsents] = useState({ truth: false, charter: false, geo: false });
 
-  const typeConfig = useMemo(
-    () => req?.types.find((t) => t.type === (form.type ?? dossier?.type)) ?? null,
-    [req, form.type, dossier?.type]
-  );
+  // Liste normalisée des activités : jamais d'ARTISAN, et DRIVER / COURIER / AGENCY toujours ouverts
+  const availableTypes = useMemo(() => {
+    const raw = (req?.types ?? []).filter((t) => t.type !== "ARTISAN");
+    return raw.map((t) => {
+      if (t.type === "DRIVER") {
+        return {
+          ...t,
+          enabled: true,
+          label: "Zem & Conducteur indépendant",
+          description:
+            "Zem, Zem indépendant (moto-taxi), Zem électrique ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
+          vehicleChoices: t.vehicleChoices?.length ? t.vehicleChoices : DEFAULT_DRIVER_VEHICLES,
+        };
+      }
+      if (t.type === "COURIER") {
+        return {
+          ...t,
+          enabled: true,
+          label: "Coursier, Coursier personnel & Livreur",
+          description:
+            "Coursier express, coursier personnel (courses, marché, pharmacie) ou livreur de colis avec double code OTP.",
+          vehicleChoices: t.vehicleChoices?.length ? t.vehicleChoices : DEFAULT_COURIER_VEHICLES,
+          specialties: t.specialties?.length ? t.specialties : DEFAULT_COURIER_SPECIALTIES,
+        };
+      }
+      return {
+        ...t,
+        enabled: true,
+        label: "Agence (Flotte Zem, Voitures & Livreurs)",
+      };
+    });
+  }, [req]);
+
   const currentType = (form.type ?? dossier?.type ?? null) as ProviderType | null;
   const isAgency = currentType === "AGENCY";
+  const isCourier = currentType === "COURIER";
+
+  const typeConfig = useMemo(
+    () => availableTypes.find((t) => t.type === currentType) ?? null,
+    [availableTypes, currentType]
+  );
 
   /* ----------------------------------------------------------- chargement */
 
@@ -124,10 +180,10 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
 
         const existing = me.provider;
         if (existing) {
-          // Brouillon en cours : on reprend exactement là où le candidat s'est arrêté.
           setForm({
-            type: existing.type,
+            type: existing.type === "ARTISAN" ? "DRIVER" : existing.type,
             vehicleType: existing.activity.vehicleType,
+            categoryId: existing.activity.categoryId ?? "LIVREUR_COLIS",
             fullName: existing.identity.fullName ?? "",
             city: existing.identity.city ?? "",
             zones: existing.identity.zones.join(", "),
@@ -170,6 +226,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       ...(zones.length ? { zones } : {}),
       ...(form.experienceYears.trim() ? { experienceYears: Number(form.experienceYears) || 0 } : {}),
       ...(form.vehicleType ? { vehicleType: form.vehicleType } : {}),
+      ...(isCourier && form.categoryId ? { categoryId: form.categoryId } : {}),
       ...(form.vehicleModel.trim() ? { vehicleModel: form.vehicleModel.trim() } : {}),
       ...(form.plateNumber.trim() ? { plateNumber: form.plateNumber.trim().toUpperCase() } : {}),
       ...(form.agencyName.trim() ? { agencyName: form.agencyName.trim() } : {}),
@@ -177,12 +234,11 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     };
   };
 
-  // Sauvegarde le brouillon : rien n'est perdu si l'app est fermée ou si le réseau tombe.
   const saveDraft = useCallback(async () => {
     const saved = await providersApi.save(buildDraft());
     setDossier(saved);
     return saved;
-  }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form, isCourier]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function validateStep(index: number): string | null {
     if (index === 0) {
@@ -221,16 +277,8 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     }
     setBusy(true);
     try {
-      if (step === 0) {
-        // Le dossier est créé dès le choix de l'activité : il reçoit un identifiant,
-        // nécessaire pour déposer les photos à l'étape suivante.
-        if (!dossier) await saveDraft();
-        else if (form.type && form.type !== dossier.type) await saveDraft();
-        else if (form.vehicleType && form.vehicleType !== dossier?.activity.vehicleType) await saveDraft();
-      } else if (step === 1 || step === 2) {
+      if (step === 0 || step === 1 || step === 2 || step === 3) {
         await saveDraft();
-      } else if (step === 3) {
-        await saveDraft(); // zones, expérience… au cas où
       } else if (step === 4) {
         if (!consents.truth || !consents.charter || !consents.geo) {
           Alert.alert("Engagements à accepter", "Les trois cases doivent être cochées pour déposer le dossier.");
@@ -255,6 +303,14 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
   }
 
   async function pickImage(mode: "camera" | "library"): Promise<ImagePicker.ImagePickerAsset | null> {
+    const pickerOpts: ImagePicker.ImagePickerOptions = {
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.45,
+      base64: true, // Permet l'envoi JSON fiable sur tous les téléphones Android
+    };
+
     if (mode === "camera") {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
@@ -265,12 +321,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         );
         return null;
       }
-      const res = await ImagePicker.launchCameraAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.6,
-      });
+      const res = await ImagePicker.launchCameraAsync(pickerOpts);
       return res.canceled ? null : res.assets[0];
     }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -278,28 +329,34 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       Alert.alert("Accès à la galerie refusé", "Autorise l'accès aux photos dans les réglages du téléphone.");
       return null;
     }
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.6,
-    });
+    const res = await ImagePicker.launchImageLibraryAsync(pickerOpts);
     return res.canceled ? null : res.assets[0];
   }
 
   async function uploadDocument(kind: DocumentKind, mode: "camera" | "library") {
-    if (!dossier) {
-      Alert.alert("Dossier non enregistré", "Reviens à l'étape 1 et choisis ton activité.");
-      return;
+    let targetDossier = dossier;
+    if (!targetDossier) {
+      try {
+        targetDossier = await saveDraft();
+      } catch (e) {
+        Alert.alert("Dossier non enregistré", errorMessage(e));
+        return;
+      }
     }
     setUploading((s) => ({ ...s, [kind]: true }));
     try {
       const asset = await pickImage(mode);
       if (!asset) return;
       const uri = asset.uri;
+      setLocalThumbs((prev) => ({ ...prev, [kind]: uri }));
       const name = asset.fileName || `${kind.toLowerCase()}-${Date.now()}.jpg`;
       const type = asset.mimeType || (uri.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg");
-      await providersApi.uploadDocument(dossier.id, kind, { uri, name, type });
+      await providersApi.uploadDocument(targetDossier.id, kind, {
+        uri,
+        name,
+        type,
+        base64: asset.base64,
+      });
       await refresh();
     } catch (e) {
       Alert.alert("Envoi impossible", errorMessage(e));
@@ -321,6 +378,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     try {
       await providersApi.declareDocument(dossier.id, kind, iso);
       await refresh();
+      Alert.alert("Date enregistrée", `Date d'expiration enregistrée (${raw.trim()}).`);
     } catch (e) {
       Alert.alert("Impossible d'enregistrer", errorMessage(e));
     } finally {
@@ -355,7 +413,6 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     );
   }
 
-  // Dossier déjà déposé ou validé : plus rien à éditer ici.
   if (dossier && !dossier.editable) {
     return (
       <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -422,28 +479,34 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
           <View style={{ gap: spacing.md }}>
             <Text style={styles.title}>Que veux-tu faire sur AZƆ̀ ?</Text>
             <Text style={styles.muted}>
-              Le choix est définitif après soumission. Les candidatures artisans et coursiers ouvrent
-              bientôt.
+              Choisis ton profil professionnel : Zem / Conducteur indépendant, Coursier / Coursier
+              personnel / Livreur, ou Agence de flotte.
             </Text>
 
-            {(req?.types ?? []).map((t) => {
+            {availableTypes.map((t) => {
               const selected = currentType === t.type;
               return (
                 <Pressable
                   key={t.type}
-                  style={[styles.card, selected && styles.cardSelected, !t.enabled && styles.cardDisabled]}
-                  disabled={!t.enabled}
-                  onPress={() => setForm((f) => ({ ...f, type: t.type, vehicleType: f.vehicleType }))}
+                  style={[styles.card, selected && styles.cardSelected]}
+                  onPress={() => setForm((f) => ({ ...f, type: t.type, vehicleType: f.vehicleType ?? "ZEM" }))}
                 >
-                  <MaterialIcons
-                    name={t.type === "AGENCY" ? "apartment" : t.type === "ARTISAN" ? "build" : "two-wheeler"}
-                    size={22}
-                    color={selected ? colors.primary : colors.onSurfaceVariant}
-                  />
+                  <View style={[styles.cardIconWrap, selected && styles.cardIconWrapSelected]}>
+                    <MaterialIcons
+                      name={
+                        t.type === "AGENCY"
+                          ? "apartment"
+                          : t.type === "COURIER"
+                            ? "local-shipping"
+                            : "two-wheeler"
+                      }
+                      size={22}
+                      color={selected ? colors.primary : colors.onSurfaceVariant}
+                    />
+                  </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>{t.label}</Text>
                     <Text style={styles.cardMeta}>{t.description}</Text>
-                    {!t.enabled && <Text style={styles.soonText}>Bientôt disponible</Text>}
                   </View>
                   <MaterialIcons
                     name={selected ? "radio-button-checked" : "radio-button-unchecked"}
@@ -454,11 +517,45 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
               );
             })}
 
-            {/* Zem / Zem électrique / Voiture indépendante */}
+            {/* Spécialité Coursier / Coursier personnel / Livreur */}
+            {isCourier && (
+              <View style={styles.subSection}>
+                <Text style={styles.sectionTitle}>Quelle est ta spécialité ?</Text>
+                {(typeConfig?.specialties ?? DEFAULT_COURIER_SPECIALTIES).map((sp) => {
+                  const selected = form.categoryId === sp.id;
+                  return (
+                    <Pressable
+                      key={sp.id}
+                      style={[styles.choiceRow, selected && styles.choiceRowSelected]}
+                      onPress={() => setForm((f) => ({ ...f, categoryId: sp.id }))}
+                    >
+                      <MaterialIcons
+                        name={
+                          sp.id === "COURSIER_PERSONNEL"
+                            ? "shopping-bag"
+                            : sp.id === "COURSIER_EXPRESS"
+                              ? "bolt"
+                              : "inventory-2"
+                        }
+                        size={20}
+                        color={selected ? colors.primary : colors.onSurfaceVariant}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.choiceTitle}>{sp.label}</Text>
+                        <Text style={styles.cardMeta}>{sp.hint}</Text>
+                      </View>
+                      {selected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Zem / Zem indépendant / Moto / Voiture */}
             {!isAgency && currentType && (
               <View style={styles.subSection}>
                 <Text style={styles.sectionTitle}>Avec quel véhicule vas-tu travailler ?</Text>
-                {(typeConfig?.vehicleChoices ?? []).map((v) => {
+                {(typeConfig?.vehicleChoices ?? DEFAULT_DRIVER_VEHICLES).map((v) => {
                   const selected = form.vehicleType === v.value;
                   return (
                     <Pressable
@@ -467,7 +564,13 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                       onPress={() => setForm((f) => ({ ...f, vehicleType: v.value }))}
                     >
                       <MaterialIcons
-                        name={v.value === "CAR" ? "directions-car" : v.value === "ZEM_ELECTRIC" ? "electric-moped" : "two-wheeler"}
+                        name={
+                          v.value === "CAR"
+                            ? "directions-car"
+                            : v.value === "ZEM_ELECTRIC"
+                              ? "electric-moped"
+                              : "two-wheeler"
+                        }
                         size={20}
                         color={selected ? colors.primary : colors.onSurfaceVariant}
                       />
@@ -554,11 +657,15 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                       style={[styles.choiceRow, selected && styles.choiceRowSelected]}
                       onPress={() => setForm((f) => ({ ...f, plan: p.plan }))}
                     >
-                      <MaterialIcons name="workspace-premium" size={20} color={selected ? colors.primary : colors.onSurfaceVariant} />
+                      <MaterialIcons
+                        name="workspace-premium"
+                        size={20}
+                        color={selected ? colors.primary : colors.onSurfaceVariant}
+                      />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.choiceTitle}>{p.label}</Text>
                         <Text style={styles.cardMeta}>
-                          {fcfa(p.fee)} à l'activation · {p.maxAccounts} chauffeurs · commission{" "}
+                          {fcfa(p.fee)} à l'activation · {p.maxAccounts} comptes · commission{" "}
                           {(p.commissionRate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %
                         </Text>
                       </View>
@@ -570,19 +677,20 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             ) : (
               <>
                 <Text style={styles.muted}>
-                  L'immatriculation est comparée à la carte grise que tu fourniras à l'étape suivante.
+                  L'immatriculation est comparée à la carte grise / photo du véhicule que tu fourniras
+                  à l'étape suivante.
                 </Text>
                 <Field
-                  label="Modèle du véhicule"
+                  label="Modèle du véhicule / de la moto"
                   value={form.vehicleModel}
                   onChangeText={(vehicleModel) => setForm((f) => ({ ...f, vehicleModel }))}
-                  placeholder="Ex. Haojue DK150, Toyota Corolla"
+                  placeholder="Ex. Haojue DK150, Bajaj Boxer, Toyota Corolla"
                 />
                 <Field
                   label="Immatriculation"
                   value={form.plateNumber}
                   onChangeText={(plateNumber) => setForm((f) => ({ ...f, plateNumber }))}
-                  placeholder="Ex. AB-1234-CD"
+                  placeholder="Ex. AB-1234-RB"
                   autoCapitalize="characters"
                   required
                 />
@@ -596,14 +704,15 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
           <View style={{ gap: spacing.md }}>
             <Text style={styles.title}>Tes pièces justificatives</Text>
             <Text style={styles.muted}>
-              Les photos sont obligatoires : sans image lisible, ton dossier ne peut pas être validé.
-              Formats acceptés JPG, PNG, WEBP ou PDF, 8 Mo maximum par pièce.
+              Le selfie et la pièce d'identité sont obligatoires en photo. Assure-toi que le texte
+              est bien lisible avant d'envoyer.
             </Text>
 
             {(dossier?.checklist ?? []).map((item) => (
               <DocumentCard
                 key={item.kind}
                 item={item}
+                localUri={localThumbs[item.kind]}
                 busy={!!uploading[item.kind]}
                 expiryDraft={expiryDraft[item.kind] ?? ""}
                 showExpiry={EXPIRY_KINDS.includes(item.kind)}
@@ -623,10 +732,22 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
 
             <View style={styles.summaryCard}>
               <SummaryRow label="Activité" value={typeConfig?.label ?? dossier?.typeLabel ?? "—"} />
+              {isCourier && (
+                <SummaryRow
+                  label="Spécialité"
+                  value={
+                    DEFAULT_COURIER_SPECIALTIES.find((s) => s.id === form.categoryId)?.label ??
+                    form.categoryId
+                  }
+                />
+              )}
               {!isAgency && form.vehicleType && (
                 <SummaryRow
                   label="Véhicule"
-                  value={typeConfig?.vehicleChoices.find((v) => v.value === form.vehicleType)?.label ?? form.vehicleType}
+                  value={
+                    typeConfig?.vehicleChoices.find((v) => v.value === form.vehicleType)?.label ??
+                    form.vehicleType
+                  }
                 />
               )}
               <SummaryRow label="Nom complet" value={form.fullName || "—"} />
@@ -675,7 +796,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                 checked={consents.geo}
                 onToggle={() => setConsents((c) => ({ ...c, geo: !c.geo }))}
                 label="J'autorise la géolocalisation pendant mes missions."
-                detail="Indispensable pour proposer des courses proches et suivre le trajet."
+                detail="Indispensable pour proposer des courses/livraisons proches et suivre le trajet."
               />
             </View>
 
@@ -692,7 +813,11 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         <Pressable style={styles.secondaryBtn} onPress={goBack} disabled={busy}>
           <Text style={styles.secondaryText}>{step === 0 ? "Quitter" : "Précédent"}</Text>
         </Pressable>
-        <Pressable style={[styles.primaryBtn, { flex: 1 }, busy && styles.btnDisabled]} onPress={goNext} disabled={busy}>
+        <Pressable
+          style={[styles.primaryBtn, { flex: 1 }, busy && styles.btnDisabled]}
+          onPress={goNext}
+          disabled={busy}
+        >
           {busy ? (
             <ActivityIndicator color="#fff" />
           ) : (
@@ -742,6 +867,7 @@ function Field(props: {
 
 function DocumentCard(props: {
   item: ProviderChecklistItem;
+  localUri?: string;
   busy: boolean;
   showExpiry: boolean;
   expiryDraft: string;
@@ -750,21 +876,31 @@ function DocumentCard(props: {
   onCamera: () => void;
   onLibrary: () => void;
 }) {
-  const { item } = props;
+  const { item, localUri } = props;
   const badge =
     item.status === "VALID"
       ? { label: "Validée", color: "#146C2E", bg: "#D7F0DC" }
       : item.status === "INVALID"
         ? { label: "Refusée", color: colors.error, bg: colors.errorContainer }
-        : item.hasFile
-          ? { label: "En attente", color: colors.tertiary, bg: colors.tertiaryFixed }
-          : { label: item.photoRequired ? "Photo obligatoire" : "À fournir", color: colors.error, bg: colors.errorContainer };
+        : item.hasFile || localUri
+          ? { label: "Photo enregistrée", color: "#146C2E", bg: "#D7F0DC" }
+          : {
+              label: item.photoRequired ? "Photo obligatoire" : "À fournir",
+              color: colors.error,
+              bg: colors.errorContainer,
+            };
+
+  const imgSource = localUri
+    ? { uri: localUri }
+    : item.hasFile && item.documentId
+      ? providersApi.fileSource(item.documentId)
+      : null;
 
   return (
-    <View style={[styles.docCard, item.photoRequired && !item.hasFile && styles.docCardMissing]}>
+    <View style={[styles.docCard, item.photoRequired && !item.hasFile && !localUri && styles.docCardMissing]}>
       <View style={styles.docHead}>
-        {item.hasFile && item.documentId ? (
-          <Image source={providersApi.fileSource(item.documentId)} style={styles.thumb} />
+        {imgSource ? (
+          <Image source={imgSource} style={styles.thumb} />
         ) : (
           <View style={styles.thumbPlaceholder}>
             <MaterialIcons name="photo-camera" size={22} color={colors.outline} />
@@ -772,7 +908,7 @@ function DocumentCard(props: {
         )}
         <View style={{ flex: 1 }}>
           <Text style={styles.docTitle}>
-            {item.label}
+            {item.label.charAt(0).toUpperCase() + item.label.slice(1)}
             {item.required ? <Text style={styles.requiredStar}> *</Text> : null}
           </Text>
           <View style={[styles.badge, { backgroundColor: badge.bg }]}>
@@ -791,7 +927,7 @@ function DocumentCard(props: {
           ) : (
             <>
               <MaterialIcons name="photo-camera" size={16} color={colors.primary} />
-              <Text style={styles.docBtnText}>{item.hasFile ? "Reprendre" : "Prendre une photo"}</Text>
+              <Text style={styles.docBtnText}>{item.hasFile || localUri ? "Reprendre" : "Prendre une photo"}</Text>
             </>
           )}
         </Pressable>
@@ -832,7 +968,17 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Consent({ checked, onToggle, label, detail }: { checked: boolean; onToggle: () => void; label: string; detail: string }) {
+function Consent({
+  checked,
+  onToggle,
+  label,
+  detail,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  label: string;
+  detail: string;
+}) {
   return (
     <Pressable style={styles.consentRow} onPress={onToggle}>
       <MaterialIcons
@@ -853,69 +999,240 @@ function Consent({ checked, onToggle, label, detail }: { checked: boolean; onTog
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: spacing.lg },
-  header: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceContainer },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceContainer,
+  },
   headerTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
   headerSub: { ...typography.labelSm, color: colors.onSurfaceVariant },
-  kycBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 5 },
+  kycBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.primaryFixed,
+    borderRadius: radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
   kycBadgeText: { ...typography.labelSm, color: colors.primary, fontWeight: "700" },
-  progressRow: { flexDirection: "row", gap: 6, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  progressRow: {
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
   progressDot: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.surfaceContainerHigh },
   progressDotActive: { backgroundColor: colors.primary },
-  scroll: { padding: spacing.md, gap: spacing.md, paddingBottom: 40 },
+  scroll: { padding: spacing.md, gap: spacing.md, paddingBottom: 100 },
   title: { ...typography.headlineMd, color: colors.onSurface, fontWeight: "800" },
   sectionTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
   muted: { ...typography.bodySm, color: colors.onSurfaceVariant, lineHeight: 20 },
   errorText: { ...typography.bodyMd, color: colors.error, textAlign: "center" },
   warnText: { ...typography.labelSm, color: colors.secondary, marginTop: 2 },
   noteText: { ...typography.labelSm, color: colors.error, marginTop: 2 },
-  soonText: { ...typography.labelSm, color: colors.outline, marginTop: 2 },
-  subSection: { gap: spacing.sm, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.xl, padding: spacing.sm + 2 },
+  subSection: {
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: radius.xl,
+    padding: spacing.sm + 2,
+  },
 
-  card: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, borderWidth: 1.5, borderColor: colors.surfaceContainer },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.surfaceContainer,
+  },
   cardSelected: { borderColor: colors.primary, backgroundColor: colors.primaryFixed },
-  cardDisabled: { opacity: 0.5 },
+  cardIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.surfaceContainerLow,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardIconWrapSelected: {
+    backgroundColor: colors.surfaceContainerLowest,
+  },
   cardTitle: { ...typography.bodyMd, color: colors.onSurface, fontWeight: "700" },
-  cardMeta: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
+  cardMeta: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2, lineHeight: 17 },
 
-  choiceRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.sm + 2, borderWidth: 1.5, borderColor: colors.surfaceContainer },
+  choiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.lg,
+    padding: spacing.sm + 2,
+    borderWidth: 1.5,
+    borderColor: colors.surfaceContainer,
+  },
   choiceRowSelected: { borderColor: colors.primary },
   choiceTitle: { ...typography.bodySm, color: colors.onSurface, fontWeight: "700" },
 
   fieldLabel: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
   requiredStar: { color: colors.error },
-  input: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.surfaceContainer, paddingHorizontal: spacing.md, paddingVertical: 12, ...typography.bodyMd, color: colors.onSurface },
+  input: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.surfaceContainer,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    ...typography.bodyMd,
+    color: colors.onSurface,
+  },
 
-  docCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, gap: spacing.sm, borderWidth: 1.5, borderColor: colors.surfaceContainer },
+  docCard: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    gap: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.surfaceContainer,
+  },
   docCardMissing: { borderColor: colors.error, backgroundColor: "#FFF8F7" },
   docHead: { flexDirection: "row", gap: 12, alignItems: "center" },
   thumb: { width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.surfaceContainer },
-  thumbPlaceholder: { width: 64, height: 64, borderRadius: radius.md, backgroundColor: colors.surfaceContainerLow, alignItems: "center", justifyContent: "center" },
+  thumbPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceContainerLow,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   docTitle: { ...typography.bodyMd, color: colors.onSurface, fontWeight: "700" },
-  badge: { alignSelf: "flex-start", borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3, marginTop: 4 },
+  badge: {
+    alignSelf: "flex-start",
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 4,
+  },
   badgeText: { ...typography.labelSm, fontWeight: "700" },
   docActions: { flexDirection: "row", gap: 8 },
-  docBtn: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.primary, paddingHorizontal: 12, paddingVertical: 8 },
+  docBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 40,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingHorizontal: 14,
+  },
   docBtnText: { ...typography.labelSm, color: colors.primary, fontWeight: "700" },
-  docBtnGhost: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.outlineVariant, paddingHorizontal: 12, paddingVertical: 8 },
+  docBtnGhost: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 40,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: colors.outlineVariant,
+    paddingHorizontal: 14,
+  },
   docBtnGhostText: { ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "700" },
   expiryRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  expiryInput: { flex: 1, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.lg, paddingHorizontal: 12, paddingVertical: 10, ...typography.bodySm, color: colors.onSurface },
-  expiryBtn: { backgroundColor: colors.surfaceContainerHigh, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 10 },
+  expiryInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: radius.lg,
+    paddingHorizontal: 12,
+    ...typography.bodySm,
+    color: colors.onSurface,
+  },
+  expiryBtn: {
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: radius.full,
+    paddingHorizontal: 16,
+  },
   expiryBtnText: { ...typography.labelSm, color: colors.onSurface, fontWeight: "700" },
 
-  summaryCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, gap: 2 },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between", gap: 12, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceContainer },
+  summaryCard: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    gap: 2,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.surfaceContainer,
+  },
   summaryLabel: { ...typography.labelMd, color: colors.onSurfaceVariant },
-  summaryValue: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700", flexShrink: 1, textAlign: "right" },
-  consentCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, gap: spacing.sm },
+  summaryValue: {
+    ...typography.labelMd,
+    color: colors.onSurface,
+    fontWeight: "700",
+    flexShrink: 1,
+    textAlign: "right",
+  },
+  consentCard: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
   consentRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   consentLabel: { ...typography.bodySm, color: colors.onSurface, fontWeight: "700" },
 
-  footer: { flexDirection: "row", gap: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.outlineVariant, backgroundColor: colors.surfaceContainerLowest },
-  primaryBtn: { backgroundColor: colors.primary, borderRadius: radius.full, paddingVertical: 14, paddingHorizontal: 22, alignItems: "center", justifyContent: "center", minWidth: 130 },
+  footer: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.outlineVariant,
+    backgroundColor: colors.surfaceContainerLowest,
+  },
+  primaryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 130,
+  },
   primaryText: { ...typography.labelMd, color: "#fff", fontWeight: "800", fontSize: 15 },
-  secondaryBtn: { borderRadius: radius.full, paddingVertical: 14, paddingHorizontal: 20, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.outline },
+  secondaryBtn: {
+    borderRadius: radius.full,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.outline,
+  },
   secondaryText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
   btnDisabled: { opacity: 0.6 },
 });

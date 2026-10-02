@@ -58,42 +58,43 @@ import { PLANS, PLAN_LABELS } from "../agencies/plans";
 /*  Règles métier du dossier prestataire                                       */
 /* -------------------------------------------------------------------------- */
 
-// Types ouverts au dépôt de dossier. ARTISAN et COURIER existent déjà dans le modèle
-// de données, mais leurs espaces métier arrivent à l'étape 3d : ils sont refusés ici
-// pour ne pas laisser un candidat sans interface derrière.
-export const ENABLED_PROVIDER_TYPES: ProviderType[] = ["DRIVER", "AGENCY"];
+// Types ouverts au dépôt de dossier sur AZƆ̀ :
+// - DRIVER  : Zem, Zem indépendant (moto-taxi / électrique), Voiture indépendante
+// - COURIER : Coursier express, Coursier personnel (courses/achats), Livreur de colis
+// - AGENCY  : Agence de flotte (Zem, Voitures, Livreurs)
+// (Pas d'activité Artisan sur AZƆ̀.)
+export const ENABLED_PROVIDER_TYPES: ProviderType[] = ["DRIVER", "COURIER", "AGENCY"];
+export const VISIBLE_PROVIDER_TYPES: ProviderType[] = ["DRIVER", "COURIER", "AGENCY"];
 
 // Rôle applicatif accordé À L'APPROBATION seulement — jamais à l'inscription.
 export const ROLE_FOR_TYPE: Record<ProviderType, Role> = {
   DRIVER: Role.DRIVER,
-  COURIER: Role.DRIVER, // l'enum Role n'a pas de COURIER : un livreur conduit aussi
+  COURIER: Role.DRIVER, // l'enum Role partage DRIVER : la distinction se lit sur provider.type
   AGENCY: Role.AGENCY,
-  ARTISAN: Role.ARTISAN,
+  ARTISAN: Role.CLIENT,
 };
 
 // Pièces exigées pour approuver un dossier.
-// L'upload réel des fichiers arrive en 3d : jusque-là une pièce est déclarée (type +
-// date d'expiration), ce qui suffit à instruire le dossier et à calculer le score KYC.
 export const REQUIRED_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   DRIVER: ["CNI", "SELFIE", "PERMIS", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
   COURIER: ["CNI", "SELFIE", "PERMIS", "PHOTO_VEHICULE"],
   AGENCY: ["CNI", "SELFIE", "RCCM", "IFU", "STATUTS"],
-  ARTISAN: ["CNI", "SELFIE", "DIPLOME"],
+  ARTISAN: ["CNI", "SELFIE"],
 };
 
 export const OPTIONAL_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   DRIVER: ["VISITE_TECHNIQUE", "EXTRAIT_CASIER"],
-  COURIER: ["ASSURANCE", "VISITE_TECHNIQUE", "EXTRAIT_CASIER"],
+  COURIER: ["CARTE_GRISE", "ASSURANCE", "EXTRAIT_CASIER"],
   AGENCY: ["PHOTO_VEHICULE", "EXTRAIT_CASIER"],
-  ARTISAN: ["DIPLOME", "EXTRAIT_CASIER"],
+  ARTISAN: ["EXTRAIT_CASIER"],
 };
 
 // Informations minimales pour pouvoir soumettre, par type d'activité.
 const REQUIRED_FIELDS: Record<ProviderType, (keyof ProviderProfile)[]> = {
   DRIVER: ["fullName", "city", "vehicleType", "plateNumber"],
-  COURIER: ["fullName", "city", "vehicleType"],
+  COURIER: ["fullName", "city", "vehicleType", "plateNumber"],
   AGENCY: ["fullName", "city", "agencyName", "plan"],
-  ARTISAN: ["fullName", "city", "categoryId"],
+  ARTISAN: ["fullName", "city"],
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -103,16 +104,16 @@ const FIELD_LABELS: Record<string, string> = {
   vehicleType: "le type de véhicule",
   vehicleModel: "le modèle du véhicule",
   plateNumber: "le numéro d'immatriculation",
-  categoryId: "la catégorie de métier",
+  categoryId: "la spécialité (coursier / livreur)",
   agencyName: "la raison sociale de l'agence",
   plan: "la formule d'abonnement",
 };
 
 const TYPE_LABELS: Record<ProviderType, string> = {
-  DRIVER: "chauffeur indépendant",
-  COURIER: "coursier / livreur",
-  AGENCY: "agence de flotte",
-  ARTISAN: "artisan",
+  DRIVER: "Zem & Conducteur indépendant",
+  COURIER: "Coursier, Coursier personnel & Livreur",
+  AGENCY: "Agence de flotte",
+  ARTISAN: "Prestataire",
 };
 
 const DOCUMENT_LABELS: Record<DocumentKind, string> = {
@@ -160,19 +161,32 @@ export const PHOTO_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   ARTISAN: ["SELFIE", "CNI"],
 };
 
-// Ce que l'app affiche à l'étape « Quel conducteur es-tu ? » : le choix du véhicule
-// distingue le zem (moto-taxi) du conducteur indépendant en voiture.
-const VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
-  { value: "ZEM", label: "Zem (moto-taxi)", hint: "Courses courtes en ville — commission 15 %" },
-  { value: "ZEM_ELECTRIC", label: "Zem électrique", hint: "Moto électrique — commission 15 %" },
-  { value: "CAR", label: "Voiture — conducteur indépendant", hint: "Courses confort — commission 15 %" },
+// Choix de véhicule et spécialité par type d'activité :
+// - DRIVER  : Zem indépendant (moto-taxi), Zem électrique indépendant, Voiture indépendante
+// - COURIER : Coursier express, Coursier personnel (courses/achats), Livreur de colis
+const DRIVER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
+  { value: "ZEM", label: "Zem indépendant (Moto-taxi)", hint: "Courses rapides en ville — commission 15 %" },
+  { value: "ZEM_ELECTRIC", label: "Zem électrique indépendant", hint: "Moto électrique écologique — commission 15 %" },
+  { value: "CAR", label: "Voiture — Conducteur indépendant", hint: "Courses confort & climatisées — commission 15 %" },
+];
+
+const COURIER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
+  { value: "ZEM", label: "Moto / Zem (Coursier & Livreur)", hint: "Plis, courses personnelles et colis en ville" },
+  { value: "ZEM_ELECTRIC", label: "Moto électrique (Coursier & Livreur)", hint: "Livraisons rapides & écologiques" },
+  { value: "CAR", label: "Voiture / Fourgonnette (Livreur)", hint: "Colis moyens, achats et marchandises" },
+];
+
+const COURIER_SPECIALTIES: { id: string; label: string; hint: string }[] = [
+  { id: "COURSIER_EXPRESS", label: "Coursier express", hint: "Plis urgents, documents et petits paquets" },
+  { id: "COURSIER_PERSONNEL", label: "Coursier personnel", hint: "Courses personnelles, marché, pharmacie & achats" },
+  { id: "LIVREUR_COLIS", label: "Livreur de colis", hint: "Livraison de colis et marchandises avec double OTP" },
 ];
 
 const TYPE_DESCRIPTIONS: Record<ProviderType, string> = {
-  DRIVER: "Conduis des clients en zem, zem électrique ou voiture, et encaisse tes courses sur AZƆ̀ Pay.",
-  AGENCY: "Gère une flotte de chauffeurs, suis leur activité et paie une formule mensuelle.",
-  ARTISAN: "Reçois des demandes d'intervention (plomberie, électricité, maçonnerie…).",
-  COURIER: "Assure des livraisons de colis avec double code de confirmation.",
+  DRIVER: "Zem, Zem indépendant (moto-taxi), Zem électrique ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
+  COURIER: "Coursier express, coursier personnel (courses, marché, pharmacie) ou livreur de colis avec double code OTP.",
+  AGENCY: "Gère une flotte de conducteurs Zem, voitures ou coursiers-livreurs, suis leur activité et bénéficie d'une commission réduite.",
+  ARTISAN: "",
 };
 
 type ProviderWithDocs = ProviderProfile & { documents: ProviderDocument[] };
@@ -191,7 +205,7 @@ type UploadedDocument = {
 /* -------------------------------------------------------------------------- */
 
 class SaveApplicationDto {
-  @IsOptional() @IsIn(["DRIVER", "AGENCY", "ARTISAN", "COURIER"]) type?: ProviderType;
+  @IsOptional() @IsIn(["DRIVER", "AGENCY", "COURIER"]) type?: ProviderType;
   @IsOptional() @IsString() @MinLength(2) @MaxLength(80) fullName?: string;
   @IsOptional() @IsString() @MaxLength(60) city?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) zones?: string[];
@@ -207,9 +221,19 @@ class SaveApplicationDto {
 
 class RegisterDocumentDto {
   @IsIn(Object.values(DocumentKind)) kind: DocumentKind;
-  // Renseigné par l'upload réel des fichiers (étape 3d).
   @IsOptional() @IsString() @MaxLength(500) url?: string;
   @IsOptional() @IsString() @MaxLength(60) mimeType?: string;
+  @IsOptional() @IsString() @IsISO8601() expiresAt?: string;
+  // Permet aussi l'envoi direct de la photo en base64 via JSON (contourne les bugs
+  // multipart de certains téléphones Android sous React Native).
+  @IsOptional() @IsString() base64?: string;
+  @IsOptional() @IsString() @MaxLength(120) fileName?: string;
+}
+
+class UploadBase64Dto {
+  @IsString() base64: string;
+  @IsOptional() @IsString() @MaxLength(60) mimeType?: string;
+  @IsOptional() @IsString() @MaxLength(120) fileName?: string;
   @IsOptional() @IsString() @IsISO8601() expiresAt?: string;
 }
 
@@ -535,9 +559,17 @@ export class ProvidersService {
     return this.serialize(updated);
   }
 
-  // POST /providers/applications/:id/documents — déclare une pièce du dossier.
-  // Le dépôt du fichier lui-même (photo/PDF) arrive à l'étape 3d.
+  // POST /providers/applications/:id/documents — déclare une pièce ou dépose sa photo en base64.
   async addDocument(userId: string, applicationId: string, dto: RegisterDocumentDto) {
+    if (dto.base64) {
+      return this.uploadBase64Document(userId, applicationId, dto.kind, {
+        base64: dto.base64,
+        mimeType: dto.mimeType,
+        fileName: dto.fileName,
+        expiresAt: dto.expiresAt,
+      });
+    }
+
     const provider = await this.loadProviderById(applicationId);
     if (provider.userId !== userId) throw new ForbiddenException("Ce dossier ne t'appartient pas");
     if (!EDITABLE_STATUSES.includes(provider.status))
@@ -559,11 +591,10 @@ export class ProvidersService {
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
       },
       update: {
-        // Une pièce re-déclarée repart en attente de validation.
         status: "PENDING",
-        url: dto.url ?? undefined,
-        mimeType: dto.mimeType ?? undefined,
-        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+        ...(dto.url !== undefined ? { url: dto.url } : {}),
+        ...(dto.mimeType !== undefined ? { mimeType: dto.mimeType } : {}),
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
         reviewerNote: null,
         reviewedAt: null,
         uploadedAt: new Date(),
@@ -1029,19 +1060,21 @@ export class ProvidersService {
 
   // GET /providers/requirements — toute la configuration du wizard d'inscription,
   // servie par l'API : l'app n'a aucun libellé ni aucune liste de pièces en dur.
-  // Ouvrir ARTISAN ou COURIER plus tard ne demandera donc aucun changement mobile.
   requirements() {
     return {
       enabledTypes: ENABLED_PROVIDER_TYPES,
-      types: (Object.keys(TYPE_LABELS) as ProviderType[]).map((type) => ({
+      types: VISIBLE_PROVIDER_TYPES.map((type) => ({
         type,
         label: TYPE_LABELS[type],
         description: TYPE_DESCRIPTIONS[type],
         enabled: ENABLED_PROVIDER_TYPES.includes(type),
         vehicleChoices:
-          type === "DRIVER" || type === "COURIER"
-            ? VEHICLE_CHOICES.filter((v) => type === "DRIVER" || v.value !== "CAR")
-            : [],
+          type === "DRIVER"
+            ? DRIVER_VEHICLE_CHOICES
+            : type === "COURIER"
+              ? COURIER_VEHICLE_CHOICES
+              : [],
+        specialties: type === "COURIER" ? COURIER_SPECIALTIES : [],
         requiredFields: REQUIRED_FIELDS[type].map((field) => ({
           field,
           label: FIELD_LABELS[field] ?? String(field),
@@ -1065,6 +1098,50 @@ export class ProvidersService {
       review: { slaHours: REVIEW_SLA_HOURS, resubmitDelayDays: RESUBMIT_DELAY_DAYS },
       upload: { maxBytes: MAX_UPLOAD_BYTES, acceptedMimeTypes: Object.keys(ACCEPTED_MIME) },
     };
+  }
+
+  // POST /providers/applications/:id/documents/:kind/base64 — dépôt JSON en base64.
+  // Permet aux téléphones Android sous React Native d'envoyer les photos KYC via le
+  // même canal JSON fiable que le reste de l'API (sans échec multipart file://).
+  async uploadBase64Document(
+    userId: string,
+    applicationId: string,
+    kind: DocumentKind,
+    dto: UploadBase64Dto
+  ) {
+    const raw = (dto.base64 ?? "").trim();
+    if (!raw) throw new BadRequestException("Aucune image reçue : reprends la photo");
+
+    let mimeType = dto.mimeType || "image/jpeg";
+    let cleanBase64 = raw;
+    const dataUrlMatch = raw.match(/^data:([^;]+);base64,(.+)$/s);
+    if (dataUrlMatch) {
+      mimeType = dataUrlMatch[1];
+      cleanBase64 = dataUrlMatch[2];
+    }
+    if (!ACCEPTED_MIME[mimeType]) {
+      mimeType = "image/jpeg";
+    }
+
+    const buffer = Buffer.from(cleanBase64, "base64");
+    if (!buffer || buffer.length === 0) {
+      throw new BadRequestException("Image invalide : reprends la photo");
+    }
+
+    const saved = await this.uploadDocument(userId, applicationId, kind, {
+      buffer,
+      mimetype: mimeType,
+      originalname: dto.fileName || `${kind.toLowerCase()}.jpg`,
+      size: buffer.length,
+    });
+
+    if (dto.expiresAt) {
+      return this.prisma.providerDocument.update({
+        where: { id: saved.id },
+        data: { expiresAt: new Date(dto.expiresAt) },
+      });
+    }
+    return saved;
   }
 
   // POST /providers/applications/:id/documents/:kind/file — dépôt du fichier (photo/PDF).
@@ -1222,6 +1299,19 @@ export class ProvidersController {
   @Post("applications/:id/documents")
   addDocument(@CurrentUser() u, @Param("id") id: string, @Body() dto: RegisterDocumentDto) {
     return this.svc.addDocument(u.userId, id, dto);
+  }
+
+  // POST /providers/applications/:id/documents/:kind/base64 — dépôt de la photo en JSON base64
+  @Post("applications/:id/documents/:kind/base64")
+  uploadDocumentBase64(
+    @CurrentUser() u,
+    @Param("id") id: string,
+    @Param("kind") kind: DocumentKind,
+    @Body() dto: UploadBase64Dto
+  ) {
+    if (!Object.values(DocumentKind).includes(kind))
+      throw new BadRequestException(`Type de pièce inconnu : ${kind}`);
+    return this.svc.uploadBase64Document(u.userId, id, kind, dto);
   }
 
   // POST /providers/applications/:id/documents/:kind/file — dépôt de la photo (multipart, champ "file")

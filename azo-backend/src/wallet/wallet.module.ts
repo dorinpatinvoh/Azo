@@ -14,8 +14,10 @@ export class WalletService {
   constructor(private prisma: PrismaService) {}
 
   async getWallet(userId: string) {
-    const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
-    if (!wallet) throw new BadRequestException("Portefeuille introuvable");
+    let wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) {
+      wallet = await this.prisma.wallet.create({ data: { userId } });
+    }
     return wallet;
   }
 

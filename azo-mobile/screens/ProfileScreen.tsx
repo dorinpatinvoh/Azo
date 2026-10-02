@@ -7,6 +7,7 @@ import { typography } from "../theme/typography";
 import { userApi, walletApi, ridesApi, UserProfile, Ride } from "../services/api";
 import ClientTabBar, { ClientTab } from "../components/ClientTabBar";
 import { fcfa, DEMO_USER, DEMO_BALANCE, DEMO_RIDES } from "../utils/rideDisplay";
+import { formatBeninPhoneDisplay } from "../utils/phone";
 
 type Props = {
   onNavigateTab: (tab: ClientTab) => void;
@@ -21,9 +22,7 @@ function initials(name?: string | null) {
 }
 
 function formatPhone(phone: string) {
-  const d = phone.replace(/\D/g, "");
-  const local = d.startsWith("229") ? d.slice(3) : d;
-  return `+229 ${local.replace(/(\d{2})(?=\d)/g, "$1 ").trim()}`;
+  return formatBeninPhoneDisplay(phone);
 }
 
 export default function ProfileScreen({ onNavigateTab, onOpenNotifications, onOpenProvider, onLogout }: Props) {
@@ -92,7 +91,7 @@ export default function ProfileScreen({ onNavigateTab, onOpenNotifications, onOp
     { id: "notifs", label: "Notifications", icon: "notifications-none" as const, onPress: onOpenNotifications },
     {
       id: "provider",
-      label: user?.role && user.role !== "CLIENT" ? "Mon espace prestataire" : "Devenir chauffeur / agence",
+      label: user?.role && user.role !== "CLIENT" ? "Mon espace prestataire" : "Devenir Zem / Coursier / Agence",
       meta: user?.role && user.role !== "CLIENT" ? user.role.toLowerCase() : "dossier à valider",
       icon: "how-to-reg" as const,
       onPress: onOpenProvider,

@@ -58,4 +58,4 @@ export const DEMO_RIDES: Ride[] = [
 export const DEMO_BALANCE = 18500;
 export const DEMO_CASHBACK = 420;
 export const DEMO_UNREAD = 2;
-export const DEMO_USER = { id: "demo", phone: "97000042", fullName: "Kossi Adjovi", role: "CLIENT", createdAt: daysAgo(90) };
+export const DEMO_USER = { id: "demo", phone: "+2290197000042", fullName: "Kossi Adjovi", role: "CLIENT", createdAt: daysAgo(90) };

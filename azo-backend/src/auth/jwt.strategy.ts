@@ -2,22 +2,25 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { PrismaService } from "../prisma/prisma.service";
+import { getJwtSecret } from "../common/jwt-secret";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private prisma: PrismaService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Accepte l'en-tête Authorization: Bearer <jwt> OU ?token=<jwt> (utile pour les
+      // balises <Image> React Native sur Android qui n'envoient pas toujours les headers).
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        ExtractJwt.fromUrlQueryParameter("token"),
+      ]),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || "dev-secret-a-changer",
+      secretOrKey: getJwtSecret(),
     });
   }
 
-  // Le contenu retourné devient req.user.
-  // Le rôle et le statut sont relus en base à chaque requête : un jeton est signé pour
-  // 30 jours, or une suspension admin ou une validation de dossier prestataire doit
-  // prendre effet immédiatement. Sans cette relecture, un chauffeur suspendu
-  // continuerait d'accepter des courses avec son ancien jeton.
+  // Le rôle et le statut sont relus en base à chaque requête : une suspension admin
+  // ou une approbation de dossier prestataire prend effet immédiatement.
   async validate(payload: { sub: string; role: string; phone: string }) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },

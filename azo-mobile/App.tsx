@@ -8,56 +8,64 @@ import {
   PlusJakartaSans_800ExtraBold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import { useFonts as useInter, Inter_400Regular } from "@expo-google-fonts/inter";
-import { View, ActivityIndicator, Pressable, Text, StyleSheet } from "react-native";
+import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 import SplashScreen from "./screens/SplashScreen";
 import OtpLoginScreen from "./screens/OtpLoginScreen";
 import HomeScreen from "./screens/HomeScreen";
-import RideBookingScreen from "./screens/RideBookingScreen"; // [RÉSERVATION] remplace RideRequestScreen
-import LiveTrackingScreen from "./screens/LiveTrackingScreen"; // [RÉSERVATION] remplace RideTrackingScreen
+import RideBookingScreen from "./screens/RideBookingScreen";
+import LiveTrackingScreen from "./screens/LiveTrackingScreen";
 import RideRatingScreen from "./screens/RideRatingScreen";
 import DeliveryScreen from "./screens/DeliveryScreen";
 import VehicleRentalScreen from "./screens/VehicleRentalScreen";
 import WalletScreen from "./screens/WalletScreen";
-import CoursesScreen from "./screens/CoursesScreen"; // [AJOUT]
-import ProfileScreen from "./screens/ProfileScreen"; // [AJOUT]
-import { setToken } from "./services/api"; // [AJOUT]
-import { Alert } from "react-native"; // [AJOUT]
+import CoursesScreen from "./screens/CoursesScreen";
+import ProfileScreen from "./screens/ProfileScreen";
 import DriverHomeScreen from "./screens/DriverHomeScreen";
+import CourierHomeScreen from "./screens/CourierHomeScreen";
 import AgencyDashboardScreen from "./screens/AgencyDashboardScreen";
 import AdminDashboardScreen from "./screens/AdminDashboardScreen";
 import MarketplaceEscrowScreen from "./screens/MarketplaceEscrowScreen";
-import ArtisansScreen from "./screens/ArtisansScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
 import DevMenuScreen, { ScreenId } from "./screens/DevMenuScreen";
 import ProviderOnboardingScreen from "./screens/ProviderOnboardingScreen";
 import ProviderStatusScreen from "./screens/ProviderStatusScreen";
 import AdminProvidersScreen from "./screens/AdminProvidersScreen";
-import { ProviderRef, ProviderType } from "./services/api";
+import { ProviderRef, ProviderType, setToken } from "./services/api";
 import { colors, radius, spacing } from "./theme/colors";
 
 type Route = ScreenId | "menu";
 
 /**
- * Écran d'arrivée après connexion.
- * Un client dont le dossier prestataire n'est pas encore approuvé tombe sur le suivi
- * de son dossier : c'est la seule façon de savoir où en est sa demande.
+ * Écran d'arrivée après connexion :
+ * - ADMIN -> Console de validation des prestataires
+ * - AGENCY -> Tableau de bord de la flotte d'agence
+ * - DRIVER + providerType === COURIER -> Espace Coursier / Livreur
+ * - DRIVER -> Zém Radar (Chauffeur Zem / Voiture)
+ * - Dossier prestataire en cours -> Suivi du dossier
+ * - Sinon -> Accueil client
  */
-function routeFor(role: string, providerStatus?: string | null): Route {
-  switch ((role || "").toUpperCase().trim()) {
-    case "DRIVER":
-    case "CONDUCTEUR":
-    case "CHAUFFEUR":
-      return "driver-home";
+function routeFor(
+  role: string,
+  providerStatus?: string | null,
+  providerType?: string | null
+): Route {
+  const normRole = (role || "").toUpperCase().trim();
+  const normType = (providerType || "").toUpperCase().trim();
+  switch (normRole) {
+    case "ADMIN":
+      return "admin-providers";
     case "AGENCY":
     case "AGENCE":
       return "agency-dashboard";
-    case "ADMIN":
-      // La console de validation est le vrai travail de l'admin : c'est l'écran d'accueil.
-      return "admin-providers";
-    case "ARTISAN":
-      return "artisans";
+    case "COURIER":
+    case "COURSIER":
+      return "courier-home";
+    case "DRIVER":
+    case "CONDUCTEUR":
+    case "CHAUFFEUR":
+      return normType === "COURIER" ? "courier-home" : "driver-home";
     default:
       if (providerStatus && providerStatus !== "APPROVED") return "provider-status";
       return "home";
@@ -67,8 +75,8 @@ function routeFor(role: string, providerStatus?: string | null): Route {
 export default function App() {
   const [route, setRoute] = useState<Route>("splash");
   const [rideId, setRideId] = useState<string | undefined>();
-  const [rideLabel, setRideLabel] = useState<string | undefined>(); // [RÉSERVATION] libellé de la destination
-  const [rideVehicle, setRideVehicle] = useState<string>("zem-express"); // [AJOUT]
+  const [rideLabel, setRideLabel] = useState<string | undefined>();
+  const [rideVehicle, setRideVehicle] = useState<string>("zem-express");
   const [isAuthRestoring, setIsAuthRestoring] = useState<boolean>(true);
 
   const [pjsLoaded] = usePJS({
@@ -82,11 +90,10 @@ export default function App() {
     setRoute(r);
   }, []);
 
-  // [AJOUT] Chaque bouton de l'accueil mène à un écran précis
   const handleSelectService = useCallback(
     (service: string) => {
       switch (service) {
-        case "transport": // Voiture
+        case "transport":
           setRideVehicle("car-confort");
           goTo("ride-request");
           break;
@@ -98,10 +105,13 @@ export default function App() {
         case "coursier":
           goTo("delivery");
           break;
+        case "agence":
+          goTo("provider-status");
+          break;
         case "location":
           goTo("rental");
           break;
-        case "courses": // courses au marché
+        case "courses":
         case "marketplace":
           goTo("marketplace");
           break;
@@ -112,9 +122,8 @@ export default function App() {
     [goTo]
   );
 
-  // Déconnexion sécurisée nettoyant le SecureStore
   const handleLogout = useCallback(async () => {
-    setToken(null); // [AJOUT] oublie le jeton en mémoire
+    setToken(null);
     try {
       await SecureStore.deleteItemAsync("userRole");
       await SecureStore.deleteItemAsync("userToken");
@@ -127,21 +136,21 @@ export default function App() {
     }
   }, [goTo]);
 
-  // Restauration de session au démarrage de l'application
   useEffect(() => {
     let isMounted = true;
 
     async function restoreSession() {
       try {
         const savedRole = await SecureStore.getItemAsync("userRole");
-        const savedToken = await SecureStore.getItemAsync("userToken"); // [AJOUT]
-        if (savedToken) setToken(savedToken); // [AJOUT] sinon les appels API ne sont pas authentifiés
+        const savedToken = await SecureStore.getItemAsync("userToken");
+        if (savedToken) setToken(savedToken);
         if (!isMounted) return;
 
         if (savedRole) {
           const role = savedRole.toUpperCase().trim();
           const savedProviderStatus = await SecureStore.getItemAsync("providerStatus");
-          setRoute(routeFor(role, savedProviderStatus));
+          const savedProviderType = await SecureStore.getItemAsync("providerType");
+          setRoute(routeFor(role, savedProviderStatus, savedProviderType));
         } else {
           setRoute("splash");
         }
@@ -181,7 +190,7 @@ export default function App() {
       {route === "otp" && (
         <OtpLoginScreen
           onVerified={(role?: string | null, provider?: ProviderRef | null) => {
-            goTo(routeFor(role ?? "", provider?.status ?? null));
+            goTo(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null));
           }}
           onBack={() => goTo("splash")}
         />
@@ -189,12 +198,11 @@ export default function App() {
 
       {route === "home" && (
         <HomeScreen
-          onSelectService={handleSelectService} // [AJOUT] remplace l'ancien if/else
-          onNavigateTab={goTo} // [AJOUT] home / courses / wallet / profile
+          onSelectService={handleSelectService}
+          onNavigateTab={goTo}
         />
       )}
 
-      {/* [RÉSERVATION] Écran de réservation connecté au backend (GPS, adresses, carte, prix) */}
       {route === "ride-request" && (
         <RideBookingScreen
           service={rideVehicle === "car-confort" ? "transport" : "zem"}
@@ -207,7 +215,6 @@ export default function App() {
         />
       )}
 
-      {/* [RÉSERVATION] Suivi en direct de la course */}
       {route === "ride-tracking" && rideId && (
         <LiveTrackingScreen
           rideId={rideId}
@@ -239,7 +246,6 @@ export default function App() {
 
       {route === "wallet" && <WalletScreen onBack={() => goTo("home")} />}
 
-      {/* [AJOUT] Onglet Courses */}
       {route === "courses" && (
         <CoursesScreen
           onNavigateTab={goTo}
@@ -252,7 +258,6 @@ export default function App() {
         />
       )}
 
-      {/* [AJOUT] Onglet Profil */}
       {route === "profile" && (
         <ProfileScreen
           onNavigateTab={goTo}
@@ -262,7 +267,6 @@ export default function App() {
         />
       )}
 
-      {/* Inscription prestataire : wizard de dépôt de dossier (identité, véhicule, photos) */}
       {route === "provider-onboarding" && (
         <ProviderOnboardingScreen
           onSubmitted={() => goTo("provider-status")}
@@ -270,39 +274,65 @@ export default function App() {
         />
       )}
 
-      {/* Suivi du dossier : statuts, pièces, journal, décision de l'admin */}
       {route === "provider-status" && (
         <ProviderStatusScreen
           onEdit={() => goTo("provider-onboarding")}
           onEnterWorkspace={(type: ProviderType) =>
-            goTo(type === "AGENCY" ? "agency-dashboard" : "driver-home")
+            goTo(
+              type === "AGENCY"
+                ? "agency-dashboard"
+                : type === "COURIER"
+                ? "courier-home"
+                : "driver-home"
+            )
           }
           onBack={() => goTo("home")}
         />
       )}
 
-      {/* Console administrateur : validation des dossiers prestataires */}
-      {route === "admin-providers" && <AdminProvidersScreen onBack={handleLogout} />}
+      {route === "admin-providers" && (
+        <AdminProvidersScreen
+          onBack={handleLogout}
+          onOpenDashboard={() => goTo("admin-dashboard")}
+        />
+      )}
 
-      {route === "driver-home" && <DriverHomeScreen onLogout={handleLogout} />}
+      {route === "driver-home" && (
+        <DriverHomeScreen
+          onLogout={handleLogout}
+          onOpenDossier={() => goTo("provider-status")}
+        />
+      )}
 
-      {route === "agency-dashboard" && <AgencyDashboardScreen onBack={handleLogout} />}
+      {route === "courier-home" && (
+        <CourierHomeScreen
+          onLogout={handleLogout}
+          onOpenDossier={() => goTo("provider-status")}
+        />
+      )}
 
-      {route === "admin-dashboard" && <AdminDashboardScreen onBack={handleLogout} />}
+      {route === "agency-dashboard" && (
+        <AgencyDashboardScreen
+          onBack={handleLogout}
+          onOpenDossier={() => goTo("provider-status")}
+        />
+      )}
+
+      {route === "admin-dashboard" && (
+        <AdminDashboardScreen
+          onBack={() => goTo("admin-providers")}
+          onOpenProviders={() => goTo("admin-providers")}
+        />
+      )}
 
       {route === "marketplace" && (
         <MarketplaceEscrowScreen onBack={() => goTo("home")} onConfirm={() => goTo("home")} />
-      )}
-
-      {route === "artisans" && (
-        <ArtisansScreen onBack={() => goTo("home")} onRequestArtisan={() => goTo("home")} />
       )}
 
       {route === "notifications" && <NotificationsScreen onBack={() => goTo("home")} />}
 
       {route === "menu" && <DevMenuScreen onSelect={(id) => goTo(id)} />}
 
-      {/* Bouton flottant pour le développement (masqué sur la réservation/suivi : il gênait le bouton Confirmer) */}
       {route !== "menu" && route !== "ride-request" && route !== "ride-tracking" && (
         <Pressable style={styles.devFab} onPress={() => goTo("menu")}>
           <Text style={styles.devFabText}>⋮⋮</Text>
@@ -321,7 +351,7 @@ const styles = StyleSheet.create({
   },
   devFab: {
     position: "absolute",
-    bottom: 150, // [AJOUT] était 90 : masquait l'onglet Profil
+    bottom: 150,
     right: spacing.md,
     width: 44,
     height: 44,

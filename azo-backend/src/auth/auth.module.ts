@@ -5,15 +5,15 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtStrategy } from "./jwt.strategy";
 import { ProvidersModule } from "../providers/providers.module";
+import { getJwtSecret } from "../common/jwt-secret";
 
 @Global()
 @Module({
   imports: [
     PassportModule,
-    // Pour ouvrir un brouillon de dossier prestataire à l'inscription (sans accorder de rôle).
     ProvidersModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || "dev-secret-a-changer",
+      secret: getJwtSecret(),
       signOptions: { expiresIn: "30d" },
     }),
   ],
