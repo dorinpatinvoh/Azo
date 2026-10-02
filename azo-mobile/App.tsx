@@ -32,7 +32,7 @@ import DevMenuScreen, { ScreenId } from "./screens/DevMenuScreen";
 import ProviderOnboardingScreen from "./screens/ProviderOnboardingScreen";
 import ProviderStatusScreen from "./screens/ProviderStatusScreen";
 import AdminProvidersScreen from "./screens/AdminProvidersScreen";
-import { ProviderRef, ProviderType, setToken } from "./services/api";
+import { ProviderRef, ProviderType, setApiUrl, setToken } from "./services/api";
 import { colors, radius, spacing } from "./theme/colors";
 
 type Route = ScreenId | "menu";
@@ -141,6 +141,8 @@ export default function App() {
 
     async function restoreSession() {
       try {
+        const customUrl = await SecureStore.getItemAsync("customApiUrl");
+        if (customUrl) setApiUrl(customUrl);
         const savedRole = await SecureStore.getItemAsync("userRole");
         const savedToken = await SecureStore.getItemAsync("userToken");
         if (savedToken) setToken(savedToken);

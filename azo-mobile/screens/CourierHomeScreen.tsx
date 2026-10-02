@@ -53,11 +53,49 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [otpInput, setOtpInput] = useState("");
+  const [simBannerCode, setSimBannerCode] = useState<string | null>(null);
+  const [simBannerSec, setSimBannerSec] = useState<number>(0);
 
   const activeDelivery = useMemo(
     () => history.find((d) => d.status === "MATCHED" || d.status === "IN_PROGRESS") ?? null,
     [history]
   );
+
+  const currentSimCode = useMemo(() => {
+    if (!activeDelivery) return null;
+    const raw =
+      activeDelivery.status === "MATCHED"
+        ? activeDelivery.pickupCode
+        : activeDelivery.deliveryCode;
+    return raw && /^\d{4}$/.test(raw) ? raw : null;
+  }, [activeDelivery]);
+
+  function showSimCodeFor5Seconds(code: string | null) {
+    if (!code) return;
+    setSimBannerCode(code);
+    setSimBannerSec(5);
+  }
+
+  useEffect(() => {
+    if (currentSimCode) {
+      showSimCodeFor5Seconds(currentSimCode);
+    }
+  }, [currentSimCode, activeDelivery?.status]);
+
+  useEffect(() => {
+    if (!simBannerCode) return;
+    const t = setInterval(() => {
+      setSimBannerSec((prev) => {
+        if (prev <= 1) {
+          clearInterval(t);
+          setSimBannerCode(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [simBannerCode]);
 
   const loadAccount = useCallback(async () => {
     const [wRes, hRes, pRes] = await Promise.allSettled([
@@ -302,6 +340,35 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
 
               {/* Saisie du code OTP de ramassage ou de remise */}
               <View style={styles.otpBox}>
+                {simBannerCode ? (
+                  <Pressable
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      backgroundColor: "#14291D",
+                      borderRadius: radius.md,
+                      padding: spacing.sm,
+                    }}
+                    onPress={() => setOtpInput(simBannerCode)}
+                  >
+                    <Text style={{ ...typography.labelMd, color: "#fff", fontWeight: "700" }}>
+                      💬 Code client (simulation) :{" "}
+                      <Text style={{ color: "#52FF9B", fontWeight: "800", letterSpacing: 2 }}>
+                        {simBannerCode}
+                      </Text>
+                    </Text>
+                    <Text style={{ ...typography.labelSm, color: "#8CF0B4", fontWeight: "800" }}>
+                      {simBannerSec}s
+                    </Text>
+                  </Pressable>
+                ) : currentSimCode ? (
+                  <Pressable onPress={() => showSimCodeFor5Seconds(currentSimCode)}>
+                    <Text style={{ ...typography.labelSm, color: colors.primary, fontWeight: "700" }}>
+                      Afficher le code client de simulation pendant 5s
+                    </Text>
+                  </Pressable>
+                ) : null}
                 <Text style={styles.otpTitle}>
                   {activeDelivery.status === "MATCHED"
                     ? "Code de ramassage (4 chiffres de l'expéditeur)"

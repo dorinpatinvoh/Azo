@@ -4,9 +4,9 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ProvidersService } from "../providers/providers.module";
 import { beninPhoneVariants, extractLocalBeninDigits, normalizeBeninPhone } from "../common/phone";
 
-const MAX_OTP_REQUESTS_WINDOW = 5;
+const MAX_OTP_REQUESTS_WINDOW = 15;
 const OTP_WINDOW_MS = 10 * 60 * 1000; // 10 min
-const MAX_VERIFY_ATTEMPTS = 5;
+const MAX_VERIFY_ATTEMPTS = 8;
 
 @Injectable()
 export class AuthService {
@@ -65,7 +65,14 @@ export class AuthService {
 
     console.log(`[OTP DEV] ${phone} -> ${code}`);
 
-    return { message: "Code envoyé", phone };
+    return {
+      message: "Code envoyé",
+      phone,
+      // En mode simulation (tant qu'aucune passerelle SMS payante n'est activée via SMS_PROVIDER="live"),
+      // le code est renvoyé pour que l'application mobile (et l'APK de démonstration) puisse afficher
+      // une bannière de notification SMS pendant 5 secondes à l'écran.
+      otpCode: process.env.SMS_PROVIDER === "live" ? undefined : code,
+    };
   }
 
   async verifyOtp(rawPhone: string, code: string, profile?: string) {

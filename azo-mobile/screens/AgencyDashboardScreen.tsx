@@ -39,6 +39,13 @@ type RosterFilter = "ALL" | "EN_COURSE" | "DISPONIBLE";
 
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
 
+const OFFICIAL_AGENCY_GRID = [
+  { plan: "PRO", name: "AGENCE PRO", fee: 100000, maxAccounts: 10, commission: "3 %" },
+  { plan: "ARGENT", name: "AGENCE ARGENT", fee: 215500, maxAccounts: 25, commission: "2,5 %" },
+  { plan: "OR", name: "AGENCE OR", fee: 450500, maxAccounts: 100, commission: "2 %" },
+  { plan: "DIAMANT", name: "AGENCE DIAMANT", fee: 600500, maxAccounts: 1000, commission: "1 %" },
+] as const;
+
 export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) {
   const [data, setData] = useState<AgencyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -380,6 +387,56 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                   })}
                 </View>
               )}
+
+              {/* Grille officielle AZƆ̀ */}
+              <Text style={[styles.sectionTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>
+                Grille officielle AZƆ̀
+              </Text>
+              <View style={{ gap: spacing.sm }}>
+                {OFFICIAL_AGENCY_GRID.map((tier) => {
+                  const isCurrent = data.agency.plan === tier.plan;
+                  return (
+                    <View
+                      key={tier.plan}
+                      style={[
+                        styles.driverRow,
+                        isCurrent && {
+                          borderColor: colors.primary,
+                          borderWidth: 1.5,
+                          backgroundColor: `${colors.primaryFixed}35`,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.driverAvatar,
+                          {
+                            backgroundColor: isCurrent
+                              ? colors.primary
+                              : colors.surfaceContainerLow,
+                          },
+                        ]}
+                      >
+                        <MaterialIcons
+                          name="workspace-premium"
+                          size={20}
+                          color={isCurrent ? "#fff" : colors.primary}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.driverName}>{tier.name}</Text>
+                        <Text style={styles.driverMeta}>
+                          Activation unique : {tier.fee.toLocaleString("fr-FR")} FCFA · Jusqu'à{" "}
+                          {tier.maxAccounts.toLocaleString("fr-FR")} comptes
+                        </Text>
+                      </View>
+                      <View style={styles.planPill}>
+                        <Text style={styles.planPillText}>Comm. {tier.commission}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             </>
           ) : null}
         </ScrollView>

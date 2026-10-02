@@ -7,7 +7,14 @@
 //   - Émulateur Android         : http://10.0.2.2:3000
 //   - Navigateur (expo web)     : http://localhost:3000
 
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.100.10:3000";
+export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.100.10:3000";
+export let API_URL = DEFAULT_API_URL;
+
+export const setApiUrl = (url: string | null | undefined) => {
+  const clean = (url || "").trim().replace(/\/+$/, "");
+  API_URL = clean || DEFAULT_API_URL;
+};
+export const getApiUrl = () => API_URL;
 
 // Préfixe des routes de réservation.
 //  - "" (vide)  : routes servies par NestJS  -> /places/..., /rides/...
@@ -123,7 +130,8 @@ function upload<T>(path: string, form: FormData, timeoutMs = 90000): Promise<T> 
 export type ProfileRole = "CLIENT" | "DRIVER" | "COURIER" | "AGENCY";
 
 export const authApi = {
-  requestOtp: (phone: string) => api.post<{ message: string; phone: string }>("/auth/request-otp", { phone }),
+  requestOtp: (phone: string) =>
+    api.post<{ message: string; phone: string; otpCode?: string }>("/auth/request-otp", { phone }),
   // `profile` n'accorde PLUS aucun rôle : il ouvre un brouillon de dossier prestataire
   // qu'un administrateur doit valider. Le rôle métier arrive avec l'approbation.
   verifyOtp: async (phone: string, code: string, profile: ProfileRole = "CLIENT") => {

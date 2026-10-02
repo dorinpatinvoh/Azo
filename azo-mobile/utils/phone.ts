@@ -3,6 +3,7 @@
  * "01" + 8 chiffres (ex. 01 97 00 00 42).
  */
 export const BENIN_PHONE_LENGTH = 10;
+export const BENIN_LOCAL_PHONE_LENGTH = 10;
 
 /** Extrait au plus 10 chiffres locaux (retire +229 si l'utilisateur a collé le numéro complet). */
 export function cleanBeninDigits(raw: string): string {
@@ -19,6 +20,13 @@ export function cleanBeninDigits(raw: string): string {
 export function formatBeninPhoneInput(raw: string): string {
   const digits = cleanBeninDigits(raw);
   return digits.replace(/(\d{2})(?=\d)/g, "$1 ").trim();
+}
+export const formatBeninLocalInput = formatBeninPhoneInput;
+
+/** Convertit un numéro béninois en format E.164 (+22901XXXXXXXX). */
+export function toBeninE164(raw: string): string {
+  const digits = cleanBeninDigits(raw);
+  return `+229${digits}`;
 }
 
 /** Valide un numéro béninois à 10 chiffres commençant par 01. */

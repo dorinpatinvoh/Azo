@@ -114,10 +114,11 @@ export class DeliveryService {
       take: 50,
     });
     const enriched = await this.enrich(items);
-    return enriched.map(({ pickupCode: _p, deliveryCode: _d, ...rest }) => ({
+    const isLiveSms = process.env.SMS_PROVIDER === "live";
+    return enriched.map(({ pickupCode, deliveryCode, ...rest }) => ({
       ...rest,
-      pickupCode: "••••",
-      deliveryCode: "••••",
+      pickupCode: isLiveSms ? "••••" : pickupCode,
+      deliveryCode: isLiveSms ? "••••" : deliveryCode,
     }));
   }
 
@@ -157,7 +158,10 @@ export class DeliveryService {
     );
 
     const [enriched] = await this.enrich([fresh]);
-    return { ...enriched, pickupCode: "••••", deliveryCode: "••••" };
+    const isLiveSms = process.env.SMS_PROVIDER === "live";
+    return isLiveSms
+      ? { ...enriched, pickupCode: "••••", deliveryCode: "••••" }
+      : enriched;
   }
 
   // Étape 1 : le coursier saisit le code de ramassage à 4 chiffres donné par l'expéditeur
@@ -200,7 +204,8 @@ export class DeliveryService {
     );
 
     const [enriched] = await this.enrich([updated]);
-    return userId === d.clientId
+    const isLiveSms = process.env.SMS_PROVIDER === "live";
+    return userId === d.clientId || !isLiveSms
       ? enriched
       : { ...enriched, pickupCode: "••••", deliveryCode: "••••" };
   }

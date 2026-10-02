@@ -81,6 +81,20 @@ const DEFAULT_COURIER_VEHICLES: { value: VehicleType; label: string; hint: strin
   { value: "CAR", label: "Voiture / Fourgonnette (Livreur)", hint: "Colis moyens, achats et marchandises" },
 ];
 
+// Nouvelle grille officielle AZƆ̀ pour les Agences
+const DEFAULT_AGENCY_PLANS: {
+  plan: AgencyPlanChoice;
+  label: string;
+  fee: number;
+  maxAccounts: number;
+  commissionRate: number;
+}[] = [
+  { plan: "PRO", label: "Agence Pro", fee: 100000, maxAccounts: 10, commissionRate: 0.03 },
+  { plan: "ARGENT", label: "Agence Argent", fee: 215500, maxAccounts: 25, commissionRate: 0.025 },
+  { plan: "OR", label: "Agence Or", fee: 450500, maxAccounts: 100, commissionRate: 0.02 },
+  { plan: "DIAMANT", label: "Agence Diamant", fee: 600500, maxAccounts: 1000, commissionRate: 0.01 },
+];
+
 // Pièces dont la date d'expiration a du sens (permis, assurance, visite technique, CNI).
 const EXPIRY_KINDS: DocumentKind[] = ["CNI", "PERMIS", "ASSURANCE", "VISITE_TECHNIQUE"];
 
@@ -648,8 +662,8 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                   autoCapitalize="words"
                   required
                 />
-                <Text style={styles.sectionTitle}>Formule</Text>
-                {(req?.plans ?? []).map((p) => {
+                <Text style={styles.sectionTitle}>Formule officielle AZƆ̀</Text>
+                {(req?.plans?.length ? req.plans : DEFAULT_AGENCY_PLANS).map((p) => {
                   const selected = form.plan === p.plan;
                   return (
                     <Pressable
@@ -663,9 +677,9 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                         color={selected ? colors.primary : colors.onSurfaceVariant}
                       />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.choiceTitle}>{p.label}</Text>
+                        <Text style={styles.choiceTitle}>{p.label.toUpperCase()}</Text>
                         <Text style={styles.cardMeta}>
-                          {fcfa(p.fee)} à l'activation · {p.maxAccounts} comptes · commission{" "}
+                          Activation unique : {fcfa(p.fee)} · Jusqu'à {p.maxAccounts.toLocaleString("fr-FR")} comptes · Commission :{" "}
                           {(p.commissionRate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %
                         </Text>
                       </View>
@@ -758,11 +772,23 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                   <SummaryRow label="Agence" value={form.agencyName || "—"} />
                   <SummaryRow
                     label="Formule"
-                    value={req?.plans.find((p) => p.plan === form.plan)?.label ?? "—"}
+                    value={
+                      (req?.plans?.length ? req.plans : DEFAULT_AGENCY_PLANS).find(
+                        (p) => p.plan === form.plan
+                      )?.label ?? "—"
+                    }
                   />
                   <SummaryRow
-                    label="Frais d'activation"
-                    value={form.plan ? fcfa(req?.plans.find((p) => p.plan === form.plan)?.fee ?? 0) : "—"}
+                    label="Activation unique"
+                    value={
+                      form.plan
+                        ? fcfa(
+                            (req?.plans?.length ? req.plans : DEFAULT_AGENCY_PLANS).find(
+                              (p) => p.plan === form.plan
+                            )?.fee ?? 0
+                          )
+                        : "—"
+                    }
                   />
                 </>
               ) : (
