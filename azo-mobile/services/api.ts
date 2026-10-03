@@ -397,6 +397,22 @@ export type ProviderDocumentView = {
   reviewedAt: string | null;
 };
 
+export type AgencyDetails = {
+  representativeFirstName?: string;
+  representativeLastName?: string;
+  representativeRole?: string;
+  representativeNpi?: string;
+  agencyType?: string;
+  legalForm?: string;
+  ifuNumber?: string;
+  rccmNumber?: string;
+  headquartersAddress?: string;
+  businessPhone?: string;
+  businessEmail?: string;
+  payoutPhone?: string;
+  fleetSize?: number;
+};
+
 export type ProviderDossier = {
   id: string;
   type: ProviderType;
@@ -419,6 +435,7 @@ export type ProviderDossier = {
     planLabel: string | null;
     planFee: number | null;
     planCommissionRate: number | null;
+    agencyDetails?: AgencyDetails | null;
   };
   review: {
     submittedAt: string | null;
@@ -497,6 +514,19 @@ export type ProviderApplicationDraft = {
   categoryId?: string;
   agencyName?: string;
   plan?: AgencyPlanChoice;
+  representativeFirstName?: string;
+  representativeLastName?: string;
+  representativeRole?: string;
+  representativeNpi?: string;
+  agencyType?: string;
+  legalForm?: string;
+  ifuNumber?: string;
+  rccmNumber?: string;
+  headquartersAddress?: string;
+  businessPhone?: string;
+  businessEmail?: string;
+  payoutPhone?: string;
+  fleetSize?: number;
 };
 
 /** Fichier choisi sur le téléphone (expo-image-picker). */

@@ -182,6 +182,64 @@ const COURIER_SPECIALTIES: { id: string; label: string; hint: string }[] = [
   { id: "LIVREUR_COLIS", label: "Livreur de colis", hint: "Livraison de colis et marchandises avec double OTP" },
 ];
 
+export const AGENCY_TYPES: { id: string; label: string; hint: string }[] = [
+  { id: "FLOTTE_ZEM", label: "Agence de Flotte Zem & Moto-Taxi", hint: "Gestion de motos-taxis Zem thermiques & électriques" },
+  { id: "FLOTTE_VOITURE", label: "Agence VTC & Transport Voiture", hint: "Flotte de berlines climatisées & transport urbain" },
+  { id: "FLOTTE_LIVRAISON", label: "Agence de Coursiers & Logistique", hint: "Flotte de livreurs de colis, coursiers express & personnels" },
+  { id: "FLOTTE_MIXTE", label: "Agence Multi-Flotte (Zem + Voitures + Livreurs)", hint: "Exploitation complète multi-services sur AZƆ̀" },
+];
+
+export type AgencyDetails = {
+  representativeFirstName?: string;
+  representativeLastName?: string;
+  representativeRole?: string;
+  representativeNpi?: string;
+  agencyType?: string;
+  legalForm?: string;
+  ifuNumber?: string;
+  rccmNumber?: string;
+  headquartersAddress?: string;
+  businessPhone?: string;
+  businessEmail?: string;
+  payoutPhone?: string;
+  fleetSize?: number;
+};
+
+function parseAgencyDetails(provider: {
+  type: ProviderType;
+  bio?: string | null;
+  fullName?: string | null;
+  categoryId?: string | null;
+}): AgencyDetails | null {
+  if (provider.type !== "AGENCY") return null;
+  let parsed: AgencyDetails = {};
+  if (provider.bio && provider.bio.trim().startsWith("{")) {
+    try {
+      parsed = JSON.parse(provider.bio);
+    } catch {
+      parsed = {};
+    }
+  }
+  const parts = (provider.fullName || "").trim().split(/\s+/);
+  const defaultFirst = parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0] || "";
+  const defaultLast = parts.length > 1 ? parts[parts.length - 1] : "";
+  return {
+    representativeFirstName: parsed.representativeFirstName ?? defaultFirst,
+    representativeLastName: parsed.representativeLastName ?? defaultLast,
+    representativeRole: parsed.representativeRole ?? "Gérant",
+    representativeNpi: parsed.representativeNpi ?? "",
+    agencyType: parsed.agencyType ?? provider.categoryId ?? "FLOTTE_MIXTE",
+    legalForm: parsed.legalForm ?? "SARL",
+    ifuNumber: parsed.ifuNumber ?? "",
+    rccmNumber: parsed.rccmNumber ?? "",
+    headquartersAddress: parsed.headquartersAddress ?? "",
+    businessPhone: parsed.businessPhone ?? "",
+    businessEmail: parsed.businessEmail ?? "",
+    payoutPhone: parsed.payoutPhone ?? "",
+    fleetSize: parsed.fleetSize ?? undefined,
+  };
+}
+
 const TYPE_DESCRIPTIONS: Record<ProviderType, string> = {
   DRIVER: "Zem, Zem indépendant (moto-taxi), Zem électrique ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
   COURIER: "Coursier express, coursier personnel (courses, marché, pharmacie) ou livreur de colis avec double code OTP.",
@@ -209,7 +267,7 @@ class SaveApplicationDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(80) fullName?: string;
   @IsOptional() @IsString() @MaxLength(60) city?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) zones?: string[];
-  @IsOptional() @IsString() @MaxLength(600) bio?: string;
+  @IsOptional() @IsString() @MaxLength(4000) bio?: string;
   @IsOptional() @IsInt() @Min(0) @Max(60) experienceYears?: number;
   @IsOptional() @IsIn(["ZEM", "ZEM_ELECTRIC", "CAR"]) vehicleType?: VehicleType;
   @IsOptional() @IsString() @MaxLength(60) vehicleModel?: string;
@@ -217,6 +275,21 @@ class SaveApplicationDto {
   @IsOptional() @IsString() @MaxLength(60) categoryId?: string;
   @IsOptional() @IsString() @MaxLength(120) agencyName?: string;
   @IsOptional() @IsIn(["PRO", "ARGENT", "OR", "DIAMANT"]) plan?: AgencyPlan;
+
+  // Champs complémentaires pour l'inscription complète d'une Agence (Bénin)
+  @IsOptional() @IsString() @MaxLength(60) representativeFirstName?: string;
+  @IsOptional() @IsString() @MaxLength(60) representativeLastName?: string;
+  @IsOptional() @IsString() @MaxLength(60) representativeRole?: string;
+  @IsOptional() @IsString() @MaxLength(30) representativeNpi?: string;
+  @IsOptional() @IsString() @MaxLength(60) agencyType?: string;
+  @IsOptional() @IsString() @MaxLength(40) legalForm?: string;
+  @IsOptional() @IsString() @MaxLength(30) ifuNumber?: string;
+  @IsOptional() @IsString() @MaxLength(60) rccmNumber?: string;
+  @IsOptional() @IsString() @MaxLength(160) headquartersAddress?: string;
+  @IsOptional() @IsString() @MaxLength(30) businessPhone?: string;
+  @IsOptional() @IsString() @MaxLength(120) businessEmail?: string;
+  @IsOptional() @IsString() @MaxLength(30) payoutPhone?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(10000) fleetSize?: number;
 }
 
 class RegisterDocumentDto {
@@ -301,12 +374,20 @@ export class ProvidersService {
   }
 
   private missingFields(provider: ProviderProfile): string[] {
-    return REQUIRED_FIELDS[provider.type]
+    const baseMissing = REQUIRED_FIELDS[provider.type]
       .filter((field) => {
         const value = provider[field];
         return value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
       })
       .map((field) => FIELD_LABELS[field] ?? String(field));
+
+    if (provider.type === "AGENCY") {
+      const details = parseAgencyDetails(provider);
+      if (!details?.representativeNpi?.trim()) baseMissing.push("le NPI du représentant légal (10 chiffres)");
+      if (!details?.ifuNumber?.trim()) baseMissing.push("le numéro IFU de l'entreprise (13 chiffres)");
+      if (!details?.rccmNumber?.trim()) baseMissing.push("le numéro RCCM de l'entreprise");
+    }
+    return baseMissing;
   }
 
   // 0-100 : une pièce requise déclarée compte pour moitié, validée et non expirée pour
@@ -361,6 +442,7 @@ export class ProvidersService {
     const missingFields = this.missingFields(provider);
     const submittedAt = provider.submittedAt;
     const waitingHours = submittedAt ? Math.max(0, Math.round((Date.now() - submittedAt.getTime()) / 3600000)) : null;
+    const agencyDetails = parseAgencyDetails(provider);
     return {
       id: provider.id,
       type: provider.type,
@@ -370,7 +452,7 @@ export class ProvidersService {
         fullName: provider.fullName,
         city: provider.city,
         zones: provider.zones,
-        bio: provider.bio,
+        bio: provider.type === "AGENCY" ? null : provider.bio,
         experienceYears: provider.experienceYears,
       },
       activity: {
@@ -383,6 +465,7 @@ export class ProvidersService {
         planLabel: provider.plan ? PLAN_LABELS[provider.plan] : null,
         planFee: provider.plan ? PLANS[provider.plan].fee : null,
         planCommissionRate: provider.plan ? PLANS[provider.plan].rate : null,
+        agencyDetails,
       },
       review: {
         submittedAt,
@@ -534,7 +617,24 @@ export class ProvidersService {
       );
     }
 
-    const { type, ...rest } = dto;
+    const {
+      type,
+      representativeFirstName,
+      representativeLastName,
+      representativeRole,
+      representativeNpi,
+      agencyType,
+      legalForm,
+      ifuNumber,
+      rccmNumber,
+      headquartersAddress,
+      businessPhone,
+      businessEmail,
+      payoutPhone,
+      fleetSize,
+      ...rest
+    } = dto;
+
     if (type) {
       this.assertTypeEnabled(type);
       if (user.provider && type !== user.provider.type && user.provider.status !== "DRAFT")
@@ -549,6 +649,35 @@ export class ProvidersService {
       if (value !== undefined) data[key] = value;
     }
     if (type) data.type = type;
+
+    const effectiveType = (type ?? provider.type) as ProviderType;
+    if (effectiveType === "AGENCY") {
+      const currentDetails = parseAgencyDetails(provider) ?? {};
+      const nextDetails: AgencyDetails = {
+        ...currentDetails,
+        ...(representativeFirstName !== undefined ? { representativeFirstName: representativeFirstName.trim() } : {}),
+        ...(representativeLastName !== undefined ? { representativeLastName: representativeLastName.trim() } : {}),
+        ...(representativeRole !== undefined ? { representativeRole: representativeRole.trim() } : {}),
+        ...(representativeNpi !== undefined ? { representativeNpi: representativeNpi.replace(/\D/g, "").slice(0, 14) } : {}),
+        ...(agencyType !== undefined ? { agencyType: agencyType.trim() } : {}),
+        ...(legalForm !== undefined ? { legalForm: legalForm.trim() } : {}),
+        ...(ifuNumber !== undefined ? { ifuNumber: ifuNumber.replace(/\D/g, "").slice(0, 15) } : {}),
+        ...(rccmNumber !== undefined ? { rccmNumber: rccmNumber.trim().toUpperCase() } : {}),
+        ...(headquartersAddress !== undefined ? { headquartersAddress: headquartersAddress.trim() } : {}),
+        ...(businessPhone !== undefined ? { businessPhone: businessPhone.trim() } : {}),
+        ...(businessEmail !== undefined ? { businessEmail: businessEmail.trim().toLowerCase() } : {}),
+        ...(payoutPhone !== undefined ? { payoutPhone: payoutPhone.trim() } : {}),
+        ...(fleetSize !== undefined ? { fleetSize } : {}),
+      };
+      data.bio = JSON.stringify(nextDetails);
+      if (nextDetails.agencyType) {
+        data.categoryId = nextDetails.agencyType;
+      }
+      if (!data.fullName && (nextDetails.representativeFirstName || nextDetails.representativeLastName)) {
+        const composed = `${nextDetails.representativeFirstName ?? ""} ${nextDetails.representativeLastName ?? ""}`.trim();
+        if (composed.length >= 2) data.fullName = composed;
+      }
+    }
 
     const updated = await this.prisma.providerProfile.update({
       where: { id: provider.id },
@@ -1074,7 +1203,12 @@ export class ProvidersService {
             : type === "COURIER"
               ? COURIER_VEHICLE_CHOICES
               : [],
-        specialties: type === "COURIER" ? COURIER_SPECIALTIES : [],
+        specialties:
+          type === "COURIER"
+            ? COURIER_SPECIALTIES
+            : type === "AGENCY"
+              ? AGENCY_TYPES
+              : [],
         requiredFields: REQUIRED_FIELDS[type].map((field) => ({
           field,
           label: FIELD_LABELS[field] ?? String(field),

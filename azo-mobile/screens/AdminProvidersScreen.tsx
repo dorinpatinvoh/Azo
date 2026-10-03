@@ -98,6 +98,13 @@ const TYPE_ICON: Record<string, keyof typeof MaterialIcons.glyphMap> = {
   AGENCY: "apartment",
 };
 
+const AGENCY_TYPE_LABELS: Record<string, string> = {
+  FLOTTE_ZEM: "Agence de Flotte Zem & Moto-Taxi",
+  FLOTTE_VOITURE: "Agence VTC & Transport Voiture",
+  FLOTTE_LIVRAISON: "Agence de Coursiers & Logistique",
+  FLOTTE_MIXTE: "Agence Multi-Flotte (Zem + Voitures + Livreurs)",
+};
+
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -501,11 +508,64 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard }: Props)
             value={submissionMetaLabel(d.review.waitingHours, d.status)}
             warn={d.review.overdue}
           />
-          {d.activity.categoryId ? <Info label="Spécialité" value={d.activity.categoryId} /> : null}
+          {d.activity.categoryId ? (
+            <Info
+              label={d.type === "AGENCY" ? "Type d'agence" : "Spécialité"}
+              value={AGENCY_TYPE_LABELS[d.activity.categoryId] ?? d.activity.categoryId}
+            />
+          ) : null}
           {d.activity.vehicleType ? <Info label="Véhicule" value={d.activity.vehicleType} /> : null}
           {d.activity.plateNumber ? <Info label="Immatriculation" value={d.activity.plateNumber} /> : null}
           {d.activity.vehicleModel ? <Info label="Modèle" value={d.activity.vehicleModel} /> : null}
           {d.activity.agencyName ? <Info label="Raison sociale" value={d.activity.agencyName} /> : null}
+          {d.activity.agencyDetails ? (
+            <>
+              {d.activity.agencyDetails.legalForm ? (
+                <Info label="Forme juridique" value={d.activity.agencyDetails.legalForm} />
+              ) : null}
+              <Info
+                label="Représentant légal"
+                value={
+                  `${d.activity.agencyDetails.representativeFirstName ?? ""} ${d.activity.agencyDetails.representativeLastName ?? ""}`.trim() ||
+                  d.identity.fullName ||
+                  "—"
+                }
+              />
+              {d.activity.agencyDetails.representativeRole ? (
+                <Info label="Fonction" value={d.activity.agencyDetails.representativeRole} />
+              ) : null}
+              {d.activity.agencyDetails.representativeNpi ? (
+                <Info label="NPI Représentant (ANIP)" value={d.activity.agencyDetails.representativeNpi} />
+              ) : null}
+              {d.activity.agencyDetails.ifuNumber ? (
+                <Info label="N° IFU (DGI Bénin)" value={d.activity.agencyDetails.ifuNumber} />
+              ) : null}
+              {d.activity.agencyDetails.rccmNumber ? (
+                <Info label="N° RCCM (GUFE)" value={d.activity.agencyDetails.rccmNumber} />
+              ) : null}
+              {d.activity.agencyDetails.headquartersAddress ? (
+                <Info label="Siège social" value={d.activity.agencyDetails.headquartersAddress} />
+              ) : null}
+              {d.activity.agencyDetails.businessPhone ? (
+                <Info
+                  label="Téléphone pro"
+                  value={formatBeninPhoneDisplay(d.activity.agencyDetails.businessPhone)}
+                />
+              ) : null}
+              {d.activity.agencyDetails.businessEmail ? (
+                <Info label="Email pro" value={d.activity.agencyDetails.businessEmail} />
+              ) : null}
+              {d.activity.agencyDetails.payoutPhone ? (
+                <Info
+                  label="Reversements MoMo"
+                  value={formatBeninPhoneDisplay(d.activity.agencyDetails.payoutPhone)}
+                />
+              ) : null}
+              {d.activity.agencyDetails.fleetSize != null ? (
+                <Info label="Taille du parc" value={`${d.activity.agencyDetails.fleetSize} véhicules`} />
+              ) : null}
+            </>
+          ) : null}
           {d.activity.planLabel ? (
             <Info
               label="Formule"

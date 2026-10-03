@@ -47,6 +47,20 @@ type Form = {
   plateNumber: string;
   agencyName: string;
   plan: AgencyPlanChoice | null;
+  // Champs spécifiques Agence (Bénin)
+  representativeLastName: string;
+  representativeFirstName: string;
+  representativeRole: string;
+  representativeNpi: string;
+  agencyType: string;
+  legalForm: string;
+  ifuNumber: string;
+  rccmNumber: string;
+  headquartersAddress: string;
+  businessPhone: string;
+  businessEmail: string;
+  payoutPhone: string;
+  fleetSize: string;
 };
 
 const EMPTY_FORM: Form = {
@@ -61,7 +75,61 @@ const EMPTY_FORM: Form = {
   plateNumber: "",
   agencyName: "",
   plan: null,
+  representativeLastName: "",
+  representativeFirstName: "",
+  representativeRole: "Gérant",
+  representativeNpi: "",
+  agencyType: "FLOTTE_MIXTE",
+  legalForm: "SARL",
+  ifuNumber: "",
+  rccmNumber: "",
+  headquartersAddress: "",
+  businessPhone: "",
+  businessEmail: "",
+  payoutPhone: "",
+  fleetSize: "",
 };
+
+const DEFAULT_AGENCY_TYPES = [
+  {
+    id: "FLOTTE_ZEM",
+    label: "Agence de Flotte Zem & Moto-Taxi",
+    hint: "Gestion de motos-taxis Zem thermiques & électriques",
+    icon: "two-wheeler" as const,
+  },
+  {
+    id: "FLOTTE_VOITURE",
+    label: "Agence VTC & Transport Voiture",
+    hint: "Flotte de berlines climatisées & transport urbain",
+    icon: "directions-car" as const,
+  },
+  {
+    id: "FLOTTE_LIVRAISON",
+    label: "Agence de Coursiers & Logistique",
+    hint: "Flotte de livreurs de colis, coursiers express & personnels",
+    icon: "local-shipping" as const,
+  },
+  {
+    id: "FLOTTE_MIXTE",
+    label: "Agence Multi-Flotte (Zem + Voitures + Livreurs)",
+    hint: "Exploitation complète multi-services sur AZƆ̀",
+    icon: "hub" as const,
+  },
+];
+
+const REPRESENTATIVE_ROLES = [
+  "Gérant",
+  "Directeur Général",
+  "Associé-Gérant",
+  "Président / Fondateur",
+];
+
+const LEGAL_FORMS = [
+  "SARL",
+  "SAS / SA",
+  "Entreprise Individuelle (EI)",
+  "Coopérative / GIE",
+];
 
 const DEFAULT_COURIER_SPECIALTIES = [
   { id: "COURSIER_EXPRESS", label: "Coursier express", hint: "Plis urgents, documents et petits paquets" },
@@ -194,6 +262,10 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
 
         const existing = me.provider;
         if (existing) {
+          const ad = existing.activity.agencyDetails;
+          const nameParts = (existing.identity.fullName ?? "").trim().split(/\s+/);
+          const defaultFirst = nameParts.length > 1 ? nameParts.slice(0, -1).join(" ") : nameParts[0] || "";
+          const defaultLast = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
           setForm({
             type: existing.type === "ARTISAN" ? "DRIVER" : existing.type,
             vehicleType: existing.activity.vehicleType,
@@ -206,6 +278,19 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             plateNumber: existing.activity.plateNumber ?? "",
             agencyName: existing.activity.agencyName ?? "",
             plan: existing.activity.plan,
+            representativeFirstName: ad?.representativeFirstName ?? defaultFirst,
+            representativeLastName: ad?.representativeLastName ?? defaultLast,
+            representativeRole: ad?.representativeRole ?? "Gérant",
+            representativeNpi: ad?.representativeNpi ?? "",
+            agencyType: ad?.agencyType ?? existing.activity.categoryId ?? "FLOTTE_MIXTE",
+            legalForm: ad?.legalForm ?? "SARL",
+            ifuNumber: ad?.ifuNumber ?? "",
+            rccmNumber: ad?.rccmNumber ?? "",
+            headquartersAddress: ad?.headquartersAddress ?? "",
+            businessPhone: ad?.businessPhone ?? "",
+            businessEmail: ad?.businessEmail ?? "",
+            payoutPhone: ad?.payoutPhone ?? "",
+            fleetSize: ad?.fleetSize != null ? String(ad.fleetSize) : "",
           });
           const draftStep = existing.status === "DRAFT" ? (existing.identity.fullName ? 2 : 1) : 0;
           setStep(draftStep);
@@ -233,18 +318,39 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       .split(/[,;]/)
       .map((z) => z.trim())
       .filter(Boolean);
+    const composedRepName = `${form.representativeFirstName.trim()} ${form.representativeLastName.trim()}`.trim();
+    const effectiveFullName = isAgency
+      ? composedRepName || form.fullName.trim()
+      : form.fullName.trim();
     return {
       ...(form.type ? { type: form.type } : {}),
-      ...(form.fullName.trim() ? { fullName: form.fullName.trim() } : {}),
+      ...(effectiveFullName ? { fullName: effectiveFullName } : {}),
       ...(form.city.trim() ? { city: form.city.trim() } : {}),
       ...(zones.length ? { zones } : {}),
       ...(form.experienceYears.trim() ? { experienceYears: Number(form.experienceYears) || 0 } : {}),
       ...(form.vehicleType ? { vehicleType: form.vehicleType } : {}),
       ...(isCourier && form.categoryId ? { categoryId: form.categoryId } : {}),
+      ...(isAgency && form.agencyType ? { categoryId: form.agencyType, agencyType: form.agencyType } : {}),
       ...(form.vehicleModel.trim() ? { vehicleModel: form.vehicleModel.trim() } : {}),
       ...(form.plateNumber.trim() ? { plateNumber: form.plateNumber.trim().toUpperCase() } : {}),
       ...(form.agencyName.trim() ? { agencyName: form.agencyName.trim() } : {}),
       ...(form.plan ? { plan: form.plan } : {}),
+      ...(isAgency
+        ? {
+            representativeFirstName: form.representativeFirstName.trim(),
+            representativeLastName: form.representativeLastName.trim(),
+            representativeRole: form.representativeRole.trim(),
+            representativeNpi: form.representativeNpi.replace(/\D/g, ""),
+            legalForm: form.legalForm.trim(),
+            ifuNumber: form.ifuNumber.replace(/\D/g, ""),
+            rccmNumber: form.rccmNumber.trim().toUpperCase(),
+            headquartersAddress: form.headquartersAddress.trim(),
+            businessPhone: form.businessPhone.trim(),
+            businessEmail: form.businessEmail.trim(),
+            payoutPhone: form.payoutPhone.trim(),
+            ...(form.fleetSize.trim() ? { fleetSize: Number(form.fleetSize) || 0 } : {}),
+          }
+        : {}),
     };
   };
 
@@ -252,15 +358,28 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     const saved = await providersApi.save(buildDraft());
     setDossier(saved);
     return saved;
-  }, [form, isCourier]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form, isCourier, isAgency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function validateStep(index: number): string | null {
     if (index === 0) {
       if (!currentType) return "Choisis ton activité pour continuer.";
       if (!isAgency && !form.vehicleType) return "Choisis le véhicule avec lequel tu vas travailler.";
+      if (isAgency && !form.agencyType) return "Choisis le type d'agence (Zem, Voiture, Livraison ou Multi-Flotte).";
       return null;
     }
     if (index === 1) {
+      if (isAgency) {
+        if (form.representativeLastName.trim().length < 2)
+          return "Indique le nom de famille du représentant légal.";
+        if (form.representativeFirstName.trim().length < 2)
+          return "Indique le(s) prénom(s) du représentant légal.";
+        const cleanNpi = form.representativeNpi.replace(/\D/g, "");
+        if (cleanNpi.length < 10)
+          return "Indique le NPI (Numéro Personnel d'Identification ANIP à 10 chiffres) du représentant légal.";
+        if (form.city.trim().length < 2)
+          return "Indique la ville d'implantation principale (Cotonou, Abomey-Calavi, Porto-Novo…).";
+        return null;
+      }
       if (form.fullName.trim().length < 3) return "Indique ton nom complet, tel qu'il figure sur ta pièce d'identité.";
       if (form.city.trim().length < 2) return "Indique ta ville (Cotonou, Porto-Novo, Abomey-Calavi…).";
       return null;
@@ -268,7 +387,14 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     if (index === 2) {
       if (isAgency) {
         if (form.agencyName.trim().length < 2) return "Indique la raison sociale de ton agence.";
-        if (!form.plan) return "Choisis la formule de ton agence.";
+        const cleanIfu = form.ifuNumber.replace(/\D/g, "");
+        if (cleanIfu.length < 13)
+          return "Indique le numéro IFU de l'entreprise (13 chiffres délivrés par la DGI Bénin).";
+        if (form.rccmNumber.trim().length < 4)
+          return "Indique le numéro RCCM de l'entreprise (ex. RB/COT/24 B 12345).";
+        if (form.headquartersAddress.trim().length < 3)
+          return "Indique l'adresse du siège social de l'agence (Quartier, Ilot ou repère).";
+        if (!form.plan) return "Choisis la formule officielle AZƆ̀ de ton agence.";
         return null;
       }
       if (form.plateNumber.trim().length < 3) return "Indique l'immatriculation de ton véhicule.";
@@ -531,6 +657,34 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
               );
             })}
 
+            {/* Type d'agence à choisir */}
+            {isAgency && (
+              <View style={styles.subSection}>
+                <Text style={styles.sectionTitle}>Quel type d'agence souhaites-tu ouvrir ?</Text>
+                {DEFAULT_AGENCY_TYPES.map((at) => {
+                  const selected = form.agencyType === at.id;
+                  return (
+                    <Pressable
+                      key={at.id}
+                      style={[styles.choiceRow, selected && styles.choiceRowSelected]}
+                      onPress={() => setForm((f) => ({ ...f, agencyType: at.id }))}
+                    >
+                      <MaterialIcons
+                        name={at.icon}
+                        size={20}
+                        color={selected ? colors.primary : colors.onSurfaceVariant}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.choiceTitle}>{at.label}</Text>
+                        <Text style={styles.cardMeta}>{at.hint}</Text>
+                      </View>
+                      {selected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
             {/* Spécialité Coursier / Coursier personnel / Livreur */}
             {isCourier && (
               <View style={styles.subSection}>
@@ -604,22 +758,89 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         {/* ---------------------------------------------------- 1. Identité */}
         {step === 1 && (
           <View style={{ gap: spacing.md }}>
-            <Text style={styles.title}>Ton identité</Text>
+            <Text style={styles.title}>
+              {isAgency ? "Identité du représentant légal" : "Ton identité"}
+            </Text>
             <Text style={styles.muted}>
-              Ces informations doivent correspondre exactement à ta pièce d'identité : elles sont
-              vérifiées par un administrateur AZƆ̀.
+              {isAgency
+                ? "Renseigne l'identité exacte du Gérant ou Directeur Général de l'agence telle qu'elle figure sur son CIP / sa pièce d'identité biométrique ANIP."
+                : "Ces informations doivent correspondre exactement à ta pièce d'identité : elles sont vérifiées par un administrateur AZƆ̀."}
             </Text>
 
+            {isAgency ? (
+              <>
+                <View style={styles.twoColRow}>
+                  <View style={{ flex: 1 }}>
+                    <Field
+                      label="Nom de famille du représentant"
+                      value={form.representativeLastName}
+                      onChangeText={(representativeLastName) =>
+                        setForm((f) => ({ ...f, representativeLastName }))
+                      }
+                      placeholder="Ex. SOGLO"
+                      autoCapitalize="characters"
+                      required
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Field
+                      label="Prénom(s) du représentant"
+                      value={form.representativeFirstName}
+                      onChangeText={(representativeFirstName) =>
+                        setForm((f) => ({ ...f, representativeFirstName }))
+                      }
+                      placeholder="Ex. Thierry Koffi"
+                      autoCapitalize="words"
+                      required
+                    />
+                  </View>
+                </View>
+
+                <View style={{ gap: 6 }}>
+                  <Text style={styles.fieldLabel}>Fonction dans l'entreprise</Text>
+                  <View style={styles.chipRow}>
+                    {REPRESENTATIVE_ROLES.map((role) => {
+                      const active = form.representativeRole === role;
+                      return (
+                        <Pressable
+                          key={role}
+                          style={[styles.roleChip, active && styles.roleChipActive]}
+                          onPress={() => setForm((f) => ({ ...f, representativeRole: role }))}
+                        >
+                          <Text style={[styles.roleChipText, active && styles.roleChipTextActive]}>
+                            {role}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <Field
+                  label="NPI du représentant (ANIP Bénin — 10 chiffres)"
+                  value={form.representativeNpi}
+                  onChangeText={(v) =>
+                    setForm((f) => ({ ...f, representativeNpi: v.replace(/\D/g, "").slice(0, 12) }))
+                  }
+                  placeholder="Ex. 1094827361"
+                  keyboardType="number-pad"
+                  maxLength={12}
+                  required
+                />
+              </>
+            ) : (
+              <Field
+                label="Nom complet (comme sur ta pièce d'identité)"
+                value={form.fullName}
+                onChangeText={(fullName) => setForm((f) => ({ ...f, fullName }))}
+                placeholder="Ex. Rodrigue Ahouandjinou"
+                autoCapitalize="words"
+                required
+              />
+            )}
+
             <Field
-              label="Nom complet (comme sur ta pièce d'identité)"
-              value={form.fullName}
-              onChangeText={(fullName) => setForm((f) => ({ ...f, fullName }))}
-              placeholder="Ex. Rodrigue Ahouandjinou"
-              autoCapitalize="words"
-              required
-            />
-            <Field
-              label="Ville"
+              label={isAgency ? "Ville d'implantation principale" : "Ville"}
               value={form.city}
               onChangeText={(city) => setForm((f) => ({ ...f, city }))}
               placeholder="Ex. Cotonou"
@@ -633,7 +854,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
               placeholder="Ex. Fidjrossè, Cadjèhoun, Haie Vive"
             />
             <Field
-              label="Années d'expérience"
+              label={isAgency ? "Années d'existence / expérience flotte" : "Années d'expérience"}
               value={form.experienceYears}
               onChangeText={(experienceYears) => setForm((f) => ({ ...f, experienceYears }))}
               placeholder="Ex. 3"
@@ -646,22 +867,117 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         {/* --------------------------------------- 2. Véhicule / Agence */}
         {step === 2 && (
           <View style={{ gap: spacing.md }}>
-            <Text style={styles.title}>{isAgency ? "Ton agence" : "Ton véhicule"}</Text>
+            <Text style={styles.title}>
+              {isAgency ? "Informations légales & Flotte" : "Ton véhicule"}
+            </Text>
 
             {isAgency ? (
               <>
                 <Text style={styles.muted}>
-                  L'agence est créée à la validation de ton dossier. Les frais d'activation sont
-                  indiqués à titre informatif.
+                  Renseigne les identifiants officiels de ton entreprise au Bénin (IFU DGI, RCCM GUFE) ainsi que le compte Mobile Money de reversement de l'agence.
                 </Text>
                 <Field
-                  label="Raison sociale"
+                  label="Raison sociale / Nom commercial de l'agence"
                   value={form.agencyName}
                   onChangeText={(agencyName) => setForm((f) => ({ ...f, agencyName }))}
-                  placeholder="Ex. Transports Sahel & Frères"
+                  placeholder="Ex. Cotonou Flotte Express SARL"
                   autoCapitalize="words"
                   required
                 />
+
+                <View style={{ gap: 6 }}>
+                  <Text style={styles.fieldLabel}>Forme juridique</Text>
+                  <View style={styles.chipRow}>
+                    {LEGAL_FORMS.map((lf) => {
+                      const active = form.legalForm === lf;
+                      return (
+                        <Pressable
+                          key={lf}
+                          style={[styles.roleChip, active && styles.roleChipActive]}
+                          onPress={() => setForm((f) => ({ ...f, legalForm: lf }))}
+                        >
+                          <Text style={[styles.roleChipText, active && styles.roleChipTextActive]}>
+                            {lf}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <Field
+                  label="N° IFU de l'entreprise (13 chiffres — DGI Bénin)"
+                  value={form.ifuNumber}
+                  onChangeText={(v) =>
+                    setForm((f) => ({ ...f, ifuNumber: v.replace(/\D/g, "").slice(0, 13) }))
+                  }
+                  placeholder="Ex. 3202410894512"
+                  keyboardType="number-pad"
+                  maxLength={13}
+                  required
+                />
+
+                <Field
+                  label="N° RCCM (Registre du Commerce et du Crédit Mobilier)"
+                  value={form.rccmNumber}
+                  onChangeText={(rccmNumber) => setForm((f) => ({ ...f, rccmNumber }))}
+                  placeholder="Ex. RB/COT/24 B 12345"
+                  autoCapitalize="characters"
+                  required
+                />
+
+                <Field
+                  label="Adresse du siège social (Quartier, Ilot / Repère)"
+                  value={form.headquartersAddress}
+                  onChangeText={(headquartersAddress) =>
+                    setForm((f) => ({ ...f, headquartersAddress }))
+                  }
+                  placeholder="Ex. Cotonou, Quartier Ganhi, Ilot 412, Immeuble Marina"
+                  required
+                />
+
+                <View style={styles.twoColRow}>
+                  <View style={{ flex: 1 }}>
+                    <Field
+                      label="Téléphone pro (01...)"
+                      value={form.businessPhone}
+                      onChangeText={(businessPhone) => setForm((f) => ({ ...f, businessPhone }))}
+                      placeholder="Ex. 01 97 00 00 05"
+                      keyboardType="number-pad"
+                      maxLength={14}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Field
+                      label="Taille du parc (véhicules)"
+                      value={form.fleetSize}
+                      onChangeText={(v) =>
+                        setForm((f) => ({ ...f, fleetSize: v.replace(/\D/g, "").slice(0, 4) }))
+                      }
+                      placeholder="Ex. 15"
+                      keyboardType="number-pad"
+                      maxLength={4}
+                    />
+                  </View>
+                </View>
+
+                <Field
+                  label="Email professionnel de l'agence"
+                  value={form.businessEmail}
+                  onChangeText={(businessEmail) => setForm((f) => ({ ...f, businessEmail }))}
+                  placeholder="Ex. direction@cotonouflotte.bj"
+                  autoCapitalize="none"
+                />
+
+                <Field
+                  label="Compte Mobile Money Entreprise (Reversements MTN / Moov — 01...)"
+                  value={form.payoutPhone}
+                  onChangeText={(payoutPhone) => setForm((f) => ({ ...f, payoutPhone }))}
+                  placeholder="Ex. 01 97 00 00 05"
+                  keyboardType="number-pad"
+                  maxLength={14}
+                />
+
                 <Text style={styles.sectionTitle}>Formule officielle AZƆ̀</Text>
                 {(req?.plans?.length ? req.plans : DEFAULT_AGENCY_PLANS).map((p) => {
                   const selected = form.plan === p.plan;
@@ -746,6 +1062,15 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
 
             <View style={styles.summaryCard}>
               <SummaryRow label="Activité" value={typeConfig?.label ?? dossier?.typeLabel ?? "—"} />
+              {isAgency && (
+                <SummaryRow
+                  label="Type d'agence"
+                  value={
+                    DEFAULT_AGENCY_TYPES.find((at) => at.id === form.agencyType)?.label ??
+                    form.agencyType
+                  }
+                />
+              )}
               {isCourier && (
                 <SummaryRow
                   label="Spécialité"
@@ -764,12 +1089,35 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                   }
                 />
               )}
-              <SummaryRow label="Nom complet" value={form.fullName || "—"} />
-              <SummaryRow label="Ville" value={form.city || "—"} />
-              {form.zones.trim() ? <SummaryRow label="Zones" value={form.zones} /> : null}
               {isAgency ? (
                 <>
-                  <SummaryRow label="Agence" value={form.agencyName || "—"} />
+                  <SummaryRow
+                    label="Représentant légal"
+                    value={
+                      `${form.representativeFirstName} ${form.representativeLastName}`.trim() ||
+                      form.fullName ||
+                      "—"
+                    }
+                  />
+                  <SummaryRow label="Fonction" value={form.representativeRole || "Gérant"} />
+                  <SummaryRow label="NPI Représentant" value={form.representativeNpi || "—"} />
+                  <SummaryRow label="Raison sociale" value={form.agencyName || "—"} />
+                  <SummaryRow label="Forme juridique" value={form.legalForm || "SARL"} />
+                  <SummaryRow label="N° IFU (DGI)" value={form.ifuNumber || "—"} />
+                  <SummaryRow label="N° RCCM" value={form.rccmNumber || "—"} />
+                  <SummaryRow label="Siège social" value={form.headquartersAddress || "—"} />
+                  {form.businessPhone.trim() ? (
+                    <SummaryRow label="Téléphone pro" value={form.businessPhone} />
+                  ) : null}
+                  {form.businessEmail.trim() ? (
+                    <SummaryRow label="Email pro" value={form.businessEmail} />
+                  ) : null}
+                  {form.payoutPhone.trim() ? (
+                    <SummaryRow label="Reversements MoMo" value={form.payoutPhone} />
+                  ) : null}
+                  {form.fleetSize.trim() ? (
+                    <SummaryRow label="Taille du parc" value={`${form.fleetSize} véhicules`} />
+                  ) : null}
                   <SummaryRow
                     label="Formule"
                     value={
@@ -793,10 +1141,13 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                 </>
               ) : (
                 <>
+                  <SummaryRow label="Nom complet" value={form.fullName || "—"} />
                   <SummaryRow label="Immatriculation" value={form.plateNumber.toUpperCase() || "—"} />
                   <SummaryRow label="Modèle" value={form.vehicleModel || "—"} />
                 </>
               )}
+              <SummaryRow label="Ville" value={form.city || "—"} />
+              {form.zones.trim() ? <SummaryRow label="Zones" value={form.zones} /> : null}
               <SummaryRow
                 label="Pièces fournies"
                 value={`${(dossier?.checklist ?? []).filter((c) => c.hasFile).length}/${
@@ -1115,6 +1466,36 @@ const styles = StyleSheet.create({
 
   fieldLabel: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
   requiredStar: { color: colors.error },
+  twoColRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  roleChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderWidth: 1.5,
+    borderColor: colors.surfaceContainer,
+  },
+  roleChipActive: {
+    backgroundColor: colors.primaryFixed,
+    borderColor: colors.primary,
+  },
+  roleChipText: {
+    ...typography.labelSm,
+    color: colors.onSurfaceVariant,
+    fontWeight: "600",
+  },
+  roleChipTextActive: {
+    color: colors.primary,
+    fontWeight: "700",
+  },
   input: {
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.lg,

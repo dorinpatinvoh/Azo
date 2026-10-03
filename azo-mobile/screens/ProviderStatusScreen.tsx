@@ -234,6 +234,43 @@ export default function ProviderStatusScreen({ onEdit, onEnterWorkspace, onBack 
           </View>
         ) : null}
 
+        {/* ---------------------------------------------- fiche légale agence */}
+        {provider.type === "AGENCY" && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Fiche légale & fiscale de l'agence</Text>
+            <StatusInfoRow label="Raison sociale" value={provider.activity.agencyName ?? "—"} />
+            {provider.activity.agencyDetails?.legalForm ? (
+              <StatusInfoRow label="Forme juridique" value={provider.activity.agencyDetails.legalForm} />
+            ) : null}
+            <StatusInfoRow
+              label="Représentant légal"
+              value={
+                `${provider.activity.agencyDetails?.representativeFirstName ?? ""} ${provider.activity.agencyDetails?.representativeLastName ?? ""}`.trim() ||
+                provider.identity.fullName ||
+                "—"
+              }
+            />
+            {provider.activity.agencyDetails?.representativeRole ? (
+              <StatusInfoRow label="Fonction" value={provider.activity.agencyDetails.representativeRole} />
+            ) : null}
+            {provider.activity.agencyDetails?.representativeNpi ? (
+              <StatusInfoRow label="NPI Représentant (ANIP)" value={provider.activity.agencyDetails.representativeNpi} />
+            ) : null}
+            {provider.activity.agencyDetails?.ifuNumber ? (
+              <StatusInfoRow label="N° IFU (DGI Bénin)" value={provider.activity.agencyDetails.ifuNumber} />
+            ) : null}
+            {provider.activity.agencyDetails?.rccmNumber ? (
+              <StatusInfoRow label="N° RCCM (GUFE)" value={provider.activity.agencyDetails.rccmNumber} />
+            ) : null}
+            {provider.activity.agencyDetails?.headquartersAddress ? (
+              <StatusInfoRow label="Siège social" value={provider.activity.agencyDetails.headquartersAddress} />
+            ) : null}
+            {provider.activity.planLabel ? (
+              <StatusInfoRow label="Formule AZƆ̀" value={provider.activity.planLabel} />
+            ) : null}
+          </View>
+        )}
+
         {/* ---------------------------------------------- pièces */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Pièces du dossier</Text>
@@ -308,6 +345,17 @@ function Header({ onBack }: { onBack: () => void }) {
       </Pressable>
       <Text style={styles.headerTitle}>Mon dossier prestataire</Text>
       <View style={{ width: 36 }} />
+    </View>
+  );
+}
+
+function StatusInfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.checkRow}>
+      <Text style={[styles.muted, { flex: 1 }]}>{label}</Text>
+      <Text style={[styles.checkLabel, { textAlign: "right", maxWidth: "60%" }]} numberOfLines={2}>
+        {value}
+      </Text>
     </View>
   );
 }
