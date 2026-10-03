@@ -1,97 +1,92 @@
 # RAPPORT D'AVANCEMENT TECHNIQUE & ARCHITECTURE — BACK-END & API (AZƆ̀)
 
 **Projet :** Plateforme de Mobilité, Transport & Livraison Urbaine **AZƆ̀** (Bénin)  
-**Périmètre :** Serveur API & Base de Données (`azo-backend` — NestJS / Prisma / PostgreSQL)  
+**Périmètre :** Serveur API, WebSockets Temps Réel & Base de Données (`azo-backend` — NestJS / Socket.IO / Prisma / PostgreSQL)  
 **URL de Production :** `https://azo-backend.onrender.com`  
 **Destinataires :** Direction Générale & Responsables Techniques  
-**Date :** 02 Octobre 2026  
+**Date :** 03 Octobre 2026  
 
 ---
 
 ## 1. Synthèse Exécutive
 
-Les travaux réalisés aujourd'hui sur le serveur **AZƆ̀ (`azo-backend`)** ont permis de livrer une architecture API complète, sécurisée et prête pour la production sur **Render Cloud** avec base de données **PostgreSQL**. Le backend gère désormais l'intégralité du cycle de vie des **prestataires (Chauffeurs, Coursiers, Agences)**, l'**upload et la persistance en base des photos KYC (`SELFIE`, `CNI`, etc.)**, la **nouvelle grille tarifaire officielle des agences AZƆ̀**, la **numérotation béninoise à 10 chiffres (`01XXXXXXXX`)**, le **commissionnement automatique via AZƆ̀ Pay**, ainsi qu'un **jeu de données réalistes de Cotonou** injecté automatiquement au déploiement.
+Les travaux réalisés aujourd'hui sur le serveur **AZƆ̀ (`azo-backend`)** ont permis de déployer deux évolutions majeures en complément du socle de production hébergé sur **Render Cloud** :
+1. **Le Volet 1 « Sécurité des Trajets & Communication Temps Réel »**, intégrant un canal de **messagerie instantanée chiffrée (WebSocket + REST)** entre le client et le prestataire ainsi que la vérification serveur du **Code de sécurité à 4 chiffres (« Bouclier AZƆ̀ »)** pour autoriser le démarrage d'une course.
+2. **L'enrôlement juridique, fiscal et opérationnel complet des Agences au Bénin (`AGENCY`)**, prenant en charge l'identité détaillée et le **NPI (ANIP à 10 chiffres)** du représentant légal, l'**IFU de l'entreprise (13 chiffres DGI)**, le **numéro RCCM (GUFE)**, le **type d'agence**, la **forme juridique**, le **siège social**, la **taille du parc** et le **compte Mobile Money professionnel de reversement**.
 
 ---
 
-## 2. Authentification OTP, Sécurité & Numérotation Bénin (`src/auth/`)
+## 2. Volet 1 — Messagerie Temps Réel & Code de Sécurité « Bouclier AZƆ̀ » (`src/rides/`)
 
-### 2.1. Normalisation & Validation Téléphonique Bénin (10 chiffres)
-- **Validation stricte** dans `RequestOtpDto` et `VerifyOtpDto` : acceptation du format national béninois à **10 chiffres** commençant par **`01`** (`01XXXXXXXX`) ainsi que du format international `+22901XXXXXXXX`.
-- **Contrôle d'accès & Statut Utilisateur (`UserStatus`)** :
-  - Vérification systématique du statut du compte (`ACTIVE` vs `BLOCKED`) lors de la connexion OTP ET à chaque requête authentifiée dans `JwtStrategy`.
-  - Un utilisateur bloqué par l'administrateur voit ses jetons JWT immédiatement rejetés (`403 Forbidden`).
+### 2.1. Passerelle WebSocket & API REST de Messagerie In-App (`rides.gateway.ts`, `rides.controller.ts`, `rides.service.ts`)
+Afin de permettre aux passagers, expéditeurs, chauffeurs et coursiers d'échanger sans jamais exposer leurs numéros de téléphone personnels :
+- **Canal Temps Réel Socket.IO (`RidesGateway`)** :
+  - Gestion de l'événement `@SubscribeMessage("ride:chat")` diffusant instantanément chaque message aux participants connectés à la salle (`room`) de la course ou de la livraison (`ride:{rideId}`).
+  - Stockage structuré des messages de mission (`chatStore`) avec horodatage ISO, rôle de l'expéditeur (`CLIENT`, `DRIVER`, `COURIER`) et nom anonymisé.
+- **Endpoints REST de Synchronisation & Secours (3G/4G)** :
+  - `GET /rides/:id/messages` : Récupère l'historique des messages de la course ou de la livraison active lors de l'ouverture de la fenêtre de discussion.
+  - `POST /rides/:id/messages` : Permet l'envoi de messages via HTTP classique avec diffusion automatique sur le canal WebSocket `ride:chat`, garantissant une fiabilité à 100 % même en cas de micro-coupure réseau mobile à Cotonou.
 
-### 2.2. Retour du code OTP pour les tests APK (`POST /auth/request-otp`)
-- En complément de l'envoi SMS / WhatsApp (Twilio), l'API renvoie `devCode` dans la réponse JSON lorsque le mode simulation est actif (`RETURN_OTP_IN_RESPONSE`), permettant à l'application APK d'afficher la notification SMS simulée pendant 5 secondes lors des démonstrations clients.
-- Enrichissement de `POST /auth/verify-otp` et `GET /auth/me` : renvoie en un seul appel le profil utilisateur complet, son rôle (`CLIENT`, `DRIVER`, `AGENCY`, `ADMIN`), ainsi que l'état et le type de son dossier prestataire (`provider.status`, `provider.type`).
-
----
-
-## 3. Gestion du Cycle de Vie des Prestataires & KYC (`src/providers/`)
-
-### 3.1. Machine à états complète des dossiers prestataires
-Le module `ProvidersModule` orchestre les 7 statuts réglementaires d'un dossier :
-- `DRAFT` (Brouillon) $\rightarrow$ `SUBMITTED` (Soumis) $\rightarrow$ `UNDER_REVIEW` (En cours d'examen) $\rightarrow$ `INCOMPLETE` (Pièces à corriger) / `APPROVED` (Approuvé) / `REJECTED` (Rejeté) / `SUSPENDED` (Suspendu).
-- **Journal d'audit immuable (`ProviderEvent`)** : Chaque action (soumission, ouverture par un admin, demande de complément, approbation, rejet, suspension, réactivation) est tracée avec horodatage, auteur (`actorId`) et commentaire.
-
-### 3.2. Upload Multipart & Persistance Cloud des Photos KYC
-- **Endpoint `POST /providers/me/documents/upload`** (`multipart/form-data`, jusqu'à 8 Mo par image, formats JPG/PNG/WEBP/HEIC).
-- **Double persistance (Disque + PostgreSQL Data URL)** :
-  - Sur les hébergeurs cloud modernes comme **Render**, le système de fichiers local est éphémère (réinitialisé à chaque redémoiement).
-  - Pour garantir **zéro perte de photo KYC**, chaque image uploadée est convertie et sauvegardée directement en base PostgreSQL (`ProviderDocument.fileUrl`) en plus de l'écriture disque, et servie via `GET /providers/documents/file/:name`.
-- **Règle métier stricte** : La soumission d'un dossier (`POST /providers/me/submit`) vérifie obligatoirement la présence des photos **`SELFIE`** et **`CNI`**, ainsi que la complétude des champs spécifiques à la filière choisie.
-
-### 3.3. Promotion Automatique à l'Approbation (`POST /admin/providers/:id/approve`)
-Lorsqu'un administrateur approuve un dossier dans une transaction atomique Prisma (`$transaction`) :
-- Si le dossier est de type **`DRIVER`** ou **`COURIER`** $\rightarrow$ le rôle de l'utilisateur passe automatiquement à `DRIVER` (avec distinction `provider.type = DRIVER | COURIER`).
-- Si le dossier est de type **`AGENCY`** $\rightarrow$ le rôle de l'utilisateur passe à `AGENCY` et l'entité `Agency` est créée ou mise à jour automatiquement avec les paramètres de la formule choisie.
+### 2.2. Vérification Serveur du Code « Bouclier AZƆ̀ » à 4 Chiffres (`POST /rides/:id/start`)
+- **Algorithme déterministe de génération (`rideSecurityPin(rideId)`)** : Chaque course possède un code PIN unique à **4 chiffres** (ex. `4829`) calculé de manière déterministe à partir de l'identifiant de la course.
+- **Contrôle strict au démarrage (`RidesService.start`)** :
+  - Lorsqu'un chauffeur appelle `POST /rides/:id/start`, le serveur vérifie le code `pin` fourni.
+  - Si le code PIN est erroné, le serveur rejette la requête (`400 BadRequestException : « Code de sécurité Bouclier AZƆ̀ invalide »`) et maintient la course au statut `ACCEPTED`.
+  - Dès que le code exact est validé, la course passe au statut `IN_PROGRESS` et l'événement temps réel `ride:status` notifie immédiatement le client.
 
 ---
 
-## 4. Nouvelle Grille Officielle des Agences & Gestion de Flotte (`src/agencies/`)
+## 3. Enrôlement Juridique & Fiscal Complet des Agences Bénin (`src/providers/providers.module.ts`)
 
-### 4.1. Grille Tarifaire Officielle AZƆ̀ intégrée au Back-End
-La constante `AGENCY_FORMULAS` applique strictement la grille officielle validée :
+### 3.1. Nouveaux Champs Réglementaires & Métier (`SaveApplicationDto` & `AgencyDetails`)
+Le module `ProvidersModule` accepte, valide et normalise désormais l'ensemble des informations requises pour l'immatriculation d'une agence partenaire au Bénin :
 
-| Formule (`AgencyPlan`) | Frais d'Activation (`activationFee`) | Quota Maximal (`maxAccounts`) | Commission AZƆ̀ (`commissionRate`) |
-| :--- | :---: | :---: | :---: |
-| **`PRO`** | **100 000 FCFA** | **10 comptes** | **3 %** (`0.03`) |
-| **`ARGENT`** | **215 500 FCFA** | **25 comptes** | **2,5 %** (`0.025`) |
-| **`OR`** | **450 500 FCFA** | **100 comptes** | **2 %** (`0.02`) |
-| **`DIAMANT`** | **600 500 FCFA** | **1 000 comptes** | **1 %** (`0.01`) |
+| Catégorie | Champ API (`SaveApplicationDto`) | Règle de Validation & Normalisation Back-End |
+| :--- | :--- | :--- |
+| **Type d'exploitation** | `agencyType` | `FLOTTE_ZEM`, `FLOTTE_VOITURE`, `FLOTTE_LIVRAISON`, ou `FLOTTE_MIXTE` |
+| **Représentant légal** | `representativeLastName` | Nom de famille du dirigeant (nettoyé et validé) |
+| **Représentant légal** | `representativeFirstName` | Prénom(s) du dirigeant (composition automatique de `fullName`) |
+| **Représentant légal** | `representativeRole` | Fonction : *Gérant*, *Directeur Général*, *Associé-Gérant*, *Président / Fondateur* |
+| **Identité ANIP** | `representativeNpi` | **NPI (Numéro Personnel d'Identification)** — chiffres uniquement (10 chiffres ANIP) |
+| **Entreprise** | `agencyName` & `legalForm` | Raison sociale & Forme juridique (*SARL*, *SAS / SA*, *EI*, *Coopérative / GIE*) |
+| **Fiscalité DGI** | `ifuNumber` | **Identifiant Fiscal Unique (IFU)** — extraction stricte des **13 chiffres** DGI Bénin |
+| **Registre GUFE** | `rccmNumber` | **Numéro RCCM** normalisé en majuscules (ex. `RB/COT/24 B 38412`) |
+| **Localisation** | `headquartersAddress` | Adresse complète du siège social (Ville, Quartier, Ilot, Immeuble) |
+| **Contact & Reversement** | `businessPhone`, `businessEmail`, `payoutPhone` | Téléphone pro (`01...`), Email pro en minuscules, Compte MoMo Entreprise (`01...`) |
+| **Capacité & Formule** | `fleetSize` & `plan` | Taille du parc (`0` à `10 000` véhicules) & Formule (`PRO`, `ARGENT`, `OR`, `DIAMANT`) |
 
-### 4.2. Endpoints de Gestion de Flotte Agence
-- `GET /agencies/me` : Retourne le tableau de bord complet de l'agence (formule, quota utilisé/restant, liste des chauffeurs et coursiers rattachés, chiffre d'affaires brut, commissions et net agence).
-- `POST /agencies/me/drivers` : Rattache un chauffeur ou coursier approuvé à partir de son numéro à 10 chiffres (`01XXXXXXXX`), après vérification automatique du respect du plafond `maxAccounts` de la formule.
-- `DELETE /agencies/me/drivers/:driverId` : Détache un chauffeur ou coursier de la flotte et enregistre l'événement dans le journal d'audit.
+### 3.2. Contrôle de Complétude avant Soumission (`missingFields`)
+Lorsqu'une agence appelle `POST /providers/applications/:id/submit`, le serveur vérifie désormais — en plus de la raison sociale, de la ville, de la formule et des photos obligatoires (`SELFIE` + `CNI`) — la présence effective :
+1. Du **NPI du représentant légal (10 chiffres ANIP)** ;
+2. Du **numéro IFU de l'entreprise (13 chiffres DGI)** ;
+3. Du **numéro RCCM de l'entreprise (GUFE)**.
 
----
-
-## 5. Livraison de Colis, Courses & Portefeuille AZƆ̀ Pay (`src/delivery/`, `src/rides/`, `src/admin/`)
-
-### 5.1. Module Coursiers & Livraison (`src/delivery/delivery.module.ts`)
-- `GET /delivery/available` : Liste les colis en attente (`PENDING`) pour les coursiers.
-- `POST /delivery/:id/accept` & `PATCH /delivery/:id/status` : Permet au coursier d'accepter une course de livraison, de confirmer la collecte (`PICKED_UP`), puis la livraison finale (`DELIVERED`).
-- **Rémunération automatique AZƆ̀ Pay** : Dès le passage au statut `DELIVERED`, le portefeuille (`Wallet`) du coursier est automatiquement crédité de **88 %** du montant de la course (commission plateforme de 12 %), avec création d'une écriture comptable `Transaction` (`RIDE_EARNING`).
-
-### 5.2. Console d'Administration Globale (`src/admin/admin.module.ts`)
-- `GET /admin/dashboard` : Agrégation temps réel du volume d'affaires (GMV), des courses actives, du nombre d'utilisateurs par rôle, des dossiers KYC en attente et des comptes bloqués.
-- `GET /admin/users` & `PATCH /admin/users/:id/status` : Recherche et filtrage des utilisateurs, blocage (`BLOCKED`) et réactivation (`ACTIVE`) immédiate des comptes avec journalisation.
-- `GET /admin/audit` : Historique complet des décisions administratives.
+### 3.3. Persistance Structurée Sans Migration Destructive (`parseAgencyDetails` & `serialize`)
+- Afin de préserver l'intégrité des bases PostgreSQL existantes (en local comme sur **Render**) sans nécessiter de réinitialisation de table, les métadonnées légales et fiscales de l'agence sont sérialisées en JSON structuré dans `ProviderProfile.bio` et synchronisées avec `ProviderProfile.categoryId` et `ProviderProfile.fullName`.
+- La méthode `ProvidersService.serialize()` expose un objet dédié **`activity.agencyDetails`** directement consommé par l'application mobile (`ProviderOnboardingScreen`, `ProviderStatusScreen`) et par la console d'administration (`AdminProvidersScreen`).
 
 ---
 
-## 6. Données Réalistes Bénin (`prisma/seed.ts`) & Déploiement Cloud Render (`render.yaml`)
+## 4. Enrichissement du Seed de Production Bénin (`prisma/seed.js`)
 
-### 6.1. Peuplement Automatique (Seed Cotonou / Bénin)
-Le fichier `prisma/seed.ts` initialise automatiquement la base de données avec un écosystème complet et réaliste à **Cotonou** :
-- **Comptes de démonstration prêts à l'emploi** (tous au format béninois 10 chiffres `01...` avec portefeuilles crédités en FCFA) :
-  - Administrateur (`0197000001`), Client (`0197000002`), Chauffeur Zem approuvé (`0197000003`), Coursier approuvé (`0197000004`), Agence OR « Cotonou Flotte Express SARL » (`0197000005`), ainsi que des dossiers candidats déjà soumis avec photos KYC pour tester la validation Admin.
-- **Lieux emblématiques de Cotonou** (*Place de l'Étoile Rouge, Carrefour IITA Calavi, Aéroport Cardinal Bernardin Gantin, Marché Dantokpa, Ganhi, Haie Vive, Fidjrossè, Stade de l'Amitié*), flotte de location, annonces Marketplace et notifications.
+Le script d'initialisation de la base de données (`prisma/seed.js`) a été mis à jour pour que les agences de démonstration disposent d'un dossier juridique et fiscal complet dès le déploiement :
+- **Agence active approuvée (`+229 01 97 00 00 10`)** :
+  - **Raison sociale** : *Atlantique Mobilité & Flotte Cotonou SARL* (Formule `OR`, Multi-Flotte `FLOTTE_MIXTE`, 28 véhicules).
+  - **Représentant légal** : *Sènakpon Rodrigue AHOUANDJINOU* (Directeur Général — NPI `1094827361`).
+  - **Identifiants légaux** : IFU `3202410894512` · RCCM `RB/COT/24 B 38412` · Siège : *Cotonou, Quartier Ganhi, Ilot 412, Immeuble Marina*.
+- **Agence en attente de validation Admin (`+229 01 96 77 88 99`)** :
+  - **Raison sociale** : *Bénin Express Logistique SARL* (Formule `ARGENT`, Agence de Coursiers & Logistique `FLOTTE_LIVRAISON`, 14 véhicules).
+  - **Représentant légal** : *Honoré KPADONOU* (Gérant — NPI `2083914756`).
+  - **Identifiants légaux** : IFU `3202519402815` · RCCM `RB/PNO/25 B 11204` · Siège : *Porto-Novo, Quartier Ouando, Carrefour Beau-Rivage*.
 
-### 6.2. Infrastructure Cloud Render (`render.yaml`)
-- Configuration **Infrastructure-as-Code** (`render.yaml`) déployant :
-  1. Le service Web Node/NestJS **`azo-backend`** (`https://azo-backend.onrender.com`).
-  2. La base de données managée PostgreSQL **`azo-db`**.
-- Pipeline de démarrage automatisé (`npm run start:render`) : synchronisation du schéma Prisma (`prisma db push`), injection des données initiales (`prisma db seed`) et lancement du serveur de production.
+---
+
+## 5. Récapitulatif des Fichiers Back-End Livrés Aujourd'hui
+
+| Fichier | Rôle & Nouveautés Livrées |
+| :--- | :--- |
+| `azo-backend/src/rides/rides.gateway.ts` | Canal WebSocket temps réel `ride:chat` et stockage des messages de mission |
+| `azo-backend/src/rides/rides.controller.ts` | Endpoints `POST /rides/:id/start` (avec `pin`), `GET /rides/:id/messages` et `POST /rides/:id/messages` |
+| `azo-backend/src/rides/rides.service.ts` | Calcul et validation du Code Bouclier AZƆ̀ à 4 chiffres (`rideSecurityPin`) et gestion des messages |
+| `azo-backend/src/providers/providers.module.ts` | Validation, sauvegarde et exposition de `agencyDetails` (NPI, IFU, RCCM, Type d'agence, Forme juridique, Siège, MoMo Pro) |
+| `azo-backend/prisma/seed.js` | Enrichissement des agences de démonstration avec des dossiers légaux et fiscaux complets du Bénin |
