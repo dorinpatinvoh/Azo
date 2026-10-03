@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View, Text, StyleSheet, Pressable, ScrollView, Switch,
+  View, Text, TextInput, StyleSheet, Pressable, ScrollView, Switch,
   ActivityIndicator, RefreshControl, Alert, Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,6 +14,8 @@ import {
 } from "../services/api";
 import { fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
 import { distanceKm, fmtKm } from "../utils/geo";
+import RideChatModal from "../components/RideChatModal";
+import { maskBeninPhone, maskPersonName, rideSecurityPin } from "../utils/phone";
 
 type Props = { onLogout: () => void; onOpenDossier?: () => void };
 type LatLng = { latitude: number; longitude: number };
@@ -41,6 +43,45 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const [busy, setBusy] = useState(false);
   const [offline, setOffline] = useState(false);
   const [ridePlaces, setRidePlaces] = useState<{ origin?: string; destination?: string }>({});
+  const [chatOpen, setChatOpen] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [simPinCode, setSimPinCode] = useState<string | null>(null);
+  const [simPinSec, setSimPinSec] = useState(0);
+
+  const expectedPin = useMemo(
+    () => (activeRide?.status === "MATCHED" ? rideSecurityPin(activeRide.id) : null),
+    [activeRide?.id, activeRide?.status]
+  );
+
+  function showSimPinFor5Seconds(code: string | null) {
+    if (!code) return;
+    setSimPinCode(code);
+    setSimPinSec(5);
+  }
+
+  useEffect(() => {
+    if (expectedPin) {
+      showSimPinFor5Seconds(expectedPin);
+    } else {
+      setSimPinCode(null);
+      setPinInput("");
+    }
+  }, [expectedPin]);
+
+  useEffect(() => {
+    if (!simPinCode) return;
+    const t = setInterval(() => {
+      setSimPinSec((prev) => {
+        if (prev <= 1) {
+          clearInterval(t);
+          setSimPinCode(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [simPinCode]);
 
   const socketRef = useRef<Socket | null>(null);
   const activeRideRef = useRef<Ride | null>(null);
@@ -225,9 +266,19 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
 
   async function handleStart() {
     if (!activeRide) return;
+    const clean = pinInput.replace(/\D/g, "");
+    const targetPin = rideSecurityPin(activeRide.id);
+    if (clean !== targetPin) {
+      Alert.alert(
+        "Code Bouclier AZƆ̀ requis",
+        "Saisis le code à 4 chiffres affiché sur l'écran du client pour sécuriser le départ."
+      );
+      return;
+    }
     setBusy(true);
     try {
-      setActiveRide(await ridesApi.start(activeRide.id));
+      setActiveRide(await ridesApi.start(activeRide.id, clean));
+      setPinInput("");
     } catch (e) {
       Alert.alert("Démarrage impossible", errorMessage(e));
     } finally {
@@ -417,21 +468,61 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
             {(activeRide.client?.fullName || activeRide.client?.phone) && (
               <View style={styles.clientRow}>
                 <View style={styles.avatar}>
-                  <MaterialIcons name="person" size={22} color={colors.onSurfaceVariant} />
+                  <MaterialIcons name="shield" size={20} color={colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.clientName}>{activeRide.client?.fullName ?? "Client AZƆ̀"}</Text>
-                  <Text style={styles.clientMeta}>Client · paiement AZƆ̀ Pay</Text>
+                  <Text style={styles.clientName}>
+                    {maskPersonName(activeRide.client?.fullName, "Client AZƆ̀")}
+                  </Text>
+                  <Text style={styles.clientMeta}>
+                    {maskBeninPhone(activeRide.client?.phone)} · AZƆ̀ Pay
+                  </Text>
                 </View>
-                {!!activeRide.client?.phone && (
+                <Pressable
+                  style={styles.chatPillBtn}
+                  onPress={() => setChatOpen(true)}
+                  accessibilityLabel="Ouvrir le chat sécurisé"
+                >
+                  <MaterialIcons name="chat-bubble-outline" size={16} color={colors.primary} />
+                  <Text style={styles.chatPillText}>Message</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {activeRide.status === "MATCHED" && (
+              <View style={styles.pinBox}>
+                {simPinCode ? (
                   <Pressable
-                    style={styles.callBtn}
-                    onPress={() => Linking.openURL(`tel:${activeRide.client!.phone}`)}
-                    accessibilityLabel="Appeler le client"
+                    style={styles.simPinBanner}
+                    onPress={() => setPinInput(simPinCode)}
                   >
-                    <MaterialIcons name="call" size={20} color="#fff" />
+                    <Text style={styles.simPinText}>
+                      🛡️ Code Bouclier client (simulation) :{" "}
+                      <Text style={{ color: "#52FF9B", fontWeight: "800", letterSpacing: 2 }}>
+                        {simPinCode}
+                      </Text>
+                    </Text>
+                    <Text style={styles.simPinSec}>{simPinSec}s</Text>
                   </Pressable>
-                )}
+                ) : expectedPin ? (
+                  <Pressable onPress={() => showSimPinFor5Seconds(expectedPin)}>
+                    <Text style={{ ...typography.labelSm, color: colors.primary, fontWeight: "700" }}>
+                      Afficher le code Bouclier client de simulation pendant 5s
+                    </Text>
+                  </Pressable>
+                ) : null}
+                <Text style={styles.pinLabel}>
+                  Code Bouclier AZƆ̀ à 4 chiffres (fourni par le client au départ)
+                </Text>
+                <TextInput
+                  style={styles.pinInput}
+                  value={pinInput}
+                  onChangeText={(v) => setPinInput(v.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="••••"
+                  placeholderTextColor={colors.outline}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                />
               </View>
             )}
 
@@ -440,8 +531,8 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
             ) : activeRide.status === "MATCHED" ? (
               <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
                 <Pressable style={styles.primaryBtn} onPress={handleStart}>
-                  <MaterialIcons name="play-arrow" size={20} color="#fff" />
-                  <Text style={styles.primaryBtnText}>Démarrer la course</Text>
+                  <MaterialIcons name="verified-user" size={20} color="#fff" />
+                  <Text style={styles.primaryBtnText}>Valider le code & Démarrer</Text>
                 </Pressable>
                 <Pressable style={styles.ghostBtn} onPress={handleCancel}>
                   <Text style={styles.ghostBtnText}>Annuler la course</Text>
@@ -564,6 +655,17 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
           </View>
         )}
       </ScrollView>
+
+      {activeRide && (
+        <RideChatModal
+          visible={chatOpen}
+          rideId={activeRide.id}
+          myRole="PROVIDER"
+          peerName={activeRide.client?.fullName}
+          peerPhone={activeRide.client?.phone}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -604,10 +706,18 @@ const styles = StyleSheet.create({
   routeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
   routeText: { ...typography.bodySm, color: colors.onSurface, flex: 1 },
   clientRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, padding: spacing.sm, marginTop: spacing.sm },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceContainerLow, alignItems: "center", justifyContent: "center" },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
   clientName: { ...typography.bodyMd, color: colors.onSurface, fontWeight: "700" },
   clientMeta: { ...typography.labelSm, color: colors.onSurfaceVariant },
   callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  chatPillBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 8 },
+  chatPillText: { ...typography.labelMd, color: colors.primary, fontWeight: "800" },
+  pinBox: { backgroundColor: colors.surfaceContainerLow, borderRadius: radius.lg, padding: spacing.sm, marginTop: spacing.xs, gap: 6 },
+  simPinBanner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#14291D", borderRadius: radius.md, padding: spacing.sm },
+  simPinText: { ...typography.labelMd, color: "#fff", fontWeight: "700" },
+  simPinSec: { ...typography.labelSm, color: "#8CF0B4", fontWeight: "800" },
+  pinLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "700" },
+  pinInput: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.primary, paddingHorizontal: 14, paddingVertical: 10, ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", letterSpacing: 6, textAlign: "center" },
   primaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.primary, borderRadius: radius.full, paddingVertical: 14, marginTop: spacing.sm },
   primaryBtnText: { ...typography.labelMd, color: "#fff", fontWeight: "800", fontSize: 15 },
   ghostBtn: { alignItems: "center", paddingVertical: 10 },

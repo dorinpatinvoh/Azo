@@ -16,6 +16,15 @@ const BASE_PRICES: Record<VehicleType, number> = {
 // Taux de commission AZƆ̀ : 15% pour un indépendant, taux de la formule pour une agence
 const INDEPENDENT_RATE = 0.15;
 
+export function rideSecurityPin(rideId: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < rideId.length; i++) {
+    hash ^= rideId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return String((Math.abs(hash) % 9000) + 1000);
+}
+
 @Injectable()
 export class RidesService {
   constructor(
@@ -88,9 +97,13 @@ export class RidesService {
     return ride;
   }
 
-  async start(rideId: string, driverId: string) {
+  async start(rideId: string, driverId: string, pin?: string) {
     const ride = await this.getOwnedByDriver(rideId, driverId);
     if (ride.status !== "MATCHED") throw new BadRequestException("Statut invalide");
+
+    if (pin && pin.trim() && pin.trim() !== rideSecurityPin(rideId)) {
+      throw new BadRequestException("Code Bouclier AZƆ̀ incorrect. Demande les 4 chiffres affichés sur l'écran du client.");
+    }
 
     // On vérifie le solde AVANT le départ : sinon la course se terminait avec un
     // client insolvable et le chauffeur n'était jamais payé.
@@ -103,6 +116,21 @@ export class RidesService {
     await this.notifications.push(ride.clientId, "Course démarrée", "Ton chauffeur est en route vers la destination.", "ride");
     this.gateway.emitStatus(rideId, "IN_PROGRESS");
     return updated;
+  }
+
+  getMessages(rideId: string) {
+    return this.gateway.getMessages(rideId);
+  }
+
+  sendMessage(
+    rideId: string,
+    user: { userId: string; role?: string },
+    dto: { text: string; senderRole?: "CLIENT" | "PROVIDER"; senderName?: string }
+  ) {
+    const role: "CLIENT" | "PROVIDER" =
+      dto.senderRole ?? (user.role === "DRIVER" ? "PROVIDER" : "CLIENT");
+    const name = (dto.senderName || (role === "PROVIDER" ? "Prestataire AZƆ̀" : "Client AZƆ̀")).slice(0, 40);
+    return this.gateway.addChatMessage(rideId, user.userId, role, name, dto.text);
   }
 
   // Fin de course : paiement + commission + revenus du chauffeur, en une transaction

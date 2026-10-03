@@ -232,6 +232,16 @@ export type Ride = {
   client?: RidePerson | null;
 };
 
+export type RideChatMessage = {
+  id: string;
+  rideId: string;
+  senderId: string;
+  senderRole: "CLIENT" | "PROVIDER";
+  senderName: string;
+  text: string;
+  createdAt: string;
+};
+
 export const ridesApi = {
   /* --- Client --- */
   estimate: (body: RideRequest) => api.post<Estimate>(`${P}/rides/estimate`, body),
@@ -244,8 +254,15 @@ export const ridesApi = {
   /* --- Conducteur --- */
   pending: () => api.get<Ride[]>(`${P}/rides/pending`),
   accept: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/accept`),
-  start: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/start`),
+  start: (rideId: string, pin?: string) => api.post<Ride>(`${P}/rides/${rideId}/start`, pin ? { pin } : {}),
   complete: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/complete`),
+
+  /* --- Messagerie sécurisée in-app --- */
+  messages: (rideId: string) => api.get<RideChatMessage[]>(`${P}/rides/${rideId}/messages`),
+  sendMessage: (
+    rideId: string,
+    body: { text: string; senderRole?: "CLIENT" | "PROVIDER"; senderName?: string }
+  ) => api.post<RideChatMessage>(`${P}/rides/${rideId}/messages`, body),
 };
 
 // Alias historique : les écrans plus anciens importent `rideApi`.

@@ -117,17 +117,12 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
             <View style={styles.walletIconBox}>
               <MaterialIcons name="account-balance-wallet" size={22} color={colors.primary} />
             </View>
-            <View>
-              <View style={styles.walletTitleRow}>
-                <Text style={styles.walletLabel}>Solde AZƆ̀ Pay</Text>
-                <View style={styles.walletZeroCashBadge}>
-                  <Text style={styles.walletZeroCashText}>100% Sans Cash</Text>
-                </View>
-              </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.walletLabel}>Solde AZƆ̀ Pay</Text>
               {loadingWallet ? (
                 <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 4 }} />
               ) : (
-                <Text style={styles.walletBalance}>
+                <Text style={styles.walletBalance} numberOfLines={1}>
                   {balance !== null ? balance.toLocaleString("fr-FR") : "---"}{" "}
                   <Text style={styles.currency}>FCFA</Text>
                 </Text>

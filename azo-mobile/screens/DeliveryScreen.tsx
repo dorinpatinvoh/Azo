@@ -17,7 +17,8 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
 import { Delivery, deliveryApi, errorMessage } from "../services/api";
-import { formatBeninPhoneDisplay } from "../utils/phone";
+import { maskBeninPhone, maskPersonName } from "../utils/phone";
+import RideChatModal from "../components/RideChatModal";
 
 const PACKAGE_TYPES = [
   { id: "doc", label: "Document / Pli", note: "Pli urgent < 1 kg", price: 1000, icon: "drafts" as const },
@@ -52,6 +53,7 @@ export default function DeliveryScreen({ onBack }: Props) {
   const [loading, setLoading] = useState(false);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [chatDelivery, setChatDelivery] = useState<Delivery | null>(null);
 
   const selectedPackage = PACKAGE_TYPES.find((p) => p.id === selectedType) ?? PACKAGE_TYPES[1];
 
@@ -184,18 +186,18 @@ export default function DeliveryScreen({ onBack }: Props) {
 
                   {d.courier ? (
                     <View style={styles.courierRow}>
-                      <MaterialIcons name="two-wheeler" size={18} color={colors.primary} />
+                      <MaterialIcons name="shield" size={18} color={colors.primary} />
                       <Text style={styles.courierText} numberOfLines={1}>
-                        {d.courier.fullName || "Coursier AZƆ̀"} · {formatBeninPhoneDisplay(d.courier.phone)}
+                        {maskPersonName(d.courier.fullName, "Coursier AZƆ̀")} ·{" "}
+                        {maskBeninPhone(d.courier.phone)}
                       </Text>
-                      {d.courier.phone ? (
-                        <Pressable
-                          style={styles.callSmallBtn}
-                          onPress={() => Linking.openURL(`tel:${d.courier!.phone}`)}
-                        >
-                          <MaterialIcons name="phone" size={16} color="#fff" />
-                        </Pressable>
-                      ) : null}
+                      <Pressable
+                        style={styles.chatSmallBtn}
+                        onPress={() => setChatDelivery(d)}
+                      >
+                        <MaterialIcons name="chat-bubble-outline" size={14} color="#fff" />
+                        <Text style={styles.chatSmallBtnText}>Message</Text>
+                      </Pressable>
                     </View>
                   ) : null}
 
@@ -310,6 +312,17 @@ export default function DeliveryScreen({ onBack }: Props) {
           />
         </View>
       </ScrollView>
+
+      {chatDelivery ? (
+        <RideChatModal
+          visible={!!chatDelivery}
+          rideId={chatDelivery.id}
+          myRole="CLIENT"
+          peerName={chatDelivery.courier?.fullName}
+          peerPhone={chatDelivery.courier?.phone}
+          onClose={() => setChatDelivery(null)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -394,6 +407,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
+  },
+  chatSmallBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+  },
+  chatSmallBtnText: {
+    ...typography.labelSm,
+    color: "#fff",
+    fontWeight: "800",
   },
   cancelBtn: { alignSelf: "flex-end", paddingVertical: 4 },
   cancelBtnText: { ...typography.labelSm, color: colors.error, fontWeight: "700" },

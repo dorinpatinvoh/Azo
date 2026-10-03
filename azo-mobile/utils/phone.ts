@@ -43,3 +43,45 @@ export function formatBeninPhoneDisplay(phone?: string | null): string {
   const spaced = local.replace(/(\d{2})(?=\d)/g, "$1 ").trim();
   return `+229 ${spaced}`;
 }
+
+/**
+ * Masque un numéro béninois pour protéger la vie privée entre Client et Prestataire
+ * Exemple : "+2290197000042" -> "01 •• •• •• 42"
+ */
+export function maskBeninPhone(phone?: string | null): string {
+  if (!phone) return "01 •• •• •• ••";
+  const digits = phone.replace(/\D/g, "");
+  const local = digits.startsWith("229") && digits.length > 8 ? digits.slice(3) : digits;
+  const prefix = local.slice(0, 2) || "01";
+  const suffix = local.slice(-2) || "••";
+  return `${prefix} •• •• •• ${suffix}`;
+}
+
+/**
+ * Anonymise le nom complet pour n'afficher que le prénom et l'initiale du nom
+ * Exemple : "Kossi Mensah" -> "Kossi M."
+ */
+export function maskPersonName(fullName?: string | null, fallback = "Utilisateur AZƆ̀"): string {
+  const clean = (fullName || "").trim();
+  if (!clean) return fallback;
+  const parts = clean.split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  const firstName = parts[0];
+  const lastInitial = parts[parts.length - 1].charAt(0).toUpperCase();
+  return `${firstName} ${lastInitial}.`;
+}
+
+/**
+ * Génère le Code Bouclier AZƆ̀ à 4 chiffres (déterministe par ID de course)
+ * identique côté Client et côté Chauffeur.
+ */
+export function rideSecurityPin(rideId?: string | null): string {
+  if (!rideId) return "4821";
+  let hash = 2166136261;
+  for (let i = 0; i < rideId.length; i++) {
+    hash ^= rideId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const num = (Math.abs(hash) % 9000) + 1000;
+  return String(num);
+}

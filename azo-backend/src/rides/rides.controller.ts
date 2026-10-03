@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
-import { IsInt, Max, Min } from "class-validator";
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 import { Role } from "@prisma/client";
 import { RidesService } from "./rides.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
@@ -10,6 +10,28 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 
 class RateDto {
   @IsInt() @Min(1) @Max(5) stars: number;
+}
+
+class StartRideDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  pin?: string;
+}
+
+class SendChatDto {
+  @IsString()
+  @MaxLength(300)
+  text: string;
+
+  @IsOptional()
+  @IsString()
+  senderRole?: "CLIENT" | "PROVIDER";
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  senderName?: string;
 }
 
 @Controller("rides")
@@ -51,8 +73,8 @@ export class RidesController {
 
   @Post(":id/start")
   @Roles(Role.DRIVER)
-  start(@Param("id") id: string, @CurrentUser() user) {
-    return this.rides.start(id, user.userId);
+  start(@Param("id") id: string, @CurrentUser() user, @Body() dto?: StartRideDto) {
+    return this.rides.start(id, user.userId, dto?.pin);
   }
 
   @Post(":id/complete")
@@ -69,10 +91,21 @@ export class RidesController {
   }
 
   // POST /rides/:id/cancel -> ouvert au client concerné ET au chauffeur assigné
-  // (le service vérifie qui a le droit d'annuler, et à quel moment).
   @Post(":id/cancel")
   cancel(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.cancel(id, user.userId);
+  }
+
+  // GET /rides/:id/messages -> Messagerie sécurisée in-app (course ou livraison)
+  @Get(":id/messages")
+  getMessages(@Param("id") id: string) {
+    return this.rides.getMessages(id);
+  }
+
+  // POST /rides/:id/messages -> Envoyer un message sécurisé in-app
+  @Post(":id/messages")
+  sendMessage(@Param("id") id: string, @CurrentUser() user, @Body() dto: SendChatDto) {
+    return this.rides.sendMessage(id, user, dto);
   }
 
   // GET /rides/:id  -> déclaré en DERNIER pour ne pas masquer /history et /pending

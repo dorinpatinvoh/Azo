@@ -9,11 +9,23 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 
-// Suivi en direct : le chauffeur envoie sa position, le client la reçoit.
-// Côté mobile : socket.emit("ride:join", { rideId }) puis socket.on("driver:location", ...)
+export type RideChatMessage = {
+  id: string;
+  rideId: string;
+  senderId: string;
+  senderRole: "CLIENT" | "PROVIDER";
+  senderName: string;
+  text: string;
+  createdAt: string;
+};
+
+// Suivi en direct + Messagerie sécurisée in-app :
+// Côté mobile : socket.emit("ride:join", { rideId }) puis socket.on("driver:location" | "ride:chat", ...)
 @WebSocketGateway({ cors: { origin: "*" } })
 export class RidesGateway implements OnGatewayConnection {
   @WebSocketServer() server: Server;
+
+  private chatStore = new Map<string, RideChatMessage[]>();
 
   constructor(private jwt: JwtService) {}
 
@@ -38,7 +50,7 @@ export class RidesGateway implements OnGatewayConnection {
   join(@ConnectedSocket() client: Socket, @MessageBody() data: { rideId?: string }) {
     if (!data?.rideId || typeof data.rideId !== "string") return { joined: null };
     client.join(`ride:${data.rideId}`);
-    return { joined: data.rideId };
+    return { joined: data.rideId, messages: this.getMessages(data.rideId) };
   }
 
   // Le chauffeur émet sa position toutes les ~5 secondes
@@ -60,6 +72,57 @@ export class RidesGateway implements OnGatewayConnection {
       lng: data.lng,
       at: Date.now(),
     });
+  }
+
+  // Messagerie instantanée sécurisée Client <-> Prestataire (sans exposer les numéros)
+  @SubscribeMessage("ride:chat")
+  onChat(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: {
+      rideId?: string;
+      senderRole?: "CLIENT" | "PROVIDER";
+      senderName?: string;
+      text?: string;
+    }
+  ) {
+    if (!data?.rideId || !data?.text || typeof data.text !== "string") return;
+    const senderId = client.data?.user?.userId || "anon";
+    const role: "CLIENT" | "PROVIDER" =
+      data.senderRole === "PROVIDER" || client.data?.user?.role === "DRIVER"
+        ? "PROVIDER"
+        : "CLIENT";
+    const name = (data.senderName || (role === "PROVIDER" ? "Prestataire AZƆ̀" : "Client AZƆ̀")).slice(0, 40);
+    return this.addChatMessage(data.rideId, senderId, role, name, data.text);
+  }
+
+  getMessages(rideId: string): RideChatMessage[] {
+    return this.chatStore.get(rideId) ?? [];
+  }
+
+  addChatMessage(
+    rideId: string,
+    senderId: string,
+    senderRole: "CLIENT" | "PROVIDER",
+    senderName: string,
+    rawText: string
+  ): RideChatMessage {
+    const text = rawText.trim().slice(0, 300);
+    const msg: RideChatMessage = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      rideId,
+      senderId,
+      senderRole,
+      senderName,
+      text,
+      createdAt: new Date().toISOString(),
+    };
+    const list = this.chatStore.get(rideId) ?? [];
+    list.push(msg);
+    if (list.length > 50) list.shift();
+    this.chatStore.set(rideId, list);
+    this.server?.to(`ride:${rideId}`).emit("ride:chat", msg);
+    return msg;
   }
 
   // Appelable depuis le service pour pousser un changement de statut aux clients

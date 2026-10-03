@@ -17,7 +17,8 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { Delivery, deliveryApi, errorMessage, walletApi } from "../services/api";
-import { formatBeninPhoneDisplay } from "../utils/phone";
+import { formatBeninPhoneDisplay, maskBeninPhone, maskPersonName } from "../utils/phone";
+import RideChatModal from "../components/RideChatModal";
 
 type Props = {
   onLogout: () => void;
@@ -55,6 +56,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
   const [otpInput, setOtpInput] = useState("");
   const [simBannerCode, setSimBannerCode] = useState<string | null>(null);
   const [simBannerSec, setSimBannerSec] = useState<number>(0);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const activeDelivery = useMemo(
     () => history.find((d) => d.status === "MATCHED" || d.status === "IN_PROGRESS") ?? null,
@@ -378,21 +380,19 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
                 <View style={styles.clientRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.clientName}>
-                      {activeDelivery.client.fullName || "Client AZƆ̀"}
+                      {maskPersonName(activeDelivery.client.fullName, "Client AZƆ̀")}
                     </Text>
                     <Text style={styles.clientPhone}>
-                      {formatBeninPhoneDisplay(activeDelivery.client.phone)}
+                      {maskBeninPhone(activeDelivery.client.phone)} · Numéro protégé
                     </Text>
                   </View>
-                  {activeDelivery.client.phone ? (
-                    <Pressable
-                      style={styles.callBtn}
-                      onPress={() => Linking.openURL(`tel:${activeDelivery.client!.phone}`)}
-                    >
-                      <MaterialIcons name="phone" size={18} color="#fff" />
-                      <Text style={styles.callBtnText}>Appeler</Text>
-                    </Pressable>
-                  ) : null}
+                  <Pressable
+                    style={styles.callBtn}
+                    onPress={() => setChatOpen(true)}
+                  >
+                    <MaterialIcons name="chat-bubble-outline" size={18} color="#fff" />
+                    <Text style={styles.callBtnText}>Message</Text>
+                  </Pressable>
                 </View>
               ) : null}
 
@@ -579,6 +579,17 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
           ) : null}
         </ScrollView>
       )}
+
+      {activeDelivery ? (
+        <RideChatModal
+          visible={chatOpen}
+          rideId={activeDelivery.id}
+          myRole="PROVIDER"
+          peerName={activeDelivery.client?.fullName}
+          peerPhone={activeDelivery.client?.phone}
+          onClose={() => setChatOpen(false)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

@@ -7,6 +7,8 @@ import { io } from "socket.io-client";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { API_URL, Ride, RideStatus, VehicleType, errorMessage, getToken, rideApi } from "../services/api";
+import RideChatModal from "../components/RideChatModal";
+import { maskBeninPhone, maskPersonName, rideSecurityPin } from "../utils/phone";
 
 type Props = { rideId: string; destinationLabel?: string; onClose: () => void; onFinish?: () => void };
 type LatLng = { latitude: number; longitude: number };
@@ -51,6 +53,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const [failures, setFailures] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   /* Statut + infos chauffeur : polling séquentiel (pas de chevauchement) */
   useEffect(() => {
@@ -201,22 +204,46 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
         {ride.driver && (
           <View style={styles.driverCard}>
-            <View style={styles.avatar}><MaterialIcons name="person" size={30} color={colors.onSurfaceVariant} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.driverName}>{ride.driver.fullName}</Text>
-              <Text style={styles.muted}>{VEHICLE_LABEL[ride.vehicleType]}</Text>
+            <View style={styles.avatar}>
+              <MaterialIcons name="verified-user" size={26} color={colors.primary} />
             </View>
-            {!!ride.driver.phone && (
-              <Pressable style={styles.callBtn} onPress={() => Linking.openURL(`tel:${ride.driver!.phone}`)} accessibilityLabel="Appeler le chauffeur">
-                <MaterialIcons name="call" size={20} color="#fff" />
-              </Pressable>
-            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.driverName}>
+                {maskPersonName(ride.driver.fullName, "Chauffeur AZƆ̀")}
+              </Text>
+              <Text style={styles.muted}>
+                {VEHICLE_LABEL[ride.vehicleType]} · {maskBeninPhone(ride.driver.phone)}
+              </Text>
+            </View>
+            <Pressable
+              style={styles.chatBtn}
+              onPress={() => setChatOpen(true)}
+              accessibilityLabel="Ouvrir le chat sécurisé"
+            >
+              <MaterialIcons name="chat-bubble-outline" size={18} color={colors.primary} />
+              <Text style={styles.chatBtnText}>Message</Text>
+            </Pressable>
             {!done && etaMinutes != null && (
               <View style={styles.eta}>
                 <Text style={styles.etaValue}>{etaMinutes}</Text>
                 <Text style={styles.etaUnit}>min</Text>
               </View>
             )}
+          </View>
+        )}
+
+        {ride.status === "MATCHED" && (
+          <View style={styles.pinBanner}>
+            <MaterialIcons name="shield" size={20} color={colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pinBannerTitle}>Code Bouclier AZƆ̀ (à donner au chauffeur)</Text>
+              <Text style={styles.pinBannerSub}>
+                Vérifie qu'il tape ces 4 chiffres avant de monter
+              </Text>
+            </View>
+            <View style={styles.pinCodePill}>
+              <Text style={styles.pinCodeText}>{rideSecurityPin(ride.id)}</Text>
+            </View>
           </View>
         )}
 
@@ -245,6 +272,16 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
           </>
         )}
       </View>
+
+      <RideChatModal
+        visible={chatOpen}
+        rideId={ride.id}
+        myRole="CLIENT"
+        peerName={ride.driver?.fullName}
+        peerPhone={ride.driver?.phone}
+        locked={finished}
+        onClose={() => setChatOpen(false)}
+      />
     </View>
   );
 }
@@ -260,9 +297,16 @@ const styles = StyleSheet.create({
   pulseWrap: { width: 56, height: 56, alignItems: "center", justifyContent: "center" },
   pulse: { position: "absolute", width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary },
   driverCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, padding: spacing.sm + 2 },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surfaceContainerLow, alignItems: "center", justifyContent: "center" },
+  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
   driverName: { ...typography.bodyMd, color: colors.onSurface, fontWeight: "700" },
   callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  chatBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 8 },
+  chatBtnText: { ...typography.labelMd, color: colors.primary, fontWeight: "800" },
+  pinBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.primaryFixed, borderRadius: radius.lg, padding: spacing.sm + 2, borderWidth: 1, borderColor: colors.primary },
+  pinBannerTitle: { ...typography.labelMd, color: colors.onSurface, fontWeight: "800" },
+  pinBannerSub: { ...typography.bodySm, color: colors.onSurfaceVariant, fontSize: 11 },
+  pinCodePill: { backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 6 },
+  pinCodeText: { ...typography.headlineSm, color: "#fff", fontWeight: "800", letterSpacing: 2 },
   eta: { alignItems: "center", backgroundColor: colors.primaryFixed, borderRadius: radius.lg, paddingHorizontal: 12, paddingVertical: 6 },
   etaValue: { ...typography.headlineSm, color: colors.primary, fontWeight: "800" },
   etaUnit: { ...typography.labelSm, color: colors.primary },
