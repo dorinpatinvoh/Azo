@@ -19,10 +19,17 @@ export type VehicleKey = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | 
 export type LegacyVehicleKey = "ZEM" | "CAR";
 export type AgencyLevel = "PRO" | "SILVER" | "OR" | "DIAMANT";
 
+/** Palier kilométrique : `upToKm` inclus, `null` pour le dernier palier (illimité). */
+export type VehicleBracket = { upToKm: number | null; perKm: number };
+
+/** Remise sur la base appliquée au-delà d'une distance (Zem : −25 % après 10 km). */
+export type BaseDiscount = { pct: number; aboveKm: number };
+
 export type VehiclePricing = {
   base: number;
-  perKmUpTo15: number;
-  perKmFrom16: number;
+  /** Paliers kilométriques, du premier au dernier (dernier = illimité). */
+  brackets: VehicleBracket[];
+  baseDiscount?: BaseDiscount;
   airConditioned?: boolean;
   family?: VehicleFamily;
 };
@@ -36,7 +43,6 @@ export type AgencyLevelPricing = {
 
 export type TarificationConfig = {
   currency: string;
-  kmThreshold: number;
   vehicles: Record<VehicleKey, VehiclePricing>;
   agencyLevels: Record<AgencyLevel, AgencyLevelPricing>;
   profiles: Record<string, { category?: string; monthlyRevenueSharePct?: number; withdrawalFeePct?: number }>;
@@ -83,20 +89,72 @@ export function vehicleLabel(vehicle: VehicleKey | string): string {
 }
 
 /** Prix d'une course = tarif de base + coût kilométrique par tranche (FCFA entiers). */
-export function ridePrice(distanceKm: number, vehicle: VehicleKey | string): number {
-  const gamme = resolveVehicleKey(vehicle);
-  const pricing = current.vehicles[gamme];
-  const threshold = current.kmThreshold;
+export type PriceBracketLine = {
+  upToKm: number | null;
+  perKm: number;
+  km: number;
+  amount: number;
+};
+
+export type PriceBreakdown = {
+  vehicle: VehicleKey;
+  family: VehicleFamily;
+  distanceKm: number;
+  /** Base effectivement facturée (après remise). */
+  base: number;
+  /** Base du barème avant remise (150 F pour un Zem). */
+  baseFull: number;
+  baseDiscountPct: number;
+  baseDiscountApplied: boolean;
+  baseDiscountAboveKm: number | null;
+  brackets: PriceBracketLine[];
+  price: number;
+};
+
+/**
+ * Détail du prix — **exactement le même calcul que le backend** (`PricingService.breakdown`) :
+ * base (remisée au-delà de la distance configurée) + une ligne par palier kilométrique.
+ * Chaque poste est tronqué en FCFA entiers, sans arrondi métier.
+ */
+export function priceBreakdown(distanceKm: number, vehicle: VehicleKey | string): PriceBreakdown {
+  const key = resolveVehicleKey(vehicle);
+  const pricing = current.vehicles[key];
   const mmPerKm = 1000;
-  const kmMm = Math.round(Math.max(distanceKm, 0) * mmPerKm);
-  const thresholdMm = Math.round(threshold * mmPerKm);
-  const firstMm = Math.min(kmMm, thresholdMm);
-  const secondMm = Math.max(kmMm - thresholdMm, 0);
-  return (
-    pricing.base +
-    Math.floor((firstMm * pricing.perKmUpTo15) / mmPerKm) +
-    Math.floor((secondMm * pricing.perKmFrom16) / mmPerKm)
-  );
+  const distance = Math.max(distanceKm, 0);
+  const kmMm = Math.round(distance * mmPerKm);
+
+  const brackets: PriceBracketLine[] = [];
+  let previousLimitMm = 0;
+  let kmAmount = 0;
+  for (const bracket of pricing.brackets) {
+    const upperLimitMm = bracket.upToKm === null ? kmMm : Math.round(bracket.upToKm * mmPerKm);
+    const bracketMm = Math.max(Math.min(kmMm, upperLimitMm) - previousLimitMm, 0);
+    const amount = Math.floor((bracketMm * bracket.perKm) / mmPerKm);
+    brackets.push({ upToKm: bracket.upToKm, perKm: bracket.perKm, km: bracketMm / mmPerKm, amount });
+    kmAmount += amount;
+    previousLimitMm = bracket.upToKm === null ? kmMm : upperLimitMm;
+  }
+
+  const discount = pricing.baseDiscount;
+  const applied = !!discount && distance > discount.aboveKm;
+  const base = applied ? Math.floor((pricing.base * (100 - discount!.pct)) / 100) : pricing.base;
+
+  return {
+    vehicle: key,
+    family: vehicleFamily(key),
+    distanceKm: distance,
+    base,
+    baseFull: pricing.base,
+    baseDiscountPct: discount?.pct ?? 0,
+    baseDiscountApplied: applied,
+    baseDiscountAboveKm: discount?.aboveKm ?? null,
+    brackets,
+    price: base + kmAmount,
+  };
+}
+
+export function ridePrice(distanceKm: number, vehicle: VehicleKey | string): number {
+  return priceBreakdown(distanceKm, vehicle).price;
 }
 
 /* ------------------------------------------------------------------ Agences */
@@ -157,7 +215,6 @@ export async function refreshTarification(): Promise<TarificationConfig> {
 function cleanse(config: TarificationConfig): TarificationConfig {
   return {
     currency: config.currency ?? reference.currency,
-    kmThreshold: config.kmThreshold ?? reference.kmThreshold,
     vehicles: config.vehicles ?? (reference as unknown as TarificationConfig).vehicles,
     agencyLevels: config.agencyLevels ?? (reference as unknown as TarificationConfig).agencyLevels,
     profiles: config.profiles ?? {},

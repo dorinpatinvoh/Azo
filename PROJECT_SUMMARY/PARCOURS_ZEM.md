@@ -10,8 +10,22 @@ premier écran :
 
 | Type | Libellé client | Tarif |
 |---|---|---|
-| `ZEM_ESSENCE` | **Zem à essence** | 800 F + 200 F/km jusqu'à 15 km, puis 150 F/km |
+| `ZEM_ESSENCE` | **Zem à essence** | 150 F de base · 90 F/km de 0 à 10 km · 85 F/km de 11 à 25 km · 80 F/km au-delà |
 | `ZEM_ELECTRIC` | **Zem électrique** | **identique** au Zem à essence (décision du 5 octobre 2026) |
+
+**Remise de base** : au-delà de **10 km**, la base passe de 150 F à **112 F** (−25 %,
+troncature FCFA). Elle ne s'applique jamais à 10 km ou moins.
+
+| Trajet | Calcul | Prix |
+|---|---|---|
+| 5 km | 150 + 5 × 90 | **600 F** |
+| 10 km | 150 + 10 × 90 | **1 050 F** |
+| 12 km | 112 + 10 × 90 + 2 × 85 | **1 182 F** |
+| 25 km | 112 + 10 × 90 + 15 × 85 | **2 287 F** |
+| 30 km | 112 + 10 × 90 + 15 × 85 + 5 × 80 | **2 687 F** |
+
+La base de 150 F est due dès que la course est **acceptée** ; le client n'est débité qu'à la
+**fin** de la course (aucun débit avant le départ).
 
 Les noms **Gazelle / Koala / Léopard** sont réservés aux **voitures** et n'apparaissent
 jamais dans la commande d'un Zem.

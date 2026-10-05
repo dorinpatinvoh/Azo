@@ -69,9 +69,11 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
 
 ## 5. Règles métier déjà codées
 - **Tarification** : tout le barème vient de `src/pricing/tarification.json`
-  (voir `PROJECT_SUMMARY/TARIFICATION.md`) — prix des courses par tranche de 15 km, en deux
-  filières : **motos-taxis Zem** (`ZEM_ESSENCE`, `ZEM_ELECTRIC` — même tarif pour les deux) et
-  **voitures** (`GAZELLE`, `KOALA`, `LEOPARD`) ; niveaux d'agence
+  (voir `PROJECT_SUMMARY/TARIFICATION.md`) — prix des courses par **paliers kilométriques propres à
+  chaque véhicule**, en deux filières : **motos-taxis Zem** (`ZEM_ESSENCE`, `ZEM_ELECTRIC` — même
+  tarif : base 150 F, 90 F/km jusqu'à 10 km, 85 F/km de 11 à 25 km, 80 F/km au-delà, −25 % sur la
+  base après 10 km) et **voitures** (`GAZELLE`, `KOALA`, `LEOPARD`, palier à 15 km, sans remise) ;
+  niveaux d'agence
   (PRO / SILVER / OR / DIAMANT : activation unique, commission, frais de retrait,
   plafond de comptes), profils prestataires. Tests : `npm test`.
 - **Radar chauffeur** : `GET /rides/pending` ne renvoie que les demandes du **véhicule exact**

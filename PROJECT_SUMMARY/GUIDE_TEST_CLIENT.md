@@ -46,7 +46,9 @@ L'écran de connexion ne pré-remplit plus aucun numéro : **chaque utilisateur 
 1. Connectez-vous avec **votre propre numéro** (n'importe quel numéro béninois à 10 chiffres commençant par `01`).
 2. **Commander un Zem** :
    - Sur l'accueil, appuyez sur **Zem**. Un premier écran demande le type de moto-taxi :
-     **Zem à essence** ou **Zem électrique** (même tarif : 800 F + 200 F/km jusqu'à 15 km, puis 150 F/km).
+     **Zem à essence** ou **Zem électrique**, au même tarif : **150 F de base**, puis
+     **90 F/km de 0 à 10 km**, **85 F/km de 11 à 25 km**, **80 F/km au-delà** — avec **−25 %
+     sur la base** dès que le trajet dépasse 10 km.
    - Vous arrivez ensuite sur la réservation : choisissez une destination à Cotonou
      (ex. *Aéroport*, *Ganhi*, *Haie Vive*), vérifiez le tarif estimé et confirmez la course.
      Un bandeau rappelle le Zem choisi, avec un bouton **Changer** pour revenir au choix.

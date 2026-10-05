@@ -228,14 +228,14 @@ export type Estimate = {
     gamme: VehicleType;
     family?: VehicleFamily;
     distanceKm: number;
-    kmThreshold: number;
+    /** Base facturée (après remise éventuelle). */
     base: number;
-    perKmUpTo15: number;
-    perKmFrom16: number;
-    kmInFirstBracket: number;
-    kmInSecondBracket: number;
-    amountInFirstBracket: number;
-    amountInSecondBracket: number;
+    baseFull: number;
+    baseDiscountPct: number;
+    baseDiscountApplied: boolean;
+    baseDiscountAboveKm: number | null;
+    /** Une ligne par palier kilométrique (km facturés et montant). */
+    brackets: { upToKm: number | null; perKm: number; km: number; amount: number }[];
     price: number;
     currency: string;
   };

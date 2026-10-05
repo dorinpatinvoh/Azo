@@ -12,6 +12,16 @@ import {
   loadTarificationConfig,
 } from "./tarification.config";
 
+/** Une ligne du calcul : kilomètres parcourus dans un palier et montant correspondant. */
+export type RidePriceBracketLine = {
+  /** Borne haute du palier (incluse), `null` pour le dernier palier (illimité). */
+  upToKm: number | null;
+  perKm: number;
+  /** Kilomètres facturés dans ce palier (0 si le trajet n'y entre pas). */
+  km: number;
+  amount: number;
+};
+
 /** Détail du calcul d'un prix de course, poste par poste. */
 export type RidePriceBreakdown = {
   /**
@@ -21,14 +31,16 @@ export type RidePriceBreakdown = {
   gamme: VehicleKey;
   family: VehicleFamily;
   distanceKm: number;
-  kmThreshold: number;
+  /** Base effectivement facturée (après remise). */
   base: number;
-  perKmUpTo15: number;
-  perKmFrom16: number;
-  kmInFirstBracket: number;
-  kmInSecondBracket: number;
-  amountInFirstBracket: number;
-  amountInSecondBracket: number;
+  /** Base du barème avant remise (150 F pour un Zem). */
+  baseFull: number;
+  /** Remise appliquée à la base (0 ou 25 % pour un Zem au-delà de 10 km). */
+  baseDiscountPct: number;
+  baseDiscountApplied: boolean;
+  /** Distance à partir de laquelle la remise de base s'applique. */
+  baseDiscountAboveKm: number | null;
+  brackets: RidePriceBracketLine[];
   price: number;
   currency: string;
 };
@@ -70,10 +82,6 @@ export class PricingService {
 
   get currency(): string {
     return this.config.currency;
-  }
-
-  get kmThreshold(): number {
-    return this.config.kmThreshold;
   }
 
   /** Véhicules facturables, dans l'ordre d'affichage (Zem puis voitures). */
@@ -155,13 +163,17 @@ export class PricingService {
   }
 
   /**
-   * Prix d'une course = tarif de base + coût kilométrique par tranche.
+   * Prix d'une course = base (remisée le cas échéant) + somme des paliers kilométriques.
    *
-   *   km_tranche1 = min(distance_km, seuil)
-   *   km_tranche2 = max(distance_km - seuil, 0)
-   *   prix = base + km_tranche1 × prix_0_seuil + km_tranche2 × prix_seuil_plus
+   * Chaque véhicule porte ses paliers dans la configuration (`brackets`) :
    *
-   * Retourne un entier FCFA : le coût kilométrique est tronqué (aucun arrondi).
+   *   * **Zem** (motos-taxis) : base **150 F**, puis **90 F/km de 0 à 10 km**,
+   *     **85 F/km de 11 à 25 km**, **80 F/km à partir du 26e km** ; au-delà de **10 km**
+   *     la base subit une **remise de 25 %** (150 F → 112 F après troncature) ;
+   *   * **voitures** : base et deux paliers (ex. Gazelle 800 F, 200 F/km jusqu'à 15 km
+   *     puis 150 F/km), sans remise de base.
+   *
+   * Retourne un entier FCFA : chaque poste est tronqué, aucun arrondi métier.
    */
   ridePrice(distanceKm: number, vehicleType: VehicleKey | string): number {
     return this.breakdown(distanceKm, vehicleType).price;
@@ -174,36 +186,51 @@ export class PricingService {
 
     const gamme = this.resolveVehicleKey(vehicleType);
     const pricing = this.config.vehicles[gamme];
-    const threshold = this.config.kmThreshold;
 
     // Calcul en millimètres entiers : la distance est ramenée au mètre près et les
     // multiplications restent exactes (20,9 − 15 = 5,899999… donnerait 884 au lieu de
     // 885 en flottant). Le montant rendu est un entier FCFA tronqué, sans arrondi métier.
     const mmPerKm = 1000;
     const kmMm = Math.round(distanceKm * mmPerKm);
-    const thresholdMm = Math.round(threshold * mmPerKm);
-    const firstBracketMm = Math.min(kmMm, thresholdMm);
-    const secondBracketMm = Math.max(kmMm - thresholdMm, 0);
 
-    const kmInFirstBracket = firstBracketMm / mmPerKm;
-    const kmInSecondBracket = secondBracketMm / mmPerKm;
-    const amountInFirstBracket = Math.floor((firstBracketMm * pricing.perKmUpTo15) / mmPerKm);
-    const amountInSecondBracket = Math.floor((secondBracketMm * pricing.perKmFrom16) / mmPerKm);
-    const price = pricing.base + amountInFirstBracket + amountInSecondBracket;
+    // Paliers : chaque borne est cumulée depuis le début du trajet (0 → 10 km, puis le
+    // 11e au tarif suivant, etc.). Le dernier palier (upToKm = null) prend le reste.
+    const brackets: RidePriceBracketLine[] = [];
+    let previousLimitMm = 0;
+    let kmAmount = 0;
+
+    for (const bracket of pricing.brackets) {
+      const upperLimitMm = bracket.upToKm === null ? kmMm : Math.round(bracket.upToKm * mmPerKm);
+      const bracketMm = Math.max(Math.min(kmMm, upperLimitMm) - previousLimitMm, 0);
+      const amount = Math.floor((bracketMm * bracket.perKm) / mmPerKm);
+      brackets.push({
+        upToKm: bracket.upToKm,
+        perKm: bracket.perKm,
+        km: bracketMm / mmPerKm,
+        amount,
+      });
+      kmAmount += amount;
+      previousLimitMm = bracket.upToKm === null ? kmMm : upperLimitMm;
+    }
+
+    // Remise de base : uniquement au-delà de la distance configurée (Zem : plus de 10 km).
+    const discount = pricing.baseDiscount;
+    const discountApplied = !!discount && distanceKm > discount.aboveKm;
+    const base = discountApplied
+      ? Math.floor((pricing.base * (100 - discount!.pct)) / 100)
+      : pricing.base;
 
     return {
       gamme,
       family: pricing.family === "ZEM" ? "ZEM" : "CAR",
       distanceKm,
-      kmThreshold: threshold,
-      base: pricing.base,
-      perKmUpTo15: pricing.perKmUpTo15,
-      perKmFrom16: pricing.perKmFrom16,
-      kmInFirstBracket,
-      kmInSecondBracket,
-      amountInFirstBracket,
-      amountInSecondBracket,
-      price,
+      base,
+      baseFull: pricing.base,
+      baseDiscountPct: discount?.pct ?? 0,
+      baseDiscountApplied: discountApplied,
+      baseDiscountAboveKm: discount?.aboveKm ?? null,
+      brackets,
+      price: base + kmAmount,
       currency: this.config.currency,
     };
   }

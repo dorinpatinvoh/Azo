@@ -37,10 +37,27 @@ export type AgencyLevel = "PRO" | "SILVER" | "OR" | "DIAMANT";
 /** Profils prestataires définis par la spécification. */
 export type ProfileKey = "ZEM_INDEPENDANT" | "LIVREUR" | "COURSIER";
 
+/**
+ * Palier kilométrique : `upToKm` est la borne haute du palier (incluse), `null` pour le
+ * dernier palier (illimité). `perKm` est le prix au kilomètre dans ce palier.
+ */
+export type VehicleBracket = {
+  upToKm: number | null;
+  perKm: number;
+};
+
+/** Remise sur la base appliquée au-delà d'une distance (`aboveKm`). */
+export type BaseDiscount = {
+  pct: number;
+  aboveKm: number;
+};
+
 export type VehiclePricing = {
   base: number;
-  perKmUpTo15: number;
-  perKmFrom16: number;
+  /** Paliers kilométriques, du premier au dernier (dernier = illimité). */
+  brackets: VehicleBracket[];
+  /** Remise éventuelle sur la base (Zem : −25 % au-delà de 10 km). */
+  baseDiscount?: BaseDiscount;
   airConditioned?: boolean;
   /** Filière du véhicule : `ZEM` (moto-taxi) ou `CAR` (voiture). */
   family?: VehicleFamily;
@@ -73,7 +90,6 @@ export type ProvisionalRule = {
 
 export type TarificationConfig = {
   currency: string;
-  kmThreshold: number;
   vehicles: Record<VehicleKey, VehiclePricing>;
   /** Répartition des demandes entre prestataires (filtrage du radar chauffeur). */
   radar?: { strictVehicleMatch?: boolean };
@@ -115,17 +131,42 @@ function isNonNegativeNumber(value: unknown): value is number {
 /** Vérifie la structure et les valeurs indispensables au calcul des prix. */
 function assertValid(config: TarificationConfig): TarificationConfig {
   if (!config || typeof config !== "object") fail("fichier illisible");
-  if (!isNonNegativeNumber(config.kmThreshold) || config.kmThreshold <= 0)
-    fail("`kmThreshold` doit être un nombre > 0");
 
   for (const vehicle of VEHICLE_KEYS) {
     const pricing = config.vehicles?.[vehicle];
     if (!pricing) fail(`véhicule « ${vehicle} » manquant dans \`vehicles\``);
-    for (const key of ["base", "perKmUpTo15", "perKmFrom16"] as const) {
-      if (!isNonNegativeNumber(pricing[key])) fail(`\`vehicles.${vehicle}.${key}\` doit être un nombre ≥ 0`);
-    }
+    if (!isNonNegativeNumber(pricing.base)) fail(`\`vehicles.${vehicle}.base\` doit être un nombre ≥ 0`);
     if (pricing.family && !FAMILIES.includes(pricing.family))
       fail(`\`vehicles.${vehicle}.family\` doit valoir « ZEM » ou « CAR »`);
+
+    // Paliers kilométriques : au moins un, bornes croissantes, dernier palier illimité.
+    const brackets = pricing.brackets;
+    if (!Array.isArray(brackets) || brackets.length === 0)
+      fail(`\`vehicles.${vehicle}.brackets\` doit contenir au moins un palier`);
+    let previousUpTo = 0;
+    brackets.forEach((bracket, index) => {
+      if (!isNonNegativeNumber(bracket?.perKm))
+        fail(`\`vehicles.${vehicle}.brackets[${index}].perKm\` doit être un nombre ≥ 0`);
+      const isLast = index === brackets.length - 1;
+      if (isLast) {
+        if (bracket.upToKm !== null)
+          fail(`\`vehicles.${vehicle}.brackets\` : le dernier palier doit avoir \`upToKm: null\` (illimité)`);
+        return;
+      }
+      if (!isNonNegativeNumber(bracket.upToKm) || bracket.upToKm <= 0)
+        fail(`\`vehicles.${vehicle}.brackets[${index}].upToKm\` doit être un nombre > 0 (ou null pour le dernier palier)`);
+      if (bracket.upToKm <= previousUpTo)
+        fail(`\`vehicles.${vehicle}.brackets\` : les bornes \`upToKm\` doivent être strictement croissantes`);
+      previousUpTo = bracket.upToKm;
+    });
+
+    const discount = pricing.baseDiscount;
+    if (discount) {
+      if (!isNonNegativeNumber(discount.pct) || discount.pct > 100)
+        fail(`\`vehicles.${vehicle}.baseDiscount.pct\` doit être un pourcentage entre 0 et 100`);
+      if (!isNonNegativeNumber(discount.aboveKm) || discount.aboveKm <= 0)
+        fail(`\`vehicles.${vehicle}.baseDiscount.aboveKm\` doit être un nombre > 0`);
+    }
   }
 
   // Les deux types de Zem appartiennent obligatoirement à la filière ZEM : le radar

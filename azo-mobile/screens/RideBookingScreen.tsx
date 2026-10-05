@@ -52,6 +52,27 @@ const POPULAR_PLACES: Place[] = [
 ];
 const ERROR_COLOR = "#B3261B";
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} FCFA`;
+
+/**
+ * Description du tarif Zem, construite depuis la configuration partagée
+ * (`config/tarification.json`, synchronisée avec le backend) : aucune valeur en dur.
+ */
+function zemPricingNote(): string {
+  const zem = tarification().vehicles.ZEM_ESSENCE;
+  const paliers = zem.brackets
+    .map((b, i) => {
+      const precedent = i === 0 ? 0 : (zem.brackets[i - 1].upToKm ?? 0);
+      const de = precedent === 0 ? 0 : precedent + 1;
+      return b.upToKm === null
+        ? `${fcfa(b.perKm)}/km à partir du ${de}e km`
+        : `${fcfa(b.perKm)}/km de ${de} à ${b.upToKm} km`;
+    })
+    .join(" · ");
+  const remise = zem.baseDiscount
+    ? ` — et ${zem.baseDiscount.pct} % de remise sur la base dès que le trajet dépasse ${zem.baseDiscount.aboveKm} km`
+    : "";
+  return `Les deux Zem ont le même tarif : ${fcfa(zem.base)} de base, puis ${paliers}${remise}.`;
+}
 const fmtKm = (n: number) => `${n.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`;
 const fmtDuration = (min: number) =>
   min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}`;
@@ -338,7 +359,6 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
    * ensuite, dans l'écran de réservation habituel.
    */
   if (service === "zem" && !zemType) {
-    const zemPricing = tarification().vehicles.ZEM_ESSENCE;
     return (
       <View style={styles.zemRoot}>
         <View style={[styles.zemHeader, { paddingTop: insets.top + spacing.sm }]}>
@@ -372,11 +392,7 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
 
           <View style={styles.zemNote}>
             <MaterialIcons name="info-outline" size={16} color={colors.onSurfaceVariant} />
-            <Text style={styles.zemNoteText}>
-              Les deux Zem ont le même tarif : {fcfa(zemPricing.base)} de base +{" "}
-              {fcfa(zemPricing.perKmUpTo15)}/km jusqu'à {tarification().kmThreshold} km, puis{" "}
-              {fcfa(zemPricing.perKmFrom16)}/km.
-            </Text>
+            <Text style={styles.zemNoteText}>{zemPricingNote()}</Text>
           </View>
         </View>
       </View>
@@ -547,19 +563,16 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
                       <Text style={[styles.summaryValue, { color: colors.primary }]}>{fcfa(est.price)}</Text>
                     </View>
                   </View>
-                  {/* Détail du barème officiel : base + tranche 1 (0–15 km) + tranche 2 (16 km et +) */}
+                  {/* Détail du barème officiel : base (remise éventuelle) + une ligne par palier */}
                   <Text style={styles.summaryDetail}>
                     {[
-                      `Base ${fcfa(est.breakdown.base)}`,
-                      est.breakdown.kmInFirstBracket > 0
-                        ? `${fmtKm(est.breakdown.kmInFirstBracket)} × ${fcfa(est.breakdown.perKmUpTo15)}/km`
-                        : null,
-                      est.breakdown.kmInSecondBracket > 0
-                        ? `${fmtKm(est.breakdown.kmInSecondBracket)} × ${fcfa(est.breakdown.perKmFrom16)}/km`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join("  +  ")}
+                      est.breakdown.baseDiscountApplied
+                        ? `Base ${fcfa(est.breakdown.baseFull)} − ${est.breakdown.baseDiscountPct} % = ${fcfa(est.breakdown.base)}`
+                        : `Base ${fcfa(est.breakdown.base)}`,
+                      ...(est.breakdown.brackets ?? [])
+                        .filter((b) => b.km > 0)
+                        .map((b) => `${fmtKm(b.km)} × ${fcfa(b.perKm)}/km`),
+                    ].join("  +  ")}
                   </Text>
                 </View>
               )}
