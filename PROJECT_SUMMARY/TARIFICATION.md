@@ -39,15 +39,21 @@ multiplication pour éviter les artefacts de virgule flottante (20,9 − 15 = 5,
 
 ## 3. Profils prestataires
 
-| Profil | Catégorie | Prélèvement |
-|---|---|---|
-| **ZEM_INDEPENDANT** | — | **15 % des revenus du mois** (calcul mensuel, jamais par course) + **1,5 % sur chaque retrait** |
-| **LIVREUR** | `INDEPENDANT_PERSONNEL` | Aucune règle définie à ce stade (profil et catégorie prévus, sans prélèvement) |
-| **COURSIER** | `INDEPENDANT_PERSONNEL` | Aucune règle définie à ce stade (profil et catégorie prévus, sans prélèvement) |
+| Profil | Catégorie | Part mensuelle | Frais de retrait | Commission par course |
+|---|---|---|---|---|
+| **ZEM_INDEPENDANT** | — | **15 % des revenus du mois** (jamais par course) — *validé* | **1,5 %** — *validé* | **0** — *validé* |
+| **LIVREUR** | `INDEPENDANT_PERSONNEL` | ⚠️ **règle à définir** (0 provisoire) | **1,5 %** (identique au Zem) | ⚠️ **règle à définir** (0 provisoire) |
+| **COURSIER** | `INDEPENDANT_PERSONNEL` | ⚠️ **règle à définir** (0 provisoire) | **1,5 %** (identique au Zem) | ⚠️ **règle à définir** (0 provisoire) |
 
 Un profil non décrit par la spécification (ex. conducteur indépendant d'une gamme
-KOALA/LEOPARD) suit la règle `unspecifiedProfile` : **aucun prélèvement** tant que le
-métier ne l'a pas tranché.
+KOALA/LEOPARD) suit la règle `unspecifiedProfile` : aucun prélèvement tant que le métier
+ne l'a pas tranché — ⚠️ lui aussi **à définir** s'il doit être facturé.
+
+Les valeurs provisoires sont **explicitemement listées** dans la section `aDefinir` de
+`tarification.json` (chemin, valeur, note « règle à définir »), en plus d'un
+avertissement `_aDefinir` dans chaque section concernée. Un test échoue si une valeur
+provisoire est modifiée sans mise à jour de cette liste, et si une règle validée y est
+ajoutée par erreur : impossible de confondre les deux.
 
 ## 4. Niveaux d'agence
 
@@ -87,20 +93,26 @@ Règles appliquées :
 cd azo-backend && npm test
 ```
 
-35 tests couvrent les exemples de la spécification, les bornes de tranches (15 km,
+39 tests couvrent les exemples de la spécification, les bornes de tranches (15 km,
 16 km), la troncature, la conversion des anciens types de véhicules, **un cas par
-niveau d'agence** (activation, commission, frais de retrait, plafond) et les profils
-prestataires (Zem 15 % / 1,5 % ; LIVREUR & COURSIER sans prélèvement).
+niveau d'agence** (activation, commission, frais de retrait, plafond), les profils
+prestataires (Zem 15 %/mois + 1,5 % par retrait ; LIVREUR & COURSIER : 1,5 % par retrait,
+règles restantes marquées « à définir ») et la liste des valeurs provisoires.
 
-## 7. Points laissés configurables (à trancher côté métier)
+## 7. Valeurs provisoires « règle à définir »
 
-1. **Livraison** : la spécification ne décrit pas de tarif de livraison. Le taux
-   existant est conservé en configuration (`delivery.commissionPct`), en attente d'une
-   règle métier. Le prix des livraisons reste déclaré par le client/coursier.
-2. **Commission par course des profils non agence** : la spec ne définit que la part
-   mensuelle des Zem. `unspecifiedProfile.rideCommissionPct` vaut donc 0 : mettre la
-   valeur souhaitée dans `tarification.json` suffit à l'activer, sans toucher au code.
-3. **Frais de retrait des LIVREUR / COURSIER** : non définis → 0 % aujourd'hui.
+| Chemin dans la config | Valeur provisoire | Statut |
+|---|---|---|
+| `delivery.commissionPct` | 15 | ⚠️ **Règle à définir** — aucun tarif de livraison validé. Valeur conservée telle quelle, non modifiée, à ne pas présenter comme une règle métier. |
+| `profiles.LIVREUR.monthlyRevenueSharePct` | 0 | ⚠️ **Règle à définir** — le 0 provisoire ne signifie **pas** « aucun frais, définitivement ». |
+| `profiles.LIVREUR.rideCommissionPct` | 0 | ⚠️ **Règle à définir** — idem. |
+| `profiles.COURSIER.monthlyRevenueSharePct` | 0 | ⚠️ **Règle à définir** — idem. |
+| `profiles.COURSIER.rideCommissionPct` | 0 | ⚠️ **Règle à définir** — idem. |
+
+Ces valeurs se changent **dans `tarification.json` uniquement** (aucun code à toucher).
+Règles validées, à ne pas confondre : Zem indépendant (15 %/mois + 1,5 % par retrait,
+0 par course), frais de retrait LIVREUR/COURSIER identiques au Zem (1,5 %), prix par
+tranches, activation unique des agences, plafonds de comptes.
 
 ## 8. Migration de base de données
 

@@ -239,17 +239,23 @@ export class PricingService {
     return this.withdrawalFees(amount, 0);
   }
 
-  /** Commission AZƆ̀ d'une course : niveau d'agence si rattaché, sinon profil, sinon 0. */
+  /**
+   * Commission AZƆ̀ d'une course : niveau d'agence si le conducteur est rattaché à une
+   * flotte, sinon la règle du profil.
+   *
+   * Le Zem indépendant a `rideCommissionPct = 0` — règle validée — car il paie 15 % de
+   * ses revenus au mois (voir `monthlyRevenueShare`), jamais par course. Pour LIVREUR et
+   * COURSIER la valeur est provisoire (« règle à définir », voir `aDefinir` dans la
+   * configuration) : elle ne doit pas être présentée comme une règle validée.
+   */
   rideCommission(
     user: { profile?: string | null; agencyLevel?: AgencyLevel | string | null },
     rideAmount: number
   ): number {
     if (user.agencyLevel) return this.agencyCommission(user.agencyLevel, rideAmount);
-    const pct = this.profilePricing(user.profile ?? "").monthlyRevenueSharePct;
-    // La commission d'une course n'existe que pour les profils qui la définissent ;
-    // les Zem indépendants paient leur part au mois (voir monthlyRevenueShare).
-    void pct;
-    return this.percentOf(rideAmount, this.config.unspecifiedProfile.rideCommissionPct);
+    const profile = user.profile ? this.profilePricing(user.profile) : null;
+    const pct = profile?.rideCommissionPct ?? this.config.unspecifiedProfile.rideCommissionPct;
+    return this.percentOf(rideAmount, pct);
   }
 
   /* ------------------------------------------------------------------ Livraison */

@@ -1,5 +1,9 @@
 import { PricingService } from "../src/pricing/pricing.service";
-import { loadTarificationConfig } from "../src/pricing/tarification.config";
+import {
+  provisionalRules,
+  loadTarificationConfig,
+  valueAtPath,
+} from "../src/pricing/tarification.config";
 
 /**
  * Tests unitaires de la tarification AZƆ̀ (spécification « Tarifs et profils »).
@@ -168,13 +172,29 @@ describe("PricingService — profils prestataires (point 2 de la spec)", () => {
     expect(fees.netAmount).toBe(98500);
   });
 
-  it("LIVREUR et COURSIER : catégorie INDEPENDANT_PERSONNEL, sans prélèvement", () => {
+  it("LIVREUR et COURSIER : catégorie INDEPENDANT_PERSONNEL", () => {
     expect(pricing.profileCategory("LIVREUR")).toBe("INDEPENDANT_PERSONNEL");
     expect(pricing.profileCategory("COURSIER")).toBe("INDEPENDANT_PERSONNEL");
-    expect(pricing.monthlyRevenueShare("LIVREUR", 200000)).toBe(0);
-    expect(pricing.monthlyRevenueShare("COURSIER", 200000)).toBe(0);
-    expect(pricing.profileWithdrawalFees("LIVREUR", 100000).fee).toBe(0);
-    expect(pricing.profileWithdrawalFees("COURSIER", 100000).fee).toBe(0);
+  });
+
+  it("LIVREUR et COURSIER : frais de retrait identiques au Zem indépendant (1,5 %)", () => {
+    for (const profile of ["LIVREUR", "COURSIER"]) {
+      const fees = pricing.profileWithdrawalFees(profile, 100000);
+      expect(fees.feePct).toBe(1.5);
+      expect(fees.fee).toBe(1500);
+      expect(fees.netAmount).toBe(98500);
+      // Identiques au Zem indépendant, règle validée
+      expect(fees).toEqual(pricing.profileWithdrawalFees("ZEM_INDEPENDANT", 100000));
+    }
+  });
+
+  it("LIVREUR et COURSIER : part mensuelle et commission par course encore à définir (0 provisoire)", () => {
+    for (const profile of ["LIVREUR", "COURSIER"]) {
+      // Valeurs provisoires : le 0 ne veut PAS dire « aucun frais, définitivement ».
+      expect(pricing.monthlyRevenueShare(profile, 200000)).toBe(0);
+      expect(pricing.rideCommission({ profile }, 10000)).toBe(0);
+      expect(pricing.getConfig().profiles[profile as "LIVREUR"]._aDefinir?.length).toBeGreaterThan(0);
+    }
   });
 
   it("préfère la règle du profil, sinon celle de l'agence de rattachement, sinon rien", () => {
@@ -196,7 +216,38 @@ describe("Configuration tarifaire", () => {
     expect(config.vehicles.KOALA).toMatchObject({ base: 1200, perKmUpTo15: 375, perKmFrom16: 350 });
     expect(config.vehicles.LEOPARD).toMatchObject({ base: 2500, perKmUpTo15: 900, perKmFrom16: 800 });
     expect(Object.keys(config.agencyLevels)).toEqual(["PRO", "SILVER", "OR", "DIAMANT"]);
-    expect(config.profiles.ZEM_INDEPENDANT).toEqual({ monthlyRevenueSharePct: 15, withdrawalFeePct: 1.5 });
+    expect(config.profiles.ZEM_INDEPENDANT).toMatchObject({ monthlyRevenueSharePct: 15, withdrawalFeePct: 1.5 });
+  });
+
+  it("déclare chaque valeur provisoire « règle à définir », avec sa valeur exacte", () => {
+    const config = loadTarificationConfig();
+    const règles = provisionalRules(config);
+    // Aucune règle validée ne doit être marquée « à définir », et inversement :
+    // chaque valeur provisoire est listée pour ne pas être confondue avec une règle.
+    expect(règles.map((r) => r.chemin).sort()).toEqual([
+      "delivery.commissionPct",
+      "profiles.COURSIER.monthlyRevenueSharePct",
+      "profiles.COURSIER.rideCommissionPct",
+      "profiles.LIVREUR.monthlyRevenueSharePct",
+      "profiles.LIVREUR.rideCommissionPct",
+    ]);
+    for (const règle of règles) {
+      expect(règle.note).toMatch(/règle à définir/i);
+      expect(valueAtPath(config, règle.chemin)).toBe(règle.valeurProvisoire);
+    }
+    // On retrouve aussi l'avertissement au niveau de chaque section concernée
+    expect(config.delivery._aDefinir?.[0]).toMatch(/règle à définir/i);
+    expect(config.profiles.LIVREUR._aDefinir?.join(" ")).toMatch(/règle à définir/i);
+    expect(config.profiles.COURSIER._aDefinir?.join(" ")).toMatch(/règle à définir/i);
+  });
+
+  it("le Zem indépendant n'a aucune commission par course (règle validée, part mensuelle)", () => {
+    const pricing = new PricingService(loadTarificationConfig());
+    const config = loadTarificationConfig();
+    expect(config.profiles.ZEM_INDEPENDANT.rideCommissionPct).toBe(0);
+    expect(pricing.rideCommission({ profile: "ZEM_INDEPENDANT" }, 10000)).toBe(0);
+    // Et sa valeur n'est pas listée comme provisoire
+    expect(provisionalRules(config).some((r) => r.chemin.includes("ZEM_INDEPENDANT"))).toBe(false);
   });
 
   it("n'expose que des montants entiers en FCFA", () => {

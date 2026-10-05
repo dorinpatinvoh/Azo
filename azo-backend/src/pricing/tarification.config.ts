@@ -43,6 +43,18 @@ export type ProfilePricing = {
   category?: string;
   monthlyRevenueSharePct?: number;
   withdrawalFeePct?: number;
+  /** Commission prélevée sur chaque course (0 pour un Zem indépendant : part mensuelle). */
+  rideCommissionPct?: number;
+  _notes?: string;
+  /** Valeurs provisoires « règle à définir » (jamais des règles validées). */
+  _aDefinir?: string[];
+};
+
+/** Valeur provisoire documentée : « règle à définir » côté métier. */
+export type ProvisionalRule = {
+  chemin: string;
+  valeurProvisoire: number;
+  note: string;
 };
 
 export type TarificationConfig = {
@@ -56,9 +68,12 @@ export type TarificationConfig = {
     monthlyRevenueSharePct: number;
     withdrawalFeePct: number;
     rideCommissionPct: number;
+    _aDefinir?: string[];
   };
   agencyActivation: { requiredForOperations: boolean };
-  delivery: { commissionPct: number };
+  delivery: { commissionPct: number; _aDefinir?: string[] };
+  /** Liste des valeurs provisoires : elles ne sont pas des règles validées. */
+  aDefinir?: ProvisionalRule[];
 };
 
 export const DEFAULT_TARIFICATION_CONFIG_PATH = join(__dirname, "tarification.json");
@@ -144,4 +159,17 @@ export function loadTarificationConfig(): TarificationConfig {
 /** Utilisé par les tests pour repartir d'un fichier neuf. */
 export function resetTarificationConfigCache() {
   cached = null;
+}
+
+/** Valeurs provisoires déclarées « règle à définir » (jamais des règles validées). */
+export function provisionalRules(config: TarificationConfig = loadTarificationConfig()): ProvisionalRule[] {
+  return config.aDefinir ?? [];
+}
+
+/** Lit une valeur par chemin pointé (ex. `profiles.LIVREUR.rideCommissionPct`). */
+export function valueAtPath(config: TarificationConfig, path: string): unknown {
+  return path.split(".").reduce<unknown>((node, key) => {
+    if (node && typeof node === "object") return (node as Record<string, unknown>)[key];
+    return undefined;
+  }, config);
 }

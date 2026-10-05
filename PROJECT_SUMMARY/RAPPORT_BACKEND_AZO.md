@@ -69,9 +69,12 @@ paiement unique) et la limite de comptes est refusée au-delà du plafond du niv
 Les gammes **GAZELLE** (800 F + 200 F/km jusqu'à 15 km puis 150 F/km), **KOALA**
 (climatisé : 1 200 F + 375 F/km puis 350 F/km) et **LEOPARD** (2 500 F + 900 F/km puis
 800 F/km) remplacent les anciens types ZEM / ZEM_ELECTRIC / CAR. Les profils
-prestataires (Zem indépendant 15 %/mois + 1,5 % par retrait, LIVREUR et COURSIER en
-catégorie `INDEPENDANT_PERSONNEL`) et les frais de retrait sont implémentés dans
-`src/pricing/`. Tests unitaires : `cd azo-backend && npm test` (35 tests verts).
+prestataires (Zem indépendant 15 %/mois + 1,5 % par retrait, sans commission par course ;
+LIVREUR et COURSIER en catégorie `INDEPENDANT_PERSONNEL` avec 1,5 % par retrait — leurs
+autres règles restant « à définir ») et les frais de retrait sont implémentés dans
+`src/pricing/`. Les valeurs non arbitrées sont listées dans la section `aDefinir` de la
+configuration et jamais présentées comme validées. Tests : `cd azo-backend && npm test`
+(39 tests verts).
 
 ### 4.2. Endpoints de Gestion de Flotte Agence
 - `GET /agencies/me` : Retourne le tableau de bord complet de l'agence (formule, quota utilisé/restant, liste des chauffeurs et coursiers rattachés, chiffre d'affaires brut, commissions et net agence).
