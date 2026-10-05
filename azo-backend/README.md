@@ -60,14 +60,22 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
 | Location | `GET /rentals/catalog`, `POST /rentals`, `GET /rentals/mine` |
 | Marketplace | `POST /marketplace/orders`, `POST /marketplace/orders/:id/validate` |
 | Artisans | `GET /artisans`, `POST /artisans/requests` |
-| Agences | `POST /agencies/drivers`, `DELETE /agencies/drivers/:userId`, `GET /agencies/dashboard` |
-| Admin | `GET /admin/stats`, `GET /admin/users` |
+| Agences | `POST /agencies/activate`, `POST /agencies/drivers`, `DELETE /agencies/drivers/:userId`, `GET /agencies/dashboard` |
+| Tarification | `GET /pricing` (barème public : gammes, paliers km, niveaux d'agence, profils) |
+| Portefeuille | `GET /wallet/withdrawal-quote?amount=`, `POST /wallet/withdraw` |
+| Admin | `GET /admin/stats`, `GET /admin/users`, `POST /admin/settlements/zem-monthly` |
 | Admin — prestataires | `GET /admin/providers`, `GET /admin/providers/stats`, `GET /admin/providers/:id`, `POST /admin/providers/:id/start-review`, `POST /admin/providers/:id/documents/:docId/decision`, `POST /admin/providers/:id/decision`, `POST /admin/providers/:id/reinstate` |
 | Notifications | `GET /notifications`, `POST /notifications/read-all` |
 
 ## 5. Règles métier déjà codées
-- Commission : 15 % pour un indépendant ; pour un chauffeur d'agence, le taux de la
-  formule (PRO 3 %, ARGENT 2,5 %, OR 2 %, DIAMANT 1 %).
+- **Tarification** : tout le barème vient de `src/pricing/tarification.json`
+  (voir `PROJECT_SUMMARY/TARIFICATION.md`) — prix des courses par gamme de véhicule
+  (GAZELLE / KOALA / LEOPARD) et par tranche de 15 km, niveaux d'agence
+  (PRO / SILVER / OR / DIAMANT : activation unique, commission, frais de retrait,
+  plafond de comptes), profils prestataires. Tests : `npm test`.
+- Commission : taux du niveau d'agence pour un chauffeur de flotte ; pour un Zem
+  indépendant, prélèvement **mensuel** de 15 % des revenus du mois (jamais par course),
+  plus 1,5 % sur chaque retrait.
 - Fin de course : le client est débité, le chauffeur crédité (prix − commission).
 - Livraison : double code OTP (ramassage + remise).
 - Marketplace : l'argent est bloqué en séquestre jusqu'à validation du client.

@@ -1,0 +1,115 @@
+{
+  "_notes": {
+    "source": "Spécification métier AZƆ̀ — Tarifs et profils. Implémenté tel quel.",
+    "currency": "FCFA — montants entiers (aucun sous-franc)",
+    "singleSourceOfTruth": "Ce fichier est la SEULE source des tarifs. Aucune règle de prix ne doit être codée en dur dans la logique métier.",
+    "vehicles": "GAZELLE / KOALA / LEOPARD sont les gammes de véhicules (entrée de gamme, intermédiaire climatisé, haut de gamme).",
+    "legacyVehicleMapping": "Types de véhicules historiques encore présents en base (courses et dossiers passés) : ils sont rattachés à une gamme pour la facturation. Aucun nouveau dossier ne les utilise.",
+    "profilesValidated": "ZEM_INDEPENDANT : règle complète et validée (15 % des revenus du mois + 1,5 % par retrait, aucune commission par course). LIVREUR et COURSIER : frais de retrait identiques au Zem (1,5 %) ; leurs autres règles restent à définir.",
+    "provisionalValues": "Toute valeur marquée « règle à définir » (voir la section `aDefinir`) est provisoire : elle n'est PAS une règle validée par le métier. Ne pas la présenter comme telle et ne pas la modifier sans décision.",
+    "unspecifiedProfile": "Profils sans règle définie dans la spécification (ex. conducteur indépendant d'une gamme KOALA/LEOPARD) : aucun prélèvement n'est appliqué tant que le métier ne l'a pas tranché.",
+    "agencyActivation": "Le paiement des frais d'activation est unique et non récurrent ; requiredForOperations = true interdit à une agence non activée d'opérer.",
+    "monthlySettlement": "Le prélèvement des Zem indépendants est mensuel (sur les revenus du mois), jamais par course."
+  },
+
+  "currency": "FCFA",
+  "kmThreshold": 15,
+
+  "vehicles": {
+    "GAZELLE": { "base": 800, "perKmUpTo15": 200, "perKmFrom16": 150 },
+    "KOALA": { "base": 1200, "perKmUpTo15": 375, "perKmFrom16": 350, "airConditioned": true },
+    "LEOPARD": { "base": 2500, "perKmUpTo15": 900, "perKmFrom16": 800 }
+  },
+
+  "agencyLevels": {
+    "PRO": { "activationFee": 100000, "commissionPct": 3, "withdrawalFeePct": 1, "maxAccounts": 25 },
+    "SILVER": { "activationFee": 215500, "commissionPct": 2.5, "withdrawalFeePct": 0.75, "maxAccounts": 50 },
+    "OR": { "activationFee": 450500, "commissionPct": 2, "withdrawalFeePct": 0.5, "maxAccounts": 100 },
+    "DIAMANT": { "activationFee": 600500, "commissionPct": 1, "withdrawalFeePct": 0.25, "maxAccounts": 1000 }
+  },
+
+  "profiles": {
+    "ZEM_INDEPENDANT": {
+      "monthlyRevenueSharePct": 15,
+      "withdrawalFeePct": 1.5,
+      "rideCommissionPct": 0,
+      "_notes": "Règle validée : 15 % des revenus du mois + 1,5 % sur chaque retrait. Aucune commission par course."
+    },
+    "LIVREUR": {
+      "category": "INDEPENDANT_PERSONNEL",
+      "withdrawalFeePct": 1.5,
+      "monthlyRevenueSharePct": 0,
+      "rideCommissionPct": 0,
+      "_notes": "Frais de retrait identiques au Zem indépendant (1,5 %).",
+      "_aDefinir": [
+        "monthlyRevenueSharePct — règle à définir (0 provisoire, ne pas interpréter comme « aucun frais »)",
+        "rideCommissionPct — règle à définir (0 provisoire, ne pas interpréter comme « aucun frais »)"
+      ]
+    },
+    "COURSIER": {
+      "category": "INDEPENDANT_PERSONNEL",
+      "withdrawalFeePct": 1.5,
+      "monthlyRevenueSharePct": 0,
+      "rideCommissionPct": 0,
+      "_notes": "Frais de retrait identiques au Zem indépendant (1,5 %).",
+      "_aDefinir": [
+        "monthlyRevenueSharePct — règle à définir (0 provisoire, ne pas interpréter comme « aucun frais »)",
+        "rideCommissionPct — règle à définir (0 provisoire, ne pas interpréter comme « aucun frais »)"
+      ]
+    }
+  },
+
+  "legacyVehicleMapping": {
+    "ZEM": "GAZELLE",
+    "ZEM_ELECTRIC": "GAZELLE",
+    "CAR": "KOALA"
+  },
+
+  "unspecifiedProfile": {
+    "monthlyRevenueSharePct": 0,
+    "withdrawalFeePct": 0,
+    "rideCommissionPct": 0,
+    "_aDefinir": [
+      "Profils sans règle dans la spécification : aucun prélèvement appliqué, règle à définir si le métier veut les facturer."
+    ]
+  },
+
+  "agencyActivation": {
+    "requiredForOperations": true
+  },
+
+  "delivery": {
+    "commissionPct": 15,
+    "_aDefinir": [
+      "commissionPct — règle à définir : aucun tarif de livraison n'est validé pour le moment. Cette valeur est provisoire (reprise de l'existant) et ne doit pas être présentée comme une règle métier."
+    ]
+  },
+
+  "aDefinir": [
+    {
+      "chemin": "delivery.commissionPct",
+      "valeurProvisoire": 15,
+      "note": "Règle à définir — aucun tarif de livraison validé. Valeur provisoire conservée telle quelle en attendant la règle métier."
+    },
+    {
+      "chemin": "profiles.LIVREUR.monthlyRevenueSharePct",
+      "valeurProvisoire": 0,
+      "note": "Règle à définir — 0 provisoire, ne pas interpréter comme « aucun frais »."
+    },
+    {
+      "chemin": "profiles.LIVREUR.rideCommissionPct",
+      "valeurProvisoire": 0,
+      "note": "Règle à définir — 0 provisoire, ne pas interpréter comme « aucun frais »."
+    },
+    {
+      "chemin": "profiles.COURSIER.monthlyRevenueSharePct",
+      "valeurProvisoire": 0,
+      "note": "Règle à définir — 0 provisoire, ne pas interpréter comme « aucun frais »."
+    },
+    {
+      "chemin": "profiles.COURSIER.rideCommissionPct",
+      "valeurProvisoire": 0,
+      "note": "Règle à définir — 0 provisoire, ne pas interpréter comme « aucun frais »."
+    }
+  ]
+}

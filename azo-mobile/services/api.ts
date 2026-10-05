@@ -198,7 +198,12 @@ export const placesApi = {
 
 /* ==================== COURSES (ZEM / ZEM ÉLECTRIQUE / VOITURE) ==================== */
 
-export type VehicleType = "ZEM" | "ZEM_ELECTRIC" | "CAR";
+/**
+ * Gammes de véhicules AZƆ̀ (barème tarifaire). Les anciens types ZEM / ZEM_ELECTRIC /
+ * CAR ne sont plus proposés : les courses passées sont rattachées à une gamme
+ * (ZEM, ZEM_ELECTRIC → GAZELLE ; CAR → KOALA) via `services/tarification`.
+ */
+export type VehicleType = "GAZELLE" | "KOALA" | "LEOPARD";
 export type RideStatus = "PENDING" | "MATCHED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 // ⚠️ N'ajoute AUCUN autre champ : le backend refuse les champs inconnus.
@@ -210,9 +215,24 @@ export type Estimate = {
   distanceKm: number;
   etaMinutes: number;
   price: number;
-  // Fournis par le calcul détaillé (backend geo.ts) ; absents du tarif forfaitaire actuel.
   durationMin?: number;
-  breakdown?: { label?: string; km: number; perKm: number }[];
+  /** Gamme facturée (GAZELLE / KOALA / LEOPARD), renvoyée par le backend. */
+  gamme?: VehicleType;
+  /** Détail du calcul officiel : base + tranches kilométriques (config tarification). */
+  breakdown?: {
+    gamme: VehicleType;
+    distanceKm: number;
+    kmThreshold: number;
+    base: number;
+    perKmUpTo15: number;
+    perKmFrom16: number;
+    kmInFirstBracket: number;
+    kmInSecondBracket: number;
+    amountInFirstBracket: number;
+    amountInSecondBracket: number;
+    price: number;
+    currency: string;
+  };
 };
 
 export type RidePerson = { fullName?: string | null; phone?: string };
@@ -365,7 +385,7 @@ export type DocumentKind =
   | "CNI" | "SELFIE" | "PERMIS" | "CARTE_GRISE" | "ASSURANCE" | "VISITE_TECHNIQUE"
   | "PHOTO_VEHICULE" | "RCCM" | "IFU" | "STATUTS" | "DIPLOME" | "EXTRAIT_CASIER";
 export type DocumentReview = "PENDING" | "VALID" | "INVALID";
-export type AgencyPlanChoice = "PRO" | "ARGENT" | "OR" | "DIAMANT";
+export type AgencyPlanChoice = "PRO" | "SILVER" | "OR" | "DIAMANT";
 
 /** Référence courte renvoyée par /auth/verify-otp. */
 export type ProviderRef = { id: string; type: ProviderType; status: ProviderStatus };
@@ -624,11 +644,25 @@ export type AgencyDashboardData = {
   seatsUsed: number;
   seatsTotal: number;
   activeRides: number;
+  /** Niveau d'agence : commission et frais de retrait de la grille officielle. */
+  commissionPct: number;
+  withdrawalFeePct: number;
+  /** Activation : paiement unique des frais du niveau avant toute opération. */
+  activated: boolean;
   roster: AgencyRosterMember[];
 };
 
 export const agenciesApi = {
   dashboard: () => api.get<AgencyDashboardData>(`${P}/agencies/dashboard`),
+  /** Paiement unique des frais d'activation du niveau (une seule fois, non récurrent). */
+  activate: () =>
+    api.post<{
+      agencyId: string;
+      plan: AgencyPlanChoice;
+      activationFee: number;
+      feePaidAt: string;
+      canOperate: boolean;
+    }>(`${P}/agencies/activate`),
   attachDriver: (phone: string) =>
     api.post<{ driver: { id: string; phone: string; fullName: string | null }; agencyId: string }>(
       `${P}/agencies/drivers`,

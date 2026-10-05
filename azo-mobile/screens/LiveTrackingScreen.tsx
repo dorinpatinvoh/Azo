@@ -22,7 +22,7 @@ const STATUS_TEXT: Record<RideStatus, string> = {
   COMPLETED: "Course terminée",
   CANCELLED: "Course annulée",
 };
-const VEHICLE_LABEL: Record<VehicleType, string> = { CAR: "Voiture", ZEM: "Zem", ZEM_ELECTRIC: "Zem électrique" };
+const VEHICLE_LABEL: Record<VehicleType, string> = { GAZELLE: "Gazelle · Zem", KOALA: "Koala · Voiture climatisée", LEOPARD: "Léopard · Haut de gamme" };
 
 function distanceKm(a: LatLng, b: LatLng) {
   const r = (d: number) => (d * Math.PI) / 180;

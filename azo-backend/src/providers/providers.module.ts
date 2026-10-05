@@ -161,19 +161,19 @@ export const PHOTO_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   ARTISAN: ["SELFIE", "CNI"],
 };
 
-// Choix de véhicule et spécialité par type d'activité :
-// - DRIVER  : Zem indépendant (moto-taxi), Zem électrique indépendant, Voiture indépendante
-// - COURIER : Coursier express, Coursier personnel (courses/achats), Livreur de colis
+// Choix de véhicule et spécialité par type d'activité.
+// Les gammes GAZELLE / KOALA / LEOPARD viennent de la configuration tarifaire :
+//   GAZELLE = entrée de gamme · KOALA = intermédiaire climatisé · LEOPARD = haut de gamme.
 const DRIVER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
-  { value: "ZEM", label: "Zem indépendant (Moto-taxi)", hint: "Courses rapides en ville — commission 15 %" },
-  { value: "ZEM_ELECTRIC", label: "Zem électrique indépendant", hint: "Moto électrique écologique — commission 15 %" },
-  { value: "CAR", label: "Voiture — Conducteur indépendant", hint: "Courses confort & climatisées — commission 15 %" },
+  { value: "GAZELLE", label: "Gazelle — Zem / moto-taxi", hint: "Entrée de gamme, courses rapides en ville" },
+  { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Intermédiaire, confort avec climatiseur" },
+  { value: "LEOPARD", label: "Léopard — Berline haut de gamme", hint: "Haut de gamme, trajets premium" },
 ];
 
 const COURIER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
-  { value: "ZEM", label: "Moto / Zem (Coursier & Livreur)", hint: "Plis, courses personnelles et colis en ville" },
-  { value: "ZEM_ELECTRIC", label: "Moto électrique (Coursier & Livreur)", hint: "Livraisons rapides & écologiques" },
-  { value: "CAR", label: "Voiture / Fourgonnette (Livreur)", hint: "Colis moyens, achats et marchandises" },
+  { value: "GAZELLE", label: "Gazelle — Moto / Zem (coursier)", hint: "Plis, courses personnelles et colis en ville" },
+  { value: "KOALA", label: "Koala — Voiture climatisée (livreur)", hint: "Colis moyens, achats et marchandises" },
+  { value: "LEOPARD", label: "Léopard — Berline haut de gamme (livreur)", hint: "Livraisons premium et clients VIP" },
 ];
 
 const COURIER_SPECIALTIES: { id: string; label: string; hint: string }[] = [
@@ -269,12 +269,12 @@ class SaveApplicationDto {
   @IsOptional() @IsArray() @IsString({ each: true }) zones?: string[];
   @IsOptional() @IsString() @MaxLength(4000) bio?: string;
   @IsOptional() @IsInt() @Min(0) @Max(60) experienceYears?: number;
-  @IsOptional() @IsIn(["ZEM", "ZEM_ELECTRIC", "CAR"]) vehicleType?: VehicleType;
+  @IsOptional() @IsIn(["GAZELLE", "KOALA", "LEOPARD"]) vehicleType?: VehicleType;
   @IsOptional() @IsString() @MaxLength(60) vehicleModel?: string;
   @IsOptional() @IsString() @MaxLength(30) plateNumber?: string;
   @IsOptional() @IsString() @MaxLength(60) categoryId?: string;
   @IsOptional() @IsString() @MaxLength(120) agencyName?: string;
-  @IsOptional() @IsIn(["PRO", "ARGENT", "OR", "DIAMANT"]) plan?: AgencyPlan;
+  @IsOptional() @IsIn(["PRO", "SILVER", "OR", "DIAMANT"]) plan?: AgencyPlan;
 
   // Champs complémentaires pour l'inscription complète d'une Agence (Bénin)
   @IsOptional() @IsString() @MaxLength(60) representativeFirstName?: string;
@@ -1044,7 +1044,8 @@ export class ProvidersService {
       let agencyId = provider.agencyId;
 
       if (provider.type === "AGENCY") {
-        const plan = provider.plan as AgencyPlan;
+        // Formule choisie dans le dossier ; à défaut le niveau d'entrée (PRO) de la grille.
+        const plan = (provider.plan as AgencyPlan) ?? "PRO";
         const formula = PLANS[plan];
         // L'agence est créée À l'approbation : un dossier refusé ne laisse aucune agence
         // orpheline, et la formule (commission + plafond de comptes) vient du dossier.

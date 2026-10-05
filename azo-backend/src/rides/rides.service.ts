@@ -1,20 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { VehicleType } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { WalletService } from "../wallet/wallet.module";
 import { NotificationsService } from "../notifications/notifications.module";
+import { PricingService } from "../pricing/pricing.module";
 import { RidesGateway } from "./rides.gateway";
 import { CreateRideDto } from "./dto/create-ride.dto";
-
-// Tarifs fixes de la maquette (FCFA). À remplacer par un vrai calcul distance/durée.
-const BASE_PRICES: Record<VehicleType, number> = {
-  ZEM: 650,
-  ZEM_ELECTRIC: 600,
-  CAR: 1850,
-};
-
-// Taux de commission AZƆ̀ : 15% pour un indépendant, taux de la formule pour une agence
-const INDEPENDENT_RATE = 0.15;
 
 export function rideSecurityPin(rideId: string): string {
   let hash = 2166136261;
@@ -31,6 +21,7 @@ export class RidesService {
     private prisma: PrismaService,
     private wallet: WalletService,
     private notifications: NotificationsService,
+    private pricing: PricingService,
     private gateway: RidesGateway
   ) {}
 
@@ -45,15 +36,22 @@ export class RidesService {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  // Estimation affichée avant confirmation (écran "Sélection trajet")
+  // Estimation affichée avant confirmation (écran "Sélection trajet").
+  // Le prix vient du barème configuré : tarif de base + coût kilométrique par tranche.
   estimate(dto: CreateRideDto) {
     const km = this.distanceKm(dto.originLat, dto.originLng, dto.destLat, dto.destLng);
-    const price = BASE_PRICES[dto.vehicleType];
-    return { distanceKm: Number(km.toFixed(1)), etaMinutes: Math.max(3, Math.round(km * 3)), price };
+    const breakdown = this.pricing.breakdown(km, dto.vehicleType);
+    return {
+      distanceKm: Number(km.toFixed(1)),
+      etaMinutes: Math.max(3, Math.round(km * 3)),
+      price: breakdown.price,
+      gamme: breakdown.gamme,
+      breakdown,
+    };
   }
 
   async create(clientId: string, dto: CreateRideDto) {
-    const price = BASE_PRICES[dto.vehicleType];
+    const { price } = this.estimate(dto);
     return this.prisma.ride.create({
       data: { ...dto, clientId, price, commission: 0, status: "PENDING" },
     });
@@ -133,14 +131,34 @@ export class RidesService {
     return this.gateway.addChatMessage(rideId, user.userId, role, name, dto.text);
   }
 
-  // Fin de course : paiement + commission + revenus du chauffeur, en une transaction
+  // Fin de course : paiement + commission + revenus du chauffeur, en une transaction.
+  // Commission : taux du niveau d'agence si le conducteur est rattaché à une flotte,
+  // sinon règles du profil prestataire (config tarifaire).
   async complete(rideId: string, driverId: string) {
     const ride = await this.getOwnedByDriver(rideId, driverId);
     if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course n'est pas en cours");
 
-    const driver = await this.prisma.user.findUnique({ where: { id: driverId }, include: { agency: true } });
-    const rate = driver?.agency ? driver.agency.commissionRate : INDEPENDENT_RATE;
-    const commission = Math.round(ride.price * rate);
+    const driver = await this.prisma.user.findUnique({
+      where: { id: driverId },
+      include: { agency: true, provider: true },
+    });
+
+    // Une agence ne peut opérer qu'une fois ses frais d'activation payés.
+    if (driver?.agency && !this.pricing.agencyCanOperate(driver.agency)) {
+      throw new BadRequestException(
+        `Agence non activée : les frais d'activation de la formule ${driver.agency.plan} ` +
+          `(${this.pricing.agencyActivationFee(driver.agency.plan).toLocaleString("fr-FR")} FCFA, paiement unique) ` +
+          "doivent être réglés avant toute course."
+      );
+    }
+
+    const commission = this.pricing.rideCommission(
+      {
+        profile: this.profileKeyOf(driver),
+        agencyLevel: driver?.agency?.plan ?? null,
+      },
+      ride.price
+    );
     const driverGain = ride.price - commission;
     const ref = `Course #${ride.id.slice(0, 6)}`;
 
@@ -214,6 +232,28 @@ export class RidesService {
       },
       orderBy: { createdAt: "desc" },
     });
+  }
+
+  /** Profil prestataire (spec tarifaire) d'un conducteur, d'après son dossier et son véhicule. */
+  private profileKeyOf(
+    driver: {
+      provider?: { type: string; vehicleType: string | null } | null;
+      agencyId?: string | null;
+    } | null
+  ): string | null {
+    if (!driver?.provider) return null;
+    const type = String(driver.provider.type).toUpperCase();
+    if (type === "COURIER") return "COURSIER";
+    if (type === "DRIVER") {
+      // Un conducteur de moto-taxi (gamme GAZELLE) sans agence est un Zem
+      // indépendant : il paie 15 % de ses revenus du mois, pas par course.
+      const gamme = driver.provider.vehicleType
+        ? this.pricing.resolveGamme(driver.provider.vehicleType)
+        : null;
+      const hasAgency = !!driver.agencyId;
+      return gamme === "GAZELLE" && !hasAgency ? "ZEM_INDEPENDANT" : null;
+    }
+    return null;
   }
 
   private async getOwnedByDriver(rideId: string, driverId: string) {

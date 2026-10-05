@@ -24,6 +24,11 @@ import {
   errorMessage,
 } from "../services/api";
 import {
+  agencyLevelPricing,
+  tarification,
+  type AgencyLevel,
+} from "../services/tarification";
+import {
   cleanBeninDigits,
   formatBeninPhoneDisplay,
   formatBeninPhoneInput,
@@ -39,12 +44,19 @@ type RosterFilter = "ALL" | "EN_COURSE" | "DISPONIBLE";
 
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
 
-const OFFICIAL_AGENCY_GRID = [
-  { plan: "PRO", name: "AGENCE PRO", fee: 100000, maxAccounts: 10, commission: "3 %" },
-  { plan: "ARGENT", name: "AGENCE ARGENT", fee: 215500, maxAccounts: 25, commission: "2,5 %" },
-  { plan: "OR", name: "AGENCE OR", fee: 450500, maxAccounts: 100, commission: "2 %" },
-  { plan: "DIAMANT", name: "AGENCE DIAMANT", fee: 600500, maxAccounts: 1000, commission: "1 %" },
-] as const;
+// Grille officielle AZƆ̀ : lue depuis la configuration tarifaire partagée
+// (aucun montant codé en dur). Les niveaux ne concernent QUE les agences.
+const OFFICIAL_AGENCY_GRID = (Object.keys(tarification().agencyLevels) as AgencyLevel[]).map((plan) => {
+  const rules = agencyLevelPricing(plan);
+  return {
+    plan,
+    name: `AGENCE ${plan}`,
+    fee: rules.activationFee,
+    maxAccounts: rules.maxAccounts,
+    commission: `${String(rules.commissionPct).replace(".", ",")} %`,
+    withdrawalFeePct: rules.withdrawalFeePct,
+  };
+});
 
 export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) {
   const [data, setData] = useState<AgencyDashboardData | null>(null);
@@ -109,6 +121,41 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
     } finally {
       setAdding(false);
     }
+  }
+
+  // Activation de l'agence : paiement UNIQUE des frais du niveau (non récurrent).
+  const [activating, setActivating] = useState(false);
+
+  function confirmActivation() {
+    if (!data) return;
+    Alert.alert(
+      "Activer mon agence",
+      `Régler ${fcfa(data.agency.activationFee)} une seule fois (frais d'activation ${data.agency.planLabel}) ?\n\n` +
+        "Le montant est débité de ton portefeuille AZƆ̀ Pay. Tant que l'activation n'est pas réglée, " +
+        "l'agence ne peut ni gérer de comptes ni opérer.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Payer et activer",
+          onPress: async () => {
+            setActivating(true);
+            try {
+              const res = await agenciesApi.activate();
+              await load();
+              Alert.alert(
+                "Agence activée ✅",
+                `${res.plan} — frais d'activation réglés (${fcfa(res.activationFee)}). ` +
+                  `${agencyLevelPricing(res.plan).maxAccounts.toLocaleString("fr-FR")} comptes autorisés.`
+              );
+            } catch (e) {
+              Alert.alert("Activation impossible", errorMessage(e));
+            } finally {
+              setActivating(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   function confirmDetach(member: AgencyRosterMember) {
@@ -181,6 +228,24 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
           </View>
         )}
       </View>
+
+      {/* Activation : paiement unique des frais du niveau, obligatoire pour opérer */}
+      {data && !data.activated && (
+        <View style={styles.activationBanner}>
+          <MaterialIcons name="lock-clock" size={18} color={colors.error} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.activationTitle}>Agence non activée</Text>
+            <Text style={styles.activationText}>
+              Règle {fcfa(data.agency.activationFee)} une seule fois (frais d'activation {data.agency.planLabel})
+              pour gérer des comptes et opérer. Formule : commission {data.commissionPct} % · retrait{" "}
+              {data.withdrawalFeePct} % · {agencyLevelPricing(data.agency.plan).maxAccounts.toLocaleString("fr-FR")} comptes.
+            </Text>
+          </View>
+          <Pressable style={styles.activationBtn} onPress={confirmActivation} disabled={activating}>
+            <Text style={styles.activationBtnText}>{activating ? "…" : "Activer"}</Text>
+          </Pressable>
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.center}>
@@ -504,6 +569,25 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
 }
 
 const styles = StyleSheet.create({
+  activationBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.errorContainer,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  activationTitle: { ...typography.labelMd, color: colors.error, fontWeight: "800" },
+  activationText: { ...typography.labelSm, color: colors.error, marginTop: 2, lineHeight: 17 },
+  activationBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  activationBtnText: { ...typography.labelMd, color: "#fff", fontWeight: "800" },
   safe: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: spacing.lg },
   header: {

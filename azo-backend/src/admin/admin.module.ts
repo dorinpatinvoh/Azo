@@ -18,6 +18,16 @@ import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { WalletModule, WalletService } from "../wallet/wallet.module";
+import { PricingModule, PricingService } from "../pricing/pricing.module";
+
+class MonthlySettlementDto {
+  /** Mois à prélever, format AAAA-MM (par défaut : mois en cours). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(7)
+  period?: string;
+}
 
 class UpdateUserStatusDto {
   @IsIn(["ACTIVE", "BLOCKED"])
@@ -31,7 +41,17 @@ class UpdateUserStatusDto {
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private wallet: WalletService,
+    private pricing: PricingService
+  ) {}
+
+  // Prélèvement mensuel des Zem indépendants (15 % des revenus du mois), délégué au
+  // portefeuille pour rester idempotent et auditable.
+  chargeZemMonthly(period?: string) {
+    return this.wallet.chargeMonthlyIndependentZem(period);
+  }
 
   // Indicateurs globaux de l'écran "Tableau de bord administrateur"
   async stats() {
@@ -194,7 +214,18 @@ export class AdminController {
   auditLog() {
     return this.svc.auditLog();
   }
+
+  // POST /admin/settlements/zem-monthly  { "period": "2026-09" }
+  // Prélèvement mensuel des Zem indépendants : 15 % des revenus du mois (idempotent).
+  @Post("settlements/zem-monthly")
+  zemMonthly(@Body() dto: MonthlySettlementDto) {
+    return this.svc.chargeZemMonthly(dto.period);
+  }
 }
 
-@Module({ controllers: [AdminController], providers: [AdminService] })
+@Module({
+  imports: [WalletModule, PricingModule],
+  controllers: [AdminController],
+  providers: [AdminService],
+})
 export class AdminModule {}

@@ -45,10 +45,11 @@ Dès la validation du code OTP (ou à la réouverture de l'application grâce à
   - Prévisualisation miniature instantanée sur chaque pièce justificative.
   - Blocage strict de la soumission tant que les **2 pièces obligatoires (`SELFIE` + `CNI`)** ne sont pas jointes.
 - **Application de la Nouvelle Grille Officielle AZƆ̀ pour les Agences** :
-  - **Formule PRO** : `100 000 FCFA` — Jusqu'à **10 comptes** — Commission **3 %**.
-  - **Formule ARGENT** : `215 500 FCFA` — Jusqu'à **25 comptes** — Commission **2,5 %**.
-  - **Formule OR** : `450 500 FCFA` — Jusqu'à **100 comptes** — Commission **2 %**.
-  - **Formule DIAMANT** : `600 500 FCFA` — Jusqu'à **1 000 comptes** — Commission **1 %**.
+  - **Niveau PRO** : `100 000 FCFA` (activation unique) — Jusqu'à **25 comptes** — Commission **3 %** — Retrait **1 %**.
+  - **Niveau SILVER** : `215 500 FCFA` — Jusqu'à **50 comptes** — Commission **2,5 %** — Retrait **0,75 %**.
+  - **Niveau OR** : `450 500 FCFA` — Jusqu'à **100 comptes** — Commission **2 %** — Retrait **0,50 %**.
+  - **Niveau DIAMANT** : `600 500 FCFA` — Jusqu'à **1 000 comptes** — Commission **1 %** — Retrait **0,25 %**.
+  - **Grille lue depuis la configuration tarifaire** (`services/tarification.ts`) : aucun montant codé en dur dans l'app.
 
 ### 3.2. Console d'Administration Mobile (`AdminProvidersScreen.tsx`)
 - **Tableau de bord analytique (3 onglets)** :
@@ -60,7 +61,7 @@ Dès la validation du code OTP (ou à la réouverture de l'application grâce à
 - **Corrections UI/UX** : Harmonisation de la hauteur des boutons de filtre (`flexGrow: 0`), alignement des cartes et suppression du bouton flottant de développement (`⋮⋮`) pour un rendu 100 % production.
 
 ### 3.3. Tableau de Bord Agence (`AgencyDashboardScreen.tsx`)
-- **Suivi de la formule et du quota** : Affichage en temps réel du plan souscrit (*PRO, ARGENT, OR, DIAMANT*), du taux de commission, des frais d'activation et de la jauge d'occupation de la flotte (ex. `3 / 25 comptes`).
+- **Suivi de la formule et du quota** : Affichage en temps réel du plan souscrit (*PRO, SILVER, OR, DIAMANT*), du taux de commission, des frais d'activation et de la jauge d'occupation de la flotte (ex. `3 / 25 comptes`).
 - **Gestion de la flotte en direct** :
   - Rattachement d'un chauffeur ou coursier approuvé via son numéro béninois à 10 chiffres (`01XXXXXXXX`).
   - Retrait d'un membre de la flotte en un clic.
@@ -100,7 +101,7 @@ Afin de résoudre la fermeture automatique de l'application à l'ouverture sur s
 | `azo-mobile/screens/OtpLoginScreen.tsx` | Interface aérée, format Bénin 10 chiffres (`01...`), bannière SMS OTP 5s, sélecteur serveur |
 | `azo-mobile/screens/ProviderOnboardingScreen.tsx` | Upload photo caméra/galerie (`SELFIE` + `CNI`), grille officielle Agences AZƆ̀ |
 | `azo-mobile/screens/AdminProvidersScreen.tsx` | Console Admin 3 onglets, aperçu & zoom photos KYC, gestion utilisateurs, UI/UX corrigée |
-| `azo-mobile/screens/AgencyDashboardScreen.tsx` | Gestion de flotte Agence, quotas PRO/ARGENT/OR/DIAMANT, rattachement chauffeurs |
+| `azo-mobile/screens/AgencyDashboardScreen.tsx` | Gestion de flotte Agence, quotas PRO/SILVER/OR/DIAMANT, activation payante, rattachement chauffeurs |
 | `azo-mobile/screens/CourierHomeScreen.tsx` | Espace Coursier/Livreur, radar de colis, suivi des livraisons et gains FCFA |
 | `azo-mobile/screens/LiveTrackingScreen.tsx` | Suivi de course en temps réel migré sur `OSMMapView` (OpenStreetMap) |
 | `azo-mobile/services/api.ts` | Client API pointant sur `https://azo-backend.onrender.com` + tolérance cold-start (45s) |

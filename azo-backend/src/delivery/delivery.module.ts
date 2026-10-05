@@ -18,8 +18,8 @@ import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { WalletModule, WalletService } from "../wallet/wallet.module";
 import { NotificationsModule, NotificationsService } from "../notifications/notifications.module";
+import { PricingModule, PricingService } from "../pricing/pricing.module";
 
-const COMMISSION_RATE = 0.15;
 
 class CreateDeliveryDto {
   @IsString() @MaxLength(30) packageType: string; // doc | small | medium | personal
@@ -40,7 +40,8 @@ export class DeliveryService {
   constructor(
     private prisma: PrismaService,
     private wallet: WalletService,
-    private notifications: NotificationsService
+    private notifications: NotificationsService,
+    private pricing: PricingService
   ) {}
 
   private async enrich(items: (Delivery & { client?: { fullName: string | null; phone: string } })[]) {
@@ -54,7 +55,7 @@ export class DeliveryService {
     const courierMap = new Map(couriers.map((c) => [c.id, { fullName: c.fullName, phone: c.phone }]));
     return items.map((d) => ({
       ...d,
-      commission: Math.round(d.price * COMMISSION_RATE),
+      commission: this.pricing.deliveryCommission(d.price),
       courier: d.courierId ? courierMap.get(d.courierId) ?? null : null,
     }));
   }
@@ -228,7 +229,7 @@ export class DeliveryService {
     }
 
     const courierId = d.courierId ?? userId;
-    const commission = Math.round(d.price * COMMISSION_RATE);
+    const commission = this.pricing.deliveryCommission(d.price);
     const net = d.price - commission;
 
     if (d.payer === "SENDER" && courierId !== d.clientId) {
@@ -369,7 +370,7 @@ export class DeliveryController {
 }
 
 @Module({
-  imports: [WalletModule, NotificationsModule],
+  imports: [WalletModule, NotificationsModule, PricingModule],
   controllers: [DeliveryController],
   providers: [DeliveryService],
 })
