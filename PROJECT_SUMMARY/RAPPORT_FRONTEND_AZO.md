@@ -3,7 +3,7 @@
 **Projet :** Plateforme de Mobilité, Transport & Livraison Urbaine **AZƆ̀** (Bénin)  
 **Périmètre :** Application Mobile Cross-Platform (`azo-mobile` — React Native / Expo)  
 **Destinataires :** Direction Générale & Responsables Techniques  
-**Date :** 02 Octobre 2026  
+**Date :** 02 Octobre 2026 — *mise à jour du 5 octobre 2026 (commande de Zem)*  
 
 ---
 
@@ -72,7 +72,26 @@ Dès la validation du code OTP (ou à la réouverture de l'application grâce à
 - **Cycle de vie complet d'une livraison** :
   - Acceptation de la mission (`ASSIGNED`) $\rightarrow$ Confirmation de collecte (`PICKED_UP`) $\rightarrow$ Confirmation de livraison (`DELIVERED`) avec crédit automatique du portefeuille **AZƆ̀ Pay**.
 
-### 3.5. Cartographie OpenStreetMap & Suivi Temps Réel (`RideBookingScreen.tsx` & `LiveTrackingScreen.tsx`)
+### 3.5. Commande d'un Zem en deux temps (`RideBookingScreen.tsx`) — 5 octobre 2026
+Le parcours Zem est désormais séparé de celui des voitures :
+
+1. **Étape 1 — écran dédié « Quel Zem veux-tu ? »** : deux grandes cartes, **Zem à essence** et
+   **Zem électrique**, avec le rappel que les deux ont le même tarif (montants lus dans la
+   configuration tarifaire partagée, jamais codés en dur). Le retour conserve le trajet déjà saisi.
+2. **Étape 2 — destination et suite du parcours** : le trajet, l'estimation officielle, le solde
+   AZƆ̀ Pay et la confirmation. Un bandeau rappelle le Zem choisi avec un bouton **Changer**
+   (retour à l'étape 1 sans rien perdre).
+3. **Filière voiture** : l'écran propose uniquement les trois voitures (**Gazelle**, **Koala**,
+   **Léopard**), avec le libellé « Choisis ta voiture » — les noms de gammes ne s'appliquent plus
+   jamais à un Zem.
+4. **Radar chauffeur** (`DriverHomeScreen.tsx`) : le dossier prestataire déclare un véhicule
+   (Zem essence / Zem électrique / Gazelle / Koala / Léopard) ; l'écran affiche « Radar Zem à
+   essence — tu ne vois que ces demandes » et la liste ne contient que les demandes compatibles.
+5. **Enrôlement prestataire** (`ProviderOnboardingScreen.tsx`) : les véhicules sont présentés en
+   deux groupes, **Moto-taxi (Zem)** puis **Voiture**, avec les icônes moto essence / moto
+   électrique / voiture.
+
+### 3.6. Cartographie OpenStreetMap & Suivi Temps Réel (`RideBookingScreen.tsx` & `LiveTrackingScreen.tsx`)
 - **Migration complète vers `OSMMapView` (Leaflet / OpenStreetMap)** :
   - Remplacement définitif de `react-native-maps` dans `LiveTrackingScreen.tsx` et `RideTrackingScreen.tsx` par `OSMMapView`.
   - **Avantage majeur** : Affichage fluide des cartes de Cotonou (Étoile Rouge, Ganhi, Haie Vive, Akpakpa, Fidjrossè, Calavi) **sans nécessiter de clé API Google Maps payante** et sans risque de crash Android lié aux certificats SHA-1.
@@ -99,6 +118,10 @@ Afin de résoudre la fermeture automatique de l'application à l'ouverture sur s
 | :--- | :--- |
 | `azo-mobile/App.tsx` | Routage multi-rôles, restauration de session, `RootErrorBoundary`, masquage du bouton de dev |
 | `azo-mobile/screens/OtpLoginScreen.tsx` | Interface aérée, format Bénin 10 chiffres (`01...`), bannière SMS OTP 5s, sélecteur serveur |
+| `azo-mobile/screens/RideBookingScreen.tsx` | **Commande Zem en 2 temps** : étape « Zem essence / Zem électrique » puis destination, estimation et confirmation ; voitures limitées à Gazelle / Koala / Léopard |
+| `azo-mobile/screens/DriverHomeScreen.tsx` | Radar filtré sur le véhicule déclaré, bandeau « Radar <véhicule> », état vide explicite |
+| `azo-mobile/screens/ProviderOnboardingScreen.tsx` | Choix de véhicule groupé en deux filières : Moto-taxi (Zem essence / électrique) puis Voiture (Gazelle / Koala / Léopard) |
+| `azo-mobile/services/tarification.ts` & `utils/rideDisplay.ts` | Filières `ZEM` / `CAR`, libellés et icônes des 5 véhicules, résolution des anciens types |
 | `azo-mobile/screens/ProviderOnboardingScreen.tsx` | Upload photo caméra/galerie (`SELFIE` + `CNI`), grille officielle Agences AZƆ̀ |
 | `azo-mobile/screens/AdminProvidersScreen.tsx` | Console Admin 3 onglets, aperçu & zoom photos KYC, gestion utilisateurs, UI/UX corrigée |
 | `azo-mobile/screens/AgencyDashboardScreen.tsx` | Gestion de flotte Agence, quotas PRO/SILVER/OR/DIAMANT, activation payante, rattachement chauffeurs |

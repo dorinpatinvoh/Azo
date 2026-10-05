@@ -21,10 +21,25 @@ Points techniques:
 
 ## 2. Course (Ride)
 
-- Écran 1: Demande (origine/destination) + choix type véhicule
+> **Mise à jour du 5 octobre 2026 — deux filières distinctes :**
+> **Zem** (moto-taxi) et **Voiture** ne partagent plus le même parcours.
+> Le détail complet est dans [`PARCOURS_ZEM.md`](./PARCOURS_ZEM.md).
+
+**Parcours Zem (`ZEM_ESSENCE` / `ZEM_ELECTRIC`)**
+- Écran 0: Interface « Quel Zem veux-tu ? » — **Zem à essence** ou **Zem électrique**
+  (les deux ont le même tarif : 800 F + 200 F/km jusqu'à 15 km, puis 150 F/km)
+- Écran 1: Demande (origine/destination) + rappel du Zem choisi (bouton « Changer »)
+- Écran 2: Estimation prix + confirmation (paiement AZƆ̀ Pay)
+
+**Parcours Voiture (`GAZELLE` / `KOALA` / `LEOPARD`)**
+- Écran 1: Demande (origine/destination) + choix de la gamme de voiture
 - Écran 2: Estimation prix + confirmation
+
+**Commun**
+- Radar chauffeur : chaque prestataire ne reçoit que les demandes de **son** véhicule
+  (un Zem à essence ne voit pas les demandes de Zem électrique).
 - Backend : création de `Ride` (PENDING)
-- Matching : recherche de driver (algorithme de proximité) -> MATCHED
+- Matching : recherche manuelle (les chauffeurs *pollent* `GET /rides/pending`) -> MATCHED
 - Suivi : position du driver en temps réel via Socket.IO
 - Fin de course : calcul prix final, prélèvement (wallet / PSP), création `Transaction`
 - Notation : écran de notation après la course

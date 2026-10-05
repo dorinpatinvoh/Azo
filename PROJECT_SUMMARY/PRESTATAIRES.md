@@ -45,7 +45,7 @@ admin. Seuls le formulaire et l'espace métier changent selon le type.
 
 ```prisma
 enum ProviderType {
-  DRIVER    // chauffeur indépendant (zem, zem électrique, voiture)
+  DRIVER    // chauffeur indépendant : moto-taxi Zem (essence / électrique) ou voiture
   AGENCY    // agence / flotte
   ARTISAN   // plombier, électricien, maçon, couturier…
   COURIER   // livreur de colis / coursier
@@ -237,8 +237,8 @@ Aucun choix de rôle à cette étape. **Le sélecteur « Client / Conducteur / A
 l'écran de connexion disparaît** : c'est la fin du trou de sécurité actuel.
 
 ### 5.2 Devenir prestataire — wizard en 5 étapes (brouillon auto-sauvegardé)
-1. **Type d'activité** — cartes : Zem / Zem électrique / Voiture · Agence de flotte ·
-   Artisan (catégorie) · Livreur. Une seule demande active par compte.
+1. **Type d'activité** — cartes : Zem / Voiture · Agence de flotte · Coursier / Livreur.
+   Une seule demande active par compte.
 2. **Identité** — nom complet (tel que sur la CNI), ville, zones desservies, années
    d'expérience ; pour une agence : raison sociale, RCCM, IFU, formule choisie avec le
    tarif affiché (45 000 → 500 000 F) et le solde wallet disponible.
@@ -402,7 +402,10 @@ backend : les endpoints sont les mêmes.
 ## 11. Décisions retenues (mis à jour le 2 octobre 2026)
 
 1. **Périmètre des activités AZƆ̀ (sans Artisan)** : AZƆ̀ opère uniquement sur :
-   - **Zem / Chauffeur (`DRIVER`)** : Zem indépendant, Zem électrique, Voiture confort (indépendant ou rattaché à une agence).
+   - **Zem / Chauffeur (`DRIVER`)** — deux filières de véhicules (mise à jour du 5 octobre 2026) :
+     **Moto-taxi (Zem)** : *Zem à essence* (`ZEM_ESSENCE`) ou *Zem électrique* (`ZEM_ELECTRIC`),
+     même tarif pour les deux ; **Voiture** : *Gazelle*, *Koala (climatisée)* ou *Léopard (premium)*.
+     Indépendant ou rattaché à une agence. Le radar ne présente que les demandes du véhicule déclaré.
    - **Coursier / Livreur (`COURIER`)** : Coursier Express (plis & colis urgents), Coursier Personnel (courses, pharmacie, achats personnels), Livreur Colis & Marchandises.
    - **Agence de transport / flotte (`AGENCY`)** : gestion d'une flotte de Zem, voitures et coursiers.
    - Il n'y a **pas d'Artisans** sur la plateforme (`VISIBLE_PROVIDER_TYPES = ["DRIVER", "COURIER", "AGENCY"]`).

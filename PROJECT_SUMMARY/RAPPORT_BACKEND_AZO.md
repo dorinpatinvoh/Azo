@@ -4,7 +4,7 @@
 **Périmètre :** Serveur API & Base de Données (`azo-backend` — NestJS / Prisma / PostgreSQL)  
 **URL de Production :** `https://azo-backend.onrender.com`  
 **Destinataires :** Direction Générale & Responsables Techniques  
-**Date :** 02 Octobre 2026  
+**Date :** 02 Octobre 2026 — *mise à jour du 5 octobre 2026 (filière Zem essence / électrique)*  
 
 ---
 
@@ -65,16 +65,38 @@ La grille vient de la configuration tarifaire (`src/pricing/tarification.json`, 
 Une agence n'opère qu'une fois ses frais d'activation réglés (`POST /agencies/activate`,
 paiement unique) et la limite de comptes est refusée au-delà du plafond du niveau.
 
-### 4.1bis. Tarification des courses (gammes de véhicules)
-Les gammes **GAZELLE** (800 F + 200 F/km jusqu'à 15 km puis 150 F/km), **KOALA**
-(climatisé : 1 200 F + 375 F/km puis 350 F/km) et **LEOPARD** (2 500 F + 900 F/km puis
-800 F/km) remplacent les anciens types ZEM / ZEM_ELECTRIC / CAR. Les profils
-prestataires (Zem indépendant 15 %/mois + 1,5 % par retrait, sans commission par course ;
-LIVREUR et COURSIER en catégorie `INDEPENDANT_PERSONNEL` avec 1,5 % par retrait — leurs
-autres règles restant « à définir ») et les frais de retrait sont implémentés dans
-`src/pricing/`. Les valeurs non arbitrées sont listées dans la section `aDefinir` de la
-configuration et jamais présentées comme validées. Tests : `cd azo-backend && npm test`
-(39 tests verts).
+### 4.1bis. Tarification des courses — deux filières distinctes (mise à jour du 5 octobre 2026)
+Les véhicules sont désormais répartis en **deux filières**, ce qui sépare enfin la commande
+d'un Zem de celle d'une voiture :
+
+| Filière | Types | Tarifs |
+| :--- | :--- | :--- |
+| **Moto-taxi (Zem)** | `ZEM_ESSENCE`, `ZEM_ELECTRIC` | **800 F + 200 F/km** jusqu'à 15 km, puis **150 F/km** — **tarif identique pour les deux types** (décision du 5 octobre 2026) |
+| **Voiture** | `GAZELLE`, `KOALA`, `LEOPARD` | Gazelle 800 + 200/km puis 150/km · Koala climatisé 1 200 + 375/km puis 350/km · Léopard 2 500 + 900/km puis 800/km |
+
+**Les noms Gazelle / Koala / Léopard ne désignent plus que des voitures** : ils n'apparaissent
+jamais dans le parcours de commande d'un Zem. La filière de chaque véhicule est portée par la
+configuration (`family: "ZEM" | "CAR"` dans `tarification.json`), jamais par une liste codée en dur.
+
+**Filtrage du radar chauffeur** : `GET /rides/pending` n'expose plus toutes les demandes. Le
+service applique `pricing.rideVisibleFor()` — par défaut (`radar.strictVehicleMatch = true`) un
+prestataire ne reçoit que les demandes du **véhicule exact** qu'il a déclaré (un Zem à essence ne
+voit pas les demandes de Zem électrique ; Gazelle ≠ Koala ≠ Léopard), et les **coursiers sont exclus**
+des demandes de transport. Le mode souple (les deux Zem partagent leurs demandes) s'active par
+configuration, sans redéploiement de code.
+
+**Profils prestataires** : le profil `ZEM_INDEPENDANT` (15 % des revenus du mois + 1,5 % par
+retrait, aucune commission par course) s'applique aux **deux** types de Zem, détectés par la
+filière du véhicule. LIVREUR et COURSIER restent en catégorie `INDEPENDANT_PERSONNEL` avec 1,5 %
+par retrait — leurs autres règles restant « à définir ». Les valeurs non arbitrées sont listées
+dans la section `aDefinir` de la configuration et jamais présentées comme validées.
+
+**Migration** `20261005140000_zem_essence_et_electrique` : ajout de `ZEM_ESSENCE` / `ZEM_ELECTRIC`
+à l'enum `VehicleType`, et conversion des données existantes (`Ride.vehicleType` et dossiers DRIVER
+en `GAZELLE` → `ZEM_ESSENCE`, puisque la Gazelle était le moto-taxi jusqu'ici).
+
+Tests : `cd azo-backend && npm test` (**45 tests verts**), dont l'égalité de tarif entre les deux
+Zem et le filtrage du radar (strict et souple).
 
 ### 4.2. Endpoints de Gestion de Flotte Agence
 - `GET /agencies/me` : Retourne le tableau de bord complet de l'agence (formule, quota utilisé/restant, liste des chauffeurs et coursiers rattachés, chiffre d'affaires brut, commissions et net agence).
