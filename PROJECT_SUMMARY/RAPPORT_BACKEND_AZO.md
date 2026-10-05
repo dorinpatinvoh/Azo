@@ -66,6 +66,9 @@ Une agence n'opère qu'une fois ses frais d'activation réglés (`POST /agencies
 paiement unique) et la limite de comptes est refusée au-delà du plafond du niveau.
 
 ### 4.1bis. Tarification des courses — deux filières distinctes (mise à jour du 5 octobre 2026)
+
+> 📄 **Rapport dédié à ce chantier : [`RAPPORT_BACKEND_ZEM.md`](./RAPPORT_BACKEND_ZEM.md)**
+> (modèle de données, barème détaillé, filtrage du radar, migration, tests).
 Les véhicules sont désormais répartis en **deux filières**, ce qui sépare enfin la commande
 d'un Zem de celle d'une voiture :
 

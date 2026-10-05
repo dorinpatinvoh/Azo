@@ -126,7 +126,14 @@ nécessaire : la copie mobile du barème est relue par `GET /pricing`.
 > Le radar du chauffeur affiche désormais son véhicule (« Radar Zem à essence — tu ne vois
 > que ces demandes »).
 
-## 5. Points connus / chantiers ouverts
+## 5. Rapports d'avancement
+
+* [`RAPPORT_BACKEND_ZEM.md`](./RAPPORT_BACKEND_ZEM.md) — back-end : modèle de données, barème,
+  filtrage du radar, endpoints, tests, migration.
+* [`RAPPORT_FRONTEND_ZEM.md`](./RAPPORT_FRONTEND_ZEM.md) — front-end : parcours client, écrans,
+  affichage des prix, valeurs de contrôle pour les tests.
+
+## 6. Points connus / chantiers ouverts
 
 1. **Pas de matching automatique** : les chauffeurs *pollent* le radar toutes les 8 s et
    le client toutes les 3 s. Aucune notification poussée, aucune expiration de demande.

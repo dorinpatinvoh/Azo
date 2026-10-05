@@ -73,6 +73,9 @@ Dès la validation du code OTP (ou à la réouverture de l'application grâce à
   - Acceptation de la mission (`ASSIGNED`) $\rightarrow$ Confirmation de collecte (`PICKED_UP`) $\rightarrow$ Confirmation de livraison (`DELIVERED`) avec crédit automatique du portefeuille **AZƆ̀ Pay**.
 
 ### 3.5. Commande d'un Zem en deux temps (`RideBookingScreen.tsx`) — 5 octobre 2026
+
+> 📄 **Rapport dédié à ce chantier : [`RAPPORT_FRONTEND_ZEM.md`](./RAPPORT_FRONTEND_ZEM.md)**
+> (parcours client, tarifs affichés, radar chauffeur, valeurs de contrôle).
 Le parcours Zem est désormais séparé de celui des voitures :
 
 1. **Étape 1 — écran dédié « Quel Zem veux-tu ? »** : deux grandes cartes, **Zem à essence** et
