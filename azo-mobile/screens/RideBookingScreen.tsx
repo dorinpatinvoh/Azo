@@ -54,24 +54,41 @@ const ERROR_COLOR = "#B3261B";
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} FCFA`;
 
 /**
- * Description du tarif Zem, construite depuis la configuration partagée
+ * Tarif d'un type de Zem, construit depuis la configuration partagée
  * (`config/tarification.json`, synchronisée avec le backend) : aucune valeur en dur.
  */
-function zemPricingNote(): string {
-  const zem = tarification().vehicles.ZEM_ESSENCE;
+function zemTariffLine(vehicle: VehicleType): string {
+  const zem = tarification().vehicles[vehicle];
   const paliers = zem.brackets
     .map((b, i) => {
       const precedent = i === 0 ? 0 : (zem.brackets[i - 1].upToKm ?? 0);
       const de = precedent === 0 ? 0 : precedent + 1;
       return b.upToKm === null
-        ? `${fcfa(b.perKm)}/km à partir du ${de}e km`
-        : `${fcfa(b.perKm)}/km de ${de} à ${b.upToKm} km`;
+        ? `${fcfa(b.perKm)}/km au-delà`
+        : `${fcfa(b.perKm)}/km (${de}–${b.upToKm} km)`;
     })
     .join(" · ");
   const remise = zem.baseDiscount
-    ? ` — et ${zem.baseDiscount.pct} % de remise sur la base dès que le trajet dépasse ${zem.baseDiscount.aboveKm} km`
+    ? ` · −${zem.baseDiscount.pct} % de base après ${zem.baseDiscount.aboveKm} km`
     : "";
-  return `Les deux Zem ont le même tarif : ${fcfa(zem.base)} de base, puis ${paliers}${remise}.`;
+  return `${fcfa(zem.base)} de base · ${paliers}${remise}`;
+}
+
+/**
+ * Note commune aux deux Zem : la base et la remise sont identiques, seuls les tarifs
+ * au kilomètre changent (l'écart est calculé depuis la configuration, jamais en dur).
+ */
+function zemCommonNote(): string {
+  const essence = tarification().vehicles.ZEM_ESSENCE;
+  const electrique = tarification().vehicles.ZEM_ELECTRIC;
+  const ecarts = essence.brackets.map((b, i) => b.perKm - (electrique.brackets[i]?.perKm ?? b.perKm));
+  const ecartUniforme = ecarts.every((e) => e === ecarts[0]);
+  const remise = essence.baseDiscount
+    ? `Même base (${fcfa(essence.base)}) et même remise de ${essence.baseDiscount.pct} % au-delà de ${essence.baseDiscount.aboveKm} km pour les deux`
+    : `Même base pour les deux`;
+  return ecartUniforme && ecarts[0] > 0
+    ? `${remise} : seul le prix au kilomètre change — l'électrique coûte ${fcfa(ecarts[0])} de moins par km.`
+    : `${remise} : seul le prix au kilomètre change.`;
 }
 const fmtKm = (n: number) => `${n.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`;
 const fmtDuration = (min: number) =>
@@ -385,6 +402,7 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
               <View style={{ flex: 1 }}>
                 <Text style={styles.zemCardTitle}>{VEHICLES[v].label}</Text>
                 <Text style={styles.zemCardSub}>{VEHICLES[v].short}</Text>
+                <Text style={styles.zemCardPrice}>{zemTariffLine(v)}</Text>
               </View>
               <MaterialIcons name="chevron-right" size={26} color={colors.outline} />
             </Pressable>
@@ -392,7 +410,7 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
 
           <View style={styles.zemNote}>
             <MaterialIcons name="info-outline" size={16} color={colors.onSurfaceVariant} />
-            <Text style={styles.zemNoteText}>{zemPricingNote()}</Text>
+            <Text style={styles.zemNoteText}>{zemCommonNote()}</Text>
           </View>
         </View>
       </View>
@@ -633,6 +651,7 @@ const styles = StyleSheet.create({
   zemCardIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
   zemCardTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", fontSize: 18 },
   zemCardSub: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 2 },
+  zemCardPrice: { ...typography.labelSm, color: colors.primary, fontWeight: "700", marginTop: 4 },
   zemNote: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, padding: spacing.sm + 2 },
   zemNoteText: { ...typography.bodySm, color: colors.onSurfaceVariant, flex: 1 },
   zemChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 8, alignSelf: "flex-start" },

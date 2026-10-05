@@ -9,9 +9,9 @@ import {
  * Tests unitaires de la tarification AZƆ̀ (spécification « Tarifs et profils »).
  *
  * Deux filières distinctes :
- *   - les MOTOS-TAXIS (Zem) : ZEM_ESSENCE et ZEM_ELECTRIC, au même tarif — base 150 F,
- *     90 F/km de 0 à 10 km, 85 F/km de 11 à 25 km, 80 F/km au-delà, et **−25 % sur la
- *     base dès que le trajet dépasse 10 km** (150 F → 112 F, troncature FCFA) ;
+ *   - les MOTOS-TAXIS (Zem) : ZEM_ESSENCE et ZEM_ELECTRIC — **même base (150 F) et même
+ *     remise (−25 % au-delà de 10 km, 150 F → 112 F)** ; seuls les tarifs au kilomètre
+ *     diffèrent : essence 90/85/80 F/km, électrique 80/75/70 F/km ;
  *   - les VOITURES : GAZELLE (800 + 200/km), KOALA (1 200 + 375/km),
  *     LEOPARD (2 500 + 900/km), avec le palier à 15 km et sans remise de base.
  *
@@ -113,48 +113,65 @@ describe("PricingService — prix d'une course (point 1 de la spec)", () => {
 describe("PricingService — filière Zem (motos-taxis)", () => {
   const pricing = new PricingService(loadTarificationConfig());
 
-  it("facture les deux types de Zem au même tarif (décision validée)", () => {
+  it("les deux Zem partagent la base, la remise et les bornes de paliers", () => {
     const essence = pricing.getVehiclePricing("ZEM_ESSENCE");
     const electrique = pricing.getVehiclePricing("ZEM_ELECTRIC");
-    expect(essence).toEqual(electrique);
-
-    for (const zem of ["ZEM_ESSENCE", "ZEM_ELECTRIC"] as const) {
-      expect(pricing.ridePrice(0, zem)).toBe(pricing.ridePrice(0, "ZEM_ESSENCE"));
-    }
+    expect(electrique.base).toBe(essence.base);
+    expect(electrique.base).toBe(150);
+    expect(electrique.baseDiscount).toEqual(essence.baseDiscount);
+    expect(electrique.baseDiscount).toEqual({ pct: 25, aboveKm: 10 });
+    // Mêmes bornes de paliers (seuls les tarifs au km changent)
+    expect(electrique.brackets.map((b) => b.upToKm)).toEqual(essence.brackets.map((b) => b.upToKm));
+    // Distance nulle : la même base pour les deux
+    expect(pricing.ridePrice(0, "ZEM_ESSENCE")).toBe(150);
+    expect(pricing.ridePrice(0, "ZEM_ELECTRIC")).toBe(150);
   });
 
-  it("applique la base de 150 F, puis 90 F/km de 0 à 10 km (aucune remise à 10 km)", () => {
+  it("Zem à essence : base 150 F, puis 90 F/km de 0 à 10 km (aucune remise à 10 km)", () => {
     // 10 km : 150 + 10 × 90 = 1 050 (la remise ne s'applique QUE au-delà de 10 km)
     expect(pricing.ridePrice(10, "ZEM_ESSENCE")).toBe(1050);
-    expect(pricing.ridePrice(10, "ZEM_ELECTRIC")).toBe(1050);
     // 5 km : 150 + 5 × 90 = 600
     expect(pricing.ridePrice(5, "ZEM_ESSENCE")).toBe(600);
-    // Distance nulle : la base seule
-    expect(pricing.ridePrice(0, "ZEM_ESSENCE")).toBe(150);
+  });
+
+  it("Zem électrique : base 150 F, puis 80 F/km de 0 à 10 km", () => {
+    // 10 km : 150 + 10 × 80 = 950 (le tarif électrique est plus bas de 10 F/km)
+    expect(pricing.ridePrice(10, "ZEM_ELECTRIC")).toBe(950);
+    // 5 km : 150 + 5 × 80 = 550
+    expect(pricing.ridePrice(5, "ZEM_ELECTRIC")).toBe(550);
+    expect(pricing.ridePrice(10, "ZEM_ELECTRIC")).toBeLessThan(pricing.ridePrice(10, "ZEM_ESSENCE"));
   });
 
   it("remise de 25 % sur la base au-delà de 10 km (150 F → 112 F, troncature)", () => {
-    // 12 km : base 150 − 25 % = 112 · 10 × 90 = 900 · 2 × 85 = 170 → 1 182
+    // 12 km essence : 112 + 900 + 2 × 85 = 1 182 · électrique : 112 + 800 + 2 × 75 = 1 062
     expect(pricing.ridePrice(12, "ZEM_ESSENCE")).toBe(1182);
-    expect(pricing.ridePrice(12, "ZEM_ELECTRIC")).toBe(1182);
-    // 11 km : 112 + 900 + 85 = 1 097
+    expect(pricing.ridePrice(12, "ZEM_ELECTRIC")).toBe(1062);
+    // 11 km essence : 112 + 900 + 85 = 1 097 · électrique : 112 + 800 + 75 = 987
     expect(pricing.ridePrice(11, "ZEM_ESSENCE")).toBe(1097);
-    // Juste au-delà du seuil (10,5 km) : 112 + 900 + floor(0,5 × 85 = 42,5) = 1 054
-    expect(pricing.ridePrice(10.5, "ZEM_ESSENCE")).toBe(1054);
+    expect(pricing.ridePrice(11, "ZEM_ELECTRIC")).toBe(987);
+    // Juste au-delà du seuil (10,5 km), électrique : 112 + 800 + floor(0,5 × 75 = 37,5) = 949
+    expect(pricing.ridePrice(10.5, "ZEM_ELECTRIC")).toBe(949);
+    // La remise s'applique de la même façon aux deux types
+    expect(pricing.breakdown(10, "ZEM_ELECTRIC").baseDiscountApplied).toBe(false);
+    expect(pricing.breakdown(10.0001, "ZEM_ELECTRIC").baseDiscountApplied).toBe(true);
   });
 
-  it("paliers 85 F/km de 11 à 25 km puis 80 F/km à partir du 26e km", () => {
-    // 25 km : 112 + 900 + 15 × 85 (1 275) = 2 287
+  it("paliers essence 85 puis 80 F/km · paliers électrique 75 puis 70 F/km", () => {
+    // 25 km : essence 112 + 900 + 1 275 = 2 287 · électrique 112 + 800 + 1 125 = 2 037
     expect(pricing.ridePrice(25, "ZEM_ESSENCE")).toBe(2287);
-    // 26 km : 112 + 900 + 1 275 + 1 × 80 = 2 367
+    expect(pricing.ridePrice(25, "ZEM_ELECTRIC")).toBe(2037);
+    // 26 km : essence 2 367 · électrique 112 + 800 + 1 125 + 70 = 2 107
     expect(pricing.ridePrice(26, "ZEM_ESSENCE")).toBe(2367);
-    // 30 km : 112 + 900 + 1 275 + 5 × 80 (400) = 2 687
-    expect(pricing.ridePrice(30, "ZEM_ELECTRIC")).toBe(2687);
-    // 100 km : 112 + 900 + 1 275 + 75 × 80 (6 000) = 8 287
+    expect(pricing.ridePrice(26, "ZEM_ELECTRIC")).toBe(2107);
+    // 30 km : essence 2 687 · électrique 112 + 800 + 1 125 + 350 = 2 387
+    expect(pricing.ridePrice(30, "ZEM_ESSENCE")).toBe(2687);
+    expect(pricing.ridePrice(30, "ZEM_ELECTRIC")).toBe(2387);
+    // 100 km : essence 8 287 · électrique 112 + 800 + 1 125 + 5 250 = 7 287
     expect(pricing.ridePrice(100, "ZEM_ESSENCE")).toBe(8287);
+    expect(pricing.ridePrice(100, "ZEM_ELECTRIC")).toBe(7287);
   });
 
-  it("détaille les trois paliers Zem et la remise de base", () => {
+  it("détaille les trois paliers Zem à essence et la remise de base", () => {
     const detail = pricing.breakdown(30, "ZEM_ESSENCE");
     expect(detail).toMatchObject({
       gamme: "ZEM_ESSENCE",
@@ -178,6 +195,15 @@ describe("PricingService — filière Zem (motos-taxis)", () => {
     expect(court.base).toBe(150);
     expect(court.baseDiscountApplied).toBe(false);
     expect(court.brackets.map((b) => b.km)).toEqual([8, 0, 0]);
+
+    // Électrique : mêmes kilomètres facturés, tarifs au km plus bas (10 F de moins)
+    const electrique = pricing.breakdown(30, "ZEM_ELECTRIC");
+    expect(electrique.brackets).toEqual([
+      { upToKm: 10, perKm: 80, km: 10, amount: 800 },
+      { upToKm: 25, perKm: 75, km: 15, amount: 1125 },
+      { upToKm: null, perKm: 70, km: 5, amount: 350 },
+    ]);
+    expect(electrique.price).toBe(2387);
   });
 
   it("classe les deux Zem dans la famille ZEM et les voitures dans la famille CAR", () => {
@@ -382,7 +408,7 @@ describe("Configuration tarifaire", () => {
         { upToKm: null, perKm: 800 },
       ],
     });
-    // Motos-taxis : les deux types partagent EXACTEMENT le tarif Zem
+    // Motos-taxis : même base et même remise, tarifs au km propres à chaque type
     expect(config.vehicles.ZEM_ESSENCE).toEqual({
       base: 150,
       family: "ZEM",
@@ -393,7 +419,20 @@ describe("Configuration tarifaire", () => {
         { upToKm: null, perKm: 80 },
       ],
     });
-    expect(config.vehicles.ZEM_ELECTRIC).toEqual(config.vehicles.ZEM_ESSENCE);
+    expect(config.vehicles.ZEM_ELECTRIC).toEqual({
+      base: 150,
+      family: "ZEM",
+      baseDiscount: { pct: 25, aboveKm: 10 },
+      brackets: [
+        { upToKm: 10, perKm: 80 },
+        { upToKm: 25, perKm: 75 },
+        { upToKm: null, perKm: 70 },
+      ],
+    });
+    // L'électrique reste moins cher au kilomètre, palier par palier
+    config.vehicles.ZEM_ESSENCE.brackets.forEach((essence, index) => {
+      expect(config.vehicles.ZEM_ELECTRIC.brackets[index].perKm).toBeLessThan(essence.perKm);
+    });
     expect(Object.keys(config.agencyLevels)).toEqual(["PRO", "SILVER", "OR", "DIAMANT"]);
     expect(config.profiles.ZEM_INDEPENDANT).toMatchObject({ monthlyRevenueSharePct: 15, withdrawalFeePct: 1.5 });
   });

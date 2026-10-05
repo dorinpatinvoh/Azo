@@ -27,7 +27,8 @@ Points techniques:
 
 **Parcours Zem (`ZEM_ESSENCE` / `ZEM_ELECTRIC`)**
 - Écran 0: Interface « Quel Zem veux-tu ? » — **Zem à essence** ou **Zem électrique**
-  (les deux ont le même tarif : **150 F de base**, puis **90 F/km de 0 à 10 km · 85 F/km de 11 à 25 km · 80 F/km au-delà** (−25 % sur la base dès que le trajet dépasse 10 km))
+  (base 150 F et −25 % de base au-delà de 10 km pour les deux ; **90/85/80 F/km** en essence,
+  **80/75/70 F/km** en électrique)
 - Écran 1: Demande (origine/destination) + rappel du Zem choisi (bouton « Changer »)
 - Écran 2: Estimation prix + confirmation (paiement AZƆ̀ Pay)
 

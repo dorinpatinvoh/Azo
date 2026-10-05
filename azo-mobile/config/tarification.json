@@ -5,7 +5,7 @@
     "singleSourceOfTruth": "Ce fichier est la SEULE source des tarifs. Aucune règle de prix ne doit être codée en dur dans la logique métier.",
     "vehicles": "Deux filières : ZEM_ESSENCE / ZEM_ELECTRIC sont les motos-taxis (filière Zem) ; GAZELLE / KOALA / LEOPARD sont les voitures (entrée de gamme, intermédiaire climatisé, haut de gamme).",
     "pricingModel": "Prix = base (remisée le cas échéant) + somme des paliers de kilomètres. Chaque véhicule porte ses propres paliers `brackets` (upToKm, perKm) ; le dernier palier a upToKm = null (illimité). `baseDiscount` (facultatif) retire un pourcentage de la base au-delà d'une distance.",
-    "zemPricing": "Règle Zem (mise à jour du 5 octobre 2026, valable pour les DEUX types, essence et électrique) : base 150 F, puis 90 F/km de 0 à 10 km, 85 F/km de 11 à 25 km, 80 F/km à partir du 26e km. Au-delà de 10 km, la base subit une remise de 25 % (150 F → 112,5 F, tronquée à 112 F comme tout montant FCFA). La base est due dès que la course est acceptée (le client n'est débité qu'à la fin de la course).",
+    "zemPricing": "Règle Zem (mise à jour du 5 octobre 2026). BASE et REMISE identiques pour les deux types : 150 F de base, et −25 % sur cette base au-delà de 10 km (150 F → 112,5 F, tronquée à 112 F comme tout montant FCFA). Seuls les prix au kilomètre diffèrent : Zem à ESSENCE 90 F/km de 0 à 10 km, 85 F/km de 11 à 25 km, 80 F/km à partir du 26e km ; Zem ÉLECTRIQUE 80 F/km de 0 à 10 km, 75 F/km de 11 à 25 km, 70 F/km à partir du 26e km (soit 10 F de moins par palier). La base est due dès que la course est acceptée (le client n'est débité qu'à la fin de la course).",
     "carPricing": "Voitures (grilles inchangées) : GAZELLE 800 F + 200 F/km jusqu'à 15 km puis 150 F/km · KOALA climatisé 1 200 F + 375 F/km puis 350 F/km · LEOPARD 2 500 F + 900 F/km puis 800 F/km. Aucune remise de base n'est appliquée aux voitures.",
     "legacyVehicleMapping": "Types de véhicules historiques encore présents en base (courses et dossiers passés) : ils sont rattachés à un véhicule facturable. Aucun nouveau dossier ne les utilise.",
     "profilesValidated": "ZEM_INDEPENDANT : règle complète et validée (15 % des revenus du mois + 1,5 % par retrait, aucune commission par course). Elle s'applique aux deux types de Zem (essence et électrique). LIVREUR et COURSIER : frais de retrait identiques au Zem (1,5 %) ; leurs autres règles restent à définir.",
@@ -50,15 +50,15 @@
       "brackets": [
         {
           "upToKm": 10,
-          "perKm": 90
+          "perKm": 80
         },
         {
           "upToKm": 25,
-          "perKm": 85
+          "perKm": 75
         },
         {
           "upToKm": null,
-          "perKm": 80
+          "perKm": 70
         }
       ]
     },

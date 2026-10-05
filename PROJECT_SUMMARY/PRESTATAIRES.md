@@ -403,8 +403,9 @@ backend : les endpoints sont les mêmes.
 
 1. **Périmètre des activités AZƆ̀ (sans Artisan)** : AZƆ̀ opère uniquement sur :
    - **Zem / Chauffeur (`DRIVER`)** — deux filières de véhicules (mise à jour du 5 octobre 2026) :
-     **Moto-taxi (Zem)** : *Zem à essence* (`ZEM_ESSENCE`) ou *Zem électrique* (`ZEM_ELECTRIC`),
-     même tarif pour les deux ; **Voiture** : *Gazelle*, *Koala (climatisée)* ou *Léopard (premium)*.
+     **Moto-taxi (Zem)** : *Zem à essence* (`ZEM_ESSENCE`) ou *Zem électrique* (`ZEM_ELECTRIC`) —
+     même base et même remise, tarif au kilomètre inférieur en électrique ; **Voiture** : *Gazelle*,
+     *Koala (climatisée)* ou *Léopard (premium)*.
      Indépendant ou rattaché à une agence. Le radar ne présente que les demandes du véhicule déclaré.
    - **Coursier / Livreur (`COURIER`)** : Coursier Express (plis & colis urgents), Coursier Personnel (courses, pharmacie, achats personnels), Livreur Colis & Marchandises.
    - **Agence de transport / flotte (`AGENCY`)** : gestion d'une flotte de Zem, voitures et coursiers.

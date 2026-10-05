@@ -42,19 +42,24 @@ FCFA entiers. Les paliers sont cumulatifs depuis l'origine : un trajet de 12 km 
 
 ### 2.1 Filière Zem — motos-taxis
 
+**Même base, même remise, même découpage des paliers pour les deux types : seuls les prix au
+kilomètre diffèrent.**
+
 | Type | Base | 0 → 10 km | 11 → 25 km | 26 km et + | Remise de base |
 |---|---|---|---|---|---|
-| **ZEM_ESSENCE** (moto à essence) | **150** | 90 / km | 85 / km | 80 / km | **−25 % au-delà de 10 km** |
-| **ZEM_ELECTRIC** (moto électrique) | **150** | 90 / km | 85 / km | 80 / km | **−25 % au-delà de 10 km** |
+| **ZEM_ESSENCE** (moto à essence) | **150** | **90** / km | **85** / km | **80** / km | **−25 % au-delà de 10 km** |
+| **ZEM_ELECTRIC** (moto électrique) | **150** | **80** / km | **75** / km | **70** / km | **−25 % au-delà de 10 km** |
 
 **Décisions validées (5 octobre 2026)**
 
-1. Le Zem électrique a **le même tarif** que le Zem à essence — un test vérifie que les deux
-   entrées de configuration restent strictement égales.
-2. Les **paliers** sont 0–10 km (90 F/km), 11–25 km (85 F/km) et 26 km et plus (80 F/km).
+1. Le Zem électrique partage la **base** (150 F) et la **remise de base** du Zem à essence, mais
+   son **prix au kilomètre est inférieur de 10 F par palier** : 80 / 75 / 70 F/km au lieu de
+   90 / 85 / 80 F/km. Un test vérifie que chaque palier électrique reste moins cher que son
+   homologue essence, et que les bornes de paliers sont identiques.
+2. Les **paliers** sont 0–10 km, 11–25 km et 26 km et plus, pour les deux types.
 3. La **remise de 25 %** porte sur **la base seule** (150 F), et uniquement quand le trajet est
    **supérieur à 10 km** : 150 × 0,75 = 112,5 → **112 F** après troncature. À 10 km ou moins, la
-   base reste de 150 F.
+   base reste de 150 F — identique pour les deux types.
 4. La base de 150 F est due **dès que la course est acceptée** ; le client n'est débité qu'à la
    **fin** de la course (aucun débit avant le départ).
 
@@ -71,7 +76,7 @@ spécification initiale, avec leur palier à 15 km et **sans remise de base**.
 
 ### 2.3 Exemples vérifiés par les tests
 
-**Zem (essence comme électrique)**
+**Zem à essence**
 
 | Exemple | Calcul | Prix |
 |---|---|---|
@@ -84,6 +89,23 @@ spécification initiale, avec leur palier à 15 km et **sans remise de base**.
 | 26 km | 112 + 10 × 90 + 15 × 85 + 1 × 80 | **2 367** |
 | 30 km | 112 + 10 × 90 + 15 × 85 + 5 × 80 | **2 687** |
 | 100 km | 112 + 10 × 90 + 15 × 85 + 75 × 80 | **8 287** |
+
+**Zem électrique**
+
+| Exemple | Calcul | Prix |
+|---|---|---|
+| 0 km | 150 | **150** |
+| 5 km | 150 + 5 × 80 | **550** |
+| 10 km | 150 + 10 × 80 | **950** |
+| 10,5 km | 112 + 10 × 80 + ⌊0,5 × 75⌋ | **949** |
+| 12 km | 112 + 10 × 80 + 2 × 75 | **1 062** |
+| 25 km | 112 + 10 × 80 + 15 × 75 | **2 037** |
+| 26 km | 112 + 10 × 80 + 15 × 75 + 1 × 70 | **2 107** |
+| 30 km | 112 + 10 × 80 + 15 × 75 + 5 × 70 | **2 387** |
+| 100 km | 112 + 10 × 80 + 15 × 75 + 75 × 70 | **7 287** |
+
+> 💡 Repère de test : à **30 km**, l'électrique est à **2 387 F** contre **2 687 F** en essence
+> (300 F d'écart) ; à **10 km**, 950 F contre 1 050 F (100 F d'écart).
 
 **Voitures**
 
@@ -102,7 +124,8 @@ remisée 112,5 F devient 112 F).
 
 Le **même calcul** existe côté application (`azo-mobile/services/tarification.ts`,
 `priceBreakdown`) pour l'affichage hors ligne : une vérification croisée a confirmé des montants
-identiques au backend sur toutes les bornes (0 · 5 · 10 · 10,5 · 11 · 12 · 25 · 26 · 30 · 100 km).
+identiques au backend, **pour les deux types de Zem**, sur toutes les bornes
+(0 · 5 · 10 · 10,5 · 11 · 12 · 25 · 26 · 30 · 100 km).
 
 ## 3. Radar des demandes (filtrage par véhicule)
 
@@ -187,13 +210,14 @@ Règles appliquées :
 cd azo-backend && npm test
 ```
 
-50 tests couvrent les exemples voitures de la spécification, les bornes de tranches (15 km,
+51 tests couvrent les exemples voitures de la spécification, les bornes de tranches (15 km,
 16 km), la troncature, la conversion des anciens types de véhicules, **un cas par niveau
 d'agence** (activation, commission, frais de retrait, plafond), les profils prestataires
 (Zem 15 %/mois + 1,5 % par retrait ; LIVREUR & COURSIER : 1,5 % par retrait, règles restantes
-marquées « à définir »), le **barème Zem** (base 150 F, trois paliers, remise de 25 % sur la
-base au-delà de 10 km — bornes 10 km / 10,5 km / 25 km / 26 km), l'égalité de tarif entre les
-deux Zem, l'absence de remise sur les voitures et le **filtrage du radar** (strict et souple).
+marquées « à définir »), le **barème Zem** (base 150 F, paliers essence 90/85/80 et électrique
+80/75/70, remise de 25 % sur la base au-delà de 10 km — bornes 10 km / 10,5 km / 25 km / 26 km,
+base et remise communes aux deux types), l'absence de remise sur les voitures et le **filtrage du
+radar** (strict et souple).
 
 ## 8. Valeurs provisoires « règle à définir »
 
@@ -206,8 +230,8 @@ deux Zem, l'absence de remise sur les voitures et le **filtrage du radar** (stri
 | `profiles.COURSIER.rideCommissionPct` | 0 | ⚠️ **Règle à définir** — idem. |
 
 Ces valeurs se changent **dans `tarification.json` uniquement** (aucun code à toucher).
-Règles validées, à ne pas confondre : barème des deux Zem (base 150 F, 90/85/80 F par palier,
-−25 % de base au-delà de 10 km, identiques pour les deux types), grille des voitures, profil Zem indépendant (15 %/mois + 1,5 % par retrait, 0 par course), frais de
+Règles validées, à ne pas confondre : barème Zem (base 150 F et −25 % de base au-delà de 10 km
+pour les deux types ; paliers essence 90/85/80 F/km et électrique 80/75/70 F/km), grille des voitures, profil Zem indépendant (15 %/mois + 1,5 % par retrait, 0 par course), frais de
 retrait LIVREUR/COURSIER identiques au Zem (1,5 %), prix par tranches, activation unique
 des agences, plafonds de comptes, filtrage du radar.
 

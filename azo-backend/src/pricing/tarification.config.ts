@@ -13,7 +13,8 @@ import embeddedConfig from "./tarification.json";
 
 /**
  * Véhicules facturables AZƆ̀, en deux filières :
- *   * `ZEM`  : ZEM_ESSENCE, ZEM_ELECTRIC — motos-taxis (même tarif pour les deux types) ;
+ *   * `ZEM`  : ZEM_ESSENCE, ZEM_ELECTRIC — motos-taxis (même base et même remise, tarifs au
+ *     kilomètre propres à chaque type : 90/85/80 F/km en essence, 80/75/70 F/km en électrique) ;
  *   * `CAR`  : GAZELLE, KOALA, LEOPARD — voitures (entrée de gamme, climatisée, premium).
  */
 export type VehicleFamily = "ZEM" | "CAR";

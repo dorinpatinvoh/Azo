@@ -71,7 +71,8 @@ d'un Zem de celle d'une voiture :
 
 | Filière | Types | Tarifs |
 | :--- | :--- | :--- |
-| **Moto-taxi (Zem)** | `ZEM_ESSENCE`, `ZEM_ELECTRIC` | **Base 150 F**, puis **90 F/km de 0 à 10 km**, **85 F/km de 11 à 25 km**, **80 F/km au-delà** — et **−25 % sur la base dès que le trajet dépasse 10 km** (150 F → 112 F). **Tarif identique pour les deux types** (décision du 5 octobre 2026) |
+| **Moto-taxi (Zem)** | `ZEM_ESSENCE` | **Base 150 F**, puis **90 F/km de 0 à 10 km**, **85 F/km de 11 à 25 km**, **80 F/km au-delà** — **−25 % sur la base dès que le trajet dépasse 10 km** (150 F → 112 F) |
+| **Moto-taxi (Zem)** | `ZEM_ELECTRIC` | **Même base (150 F) et même remise** que le Zem à essence, mais **10 F de moins par kilomètre** : **80 / 75 / 70 F/km** sur les mêmes paliers |
 | **Voiture** | `GAZELLE`, `KOALA`, `LEOPARD` | Gazelle 800 + 200/km puis 150/km · Koala climatisé 1 200 + 375/km puis 350/km · Léopard 2 500 + 900/km puis 800/km |
 
 **Les noms Gazelle / Koala / Léopard ne désignent plus que des voitures** : ils n'apparaissent
@@ -101,9 +102,10 @@ dans la section `aDefinir` de la configuration et jamais présentées comme vali
 à l'enum `VehicleType`, et conversion des données existantes (`Ride.vehicleType` et dossiers DRIVER
 en `GAZELLE` → `ZEM_ESSENCE`, puisque la Gazelle était le moto-taxi jusqu'ici).
 
-Tests : `cd azo-backend && npm test` (**50 tests verts**), dont les trois paliers Zem, la remise de
-base (bornes à 10 km et 10,5 km), l'égalité de tarif entre les deux Zem, l'absence de remise sur
-les voitures et le filtrage du radar (strict et souple).
+Tests : `cd azo-backend && npm test` (**51 tests verts**), dont les trois paliers des deux Zem
+(90/85/80 et 80/75/70), la remise de base (bornes à 10 km et 10,5 km), la base et la remise
+communes aux deux types, l'absence de remise sur les voitures et le filtrage du radar (strict et
+souple).
 
 ### 4.2. Endpoints de Gestion de Flotte Agence
 - `GET /agencies/me` : Retourne le tableau de bord complet de l'agence (formule, quota utilisé/restant, liste des chauffeurs et coursiers rattachés, chiffre d'affaires brut, commissions et net agence).
