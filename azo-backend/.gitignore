@@ -6,5 +6,8 @@ uploads/
 # Sortie de compilation
 dist/
 
+# Dépendances installées (npm install) : jamais versionnées, Render les réinstalle
+node_modules/
+
 # Fichiers temporaires
 *.log

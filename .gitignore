@@ -1,0 +1,14 @@
+# Dépendances
+node_modules/
+
+# Sorties de compilation et caches divers
+dist/
+.expo/
+*.log
+
+# Variables d'environnement et secrets
+.env
+.env.local
+
+# Pièces justificatives des prestataires (données sensibles)
+azo-backend/uploads/
