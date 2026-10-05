@@ -1,6 +1,6 @@
 /**
  * Plan de numérotation nationale du Bénin (+229) à 10 chiffres :
- * "01" + 8 chiffres (ex. 01 97 00 00 42).
+ * "01" + 8 chiffres (ex. 01 XX XX XX XX).
  */
 export const BENIN_PHONE_LENGTH = 10;
 export const BENIN_LOCAL_PHONE_LENGTH = 10;
@@ -16,7 +16,7 @@ export function cleanBeninDigits(raw: string): string {
   return digits.slice(0, BENIN_PHONE_LENGTH);
 }
 
-/** Formate la saisie en "01 97 00 00 42" (groupes de 2 chiffres). */
+/** Formate la saisie en "01 XX XX XX XX" (groupes de 2 chiffres). */
 export function formatBeninPhoneInput(raw: string): string {
   const digits = cleanBeninDigits(raw);
   return digits.replace(/(\d{2})(?=\d)/g, "$1 ").trim();
@@ -35,7 +35,7 @@ export function isValidBeninPhone(raw: string): boolean {
   return digits.length === BENIN_PHONE_LENGTH && digits.startsWith("01");
 }
 
-/** Affiche proprement un numéro stocké (+2290197000042 -> +229 01 97 00 00 42). */
+/** Affiche proprement un numéro stocké (+22901XXXXXXXX -> +229 01 XX XX XX XX). */
 export function formatBeninPhoneDisplay(phone?: string | null): string {
   if (!phone) return "";
   const digits = phone.replace(/\D/g, "");
@@ -46,7 +46,7 @@ export function formatBeninPhoneDisplay(phone?: string | null): string {
 
 /**
  * Masque un numéro béninois pour protéger la vie privée entre Client et Prestataire
- * Exemple : "+2290197000042" -> "01 •• •• •• 42"
+ * Exemple : "+22901XXXXXXXX" -> "01 •• •• •• XX"
  */
 export function maskBeninPhone(phone?: string | null): string {
   if (!phone) return "01 •• •• •• ••";

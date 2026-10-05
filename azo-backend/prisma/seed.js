@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Seed AZƆ̀ — administration, dossiers prestataires et jeu de données réaliste (Bénin / Cotonou).
+ * Seed AZƆ̀ — administration et dossiers prestataires (Bénin / Cotonou).
  *
- *   npm run seed                                crée l'ADMIN + données réalistes de démonstration
+ *   npm run seed                                crée/actualise l'ADMIN et purge les anciens comptes de test
  *   npm run providers:list                      liste les comptes et leurs dossiers
- *   npm run providers:approve -- +2290197000042 approuve le dossier d'un numéro
+ *   npm run providers:approve -- +22901XXXXXXXX approuve le dossier d'un numéro
+ *
+ * Aucun compte de démonstration n'est créé : chaque utilisateur (client ou
+ * prestataire) s'inscrit avec son propre numéro depuis l'application mobile.
  */
-const fs = require("fs");
-const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
@@ -50,23 +51,6 @@ function phoneVariants(raw) {
   if (local.length === 10 && local.startsWith("01")) set.add(`+229${local.slice(2)}`);
   else if (local.length === 8) set.add(`+22901${local}`);
   return Array.from(set);
-}
-
-// Crée une petite image PNG valide sur disque pour que les pièces des dossiers de démo
-// s'ouvrent réellement en plein écran dans la console Admin.
-function ensureSampleDocumentImage() {
-  const relDir = path.join("providers", "demo");
-  const absDir = path.join(__dirname, "..", "uploads", relDir);
-  fs.mkdirSync(absDir, { recursive: true });
-  const fileName = "piece-kyc-azo.png";
-  const absFile = path.join(absDir, fileName);
-  if (!fs.existsSync(absFile)) {
-    // PNG émeraude 1x1 valide encodé en base64
-    const pngBase64 =
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-    fs.writeFileSync(absFile, Buffer.from(pngBase64, "base64"));
-  }
-  return `${relDir}/${fileName}`;
 }
 
 async function upsertUserWithWallet({ phone, fullName, role, status = "ACTIVE", balance = 0, cashback = 0, agencyId = null }) {
@@ -127,657 +111,71 @@ async function ensureAdmin() {
   return admin;
 }
 
-async function seedRealisticEcosystem(adminUser) {
-  const sampleDocPath = ensureSampleDocumentImage();
-  const now = new Date();
-  const hoursAgo = (h) => new Date(now.getTime() - h * 3600 * 1000);
-  const daysAgo = (d) => new Date(now.getTime() - d * 24 * 3600 * 1000);
-  const inTwoYears = new Date(now.getTime() + 730 * 24 * 3600 * 1000);
+/* -------------------------------------------------------------------------- */
 
-  // 1. Client réaliste (numéro par défaut de l'écran de connexion : 01 97 00 00 42)
-  const client = await upsertUserWithWallet({
-    phone: "+2290197000042",
-    fullName: "Kossi Boris Adjovi",
-    role: "CLIENT",
-    status: "ACTIVE",
-    balance: 48500,
-    cashback: 1250,
-  });
+// Anciens numéros de test livrés avec le seed d'origine : ils ne doivent plus
+// exister en base. Seul le compte ADMIN (ADMIN_PHONE) est conservé.
+const LEGACY_DEMO_PHONES = [
+  "+2290197000042", // client de démonstration
+  "+2290197000001", // zem / chauffeur indépendant
+  "+2290197000002", // conducteur de flotte
+  "+2290197000003", // conducteur de flotte
+  "+2290197000004", // coursier / livreur
+  "+2290197000010", // agence de démonstration
+  "+2290196112233", // dossier KYC en attente
+  "+2290196445566", // dossier KYC en attente
+  "+2290196778899", // dossier KYC en attente
+];
 
-  // 2. Agence validée (Formule OR : 450 500 FCFA, 100 comptes, commission 2 %)
-  let mainAgency = await prisma.agency.findFirst({
-    where: { name: "Atlantique Mobilité & Flotte Cotonou SARL" },
-  });
-  if (!mainAgency) {
-    mainAgency = await prisma.agency.create({
-      data: {
-        name: "Atlantique Mobilité & Flotte Cotonou SARL",
-        plan: "OR",
-        commissionRate: PLANS.OR.rate,
-        maxAccounts: PLANS.OR.maxAccounts,
-        activationFee: PLANS.OR.fee,
-        feePaidAt: daysAgo(15),
-      },
+const LEGACY_DEMO_AGENCY_NAMES = [
+  "Atlantique Mobilité & Flotte Cotonou SARL",
+  "Cotonou Flotte Express SARL",
+  "Bénin Express Logistique SARL",
+];
+
+// Supprime les comptes de démonstration et leurs données (courses, livraisons,
+// portefeuille, dossier prestataire, agences). Ne touche jamais un ADMIN.
+async function purgeLegacyDemoData() {
+  let removed = 0;
+
+  for (const rawPhone of LEGACY_DEMO_PHONES) {
+    const variants = phoneVariants(rawPhone);
+    const users = await prisma.user.findMany({
+      where: { phone: { in: variants }, role: { not: "ADMIN" } },
+      select: { id: true },
     });
-  } else {
-    mainAgency = await prisma.agency.update({
-      where: { id: mainAgency.id },
-      data: {
-        plan: "OR",
-        commissionRate: PLANS.OR.rate,
-        maxAccounts: PLANS.OR.maxAccounts,
-        activationFee: PLANS.OR.fee,
-      },
-    });
-  }
-
-  const agencyOwner = await upsertUserWithWallet({
-    phone: "+2290197000010",
-    fullName: "Sènakpon Rodrigue Ahouandjinou",
-    role: "AGENCY",
-    status: "ACTIVE",
-    balance: 285000,
-    agencyId: mainAgency.id,
-  });
-
-  await upsertApprovedProvider({
-    user: agencyOwner,
-    type: "AGENCY",
-    fullName: "Sènakpon Rodrigue Ahouandjinou",
-    city: "Cotonou",
-    zones: ["Ganhi", "Haie Vive", "Akpakpa", "Cadjèhoun", "Fidjrossè"],
-    categoryId: "FLOTTE_MIXTE",
-    agencyName: "Atlantique Mobilité & Flotte Cotonou SARL",
-    plan: "OR",
-    bio: JSON.stringify({
-      representativeFirstName: "Sènakpon Rodrigue",
-      representativeLastName: "AHOUANDJINOU",
-      representativeRole: "Directeur Général",
-      representativeNpi: "1094827361",
-      agencyType: "FLOTTE_MIXTE",
-      legalForm: "SARL",
-      ifuNumber: "3202410894512",
-      rccmNumber: "RB/COT/24 B 38412",
-      headquartersAddress: "Cotonou, Quartier Ganhi, Ilot 412, Immeuble Marina",
-      businessPhone: "+2290197000010",
-      businessEmail: "direction@atlantiquemobilite.bj",
-      payoutPhone: "+2290197000010",
-      fleetSize: 28,
-    }),
-    agencyId: mainAgency.id,
-    rating: 4.9,
-    jobsCompleted: 58,
-    docKinds: ["CNI", "SELFIE", "RCCM", "IFU", "STATUTS"],
-    sampleDocPath,
-    inTwoYears,
-    adminId: adminUser?.id,
-  });
-
-  // 3. Zem indépendant validé (01 97 00 00 01)
-  const zemDriver = await upsertUserWithWallet({
-    phone: "+2290197000001",
-    fullName: "Romaric Soglo",
-    role: "DRIVER",
-    status: "ACTIVE",
-    balance: 34200,
-  });
-
-  await upsertApprovedProvider({
-    user: zemDriver,
-    type: "DRIVER",
-    fullName: "Romaric Soglo",
-    city: "Cotonou",
-    zones: ["Haie Vive", "Cadjèhoun", "Ganhi", "Akpakpa", "Étoile Rouge"],
-    vehicleType: "ZEM",
-    vehicleModel: "Haojue DK 150",
-    plateNumber: "BJ-4821-AA",
-    experienceYears: 5,
-    rating: 4.9,
-    jobsCompleted: 42,
-    docKinds: ["CNI", "SELFIE", "PERMIS", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
-    sampleDocPath,
-    inTwoYears,
-    adminId: adminUser?.id,
-  });
-
-  // 4. Deux conducteurs rattachés à l'agence Atlantique Mobilité
-  const fleetDriver1 = await upsertUserWithWallet({
-    phone: "+2290197000002",
-    fullName: "Coffi Narcisse Dossou",
-    role: "DRIVER",
-    status: "ACTIVE",
-    balance: 29500,
-    agencyId: mainAgency.id,
-  });
-
-  await upsertApprovedProvider({
-    user: fleetDriver1,
-    type: "DRIVER",
-    fullName: "Coffi Narcisse Dossou",
-    city: "Cotonou",
-    zones: ["Fidjrossè", "Cadjèhoun", "Place du Souvenir", "Camp Guézo"],
-    vehicleType: "ZEM_ELECTRIC",
-    vehicleModel: "Spiro Mauto Électrique",
-    plateNumber: "BJ-9104-RB",
-    experienceYears: 3,
-    agencyId: mainAgency.id,
-    rating: 4.8,
-    jobsCompleted: 31,
-    docKinds: ["CNI", "SELFIE", "PERMIS", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
-    sampleDocPath,
-    inTwoYears,
-    adminId: adminUser?.id,
-  });
-
-  const fleetDriver2 = await upsertUserWithWallet({
-    phone: "+2290197000003",
-    fullName: "Ulrich Houngbédji",
-    role: "DRIVER",
-    status: "ACTIVE",
-    balance: 64000,
-    agencyId: mainAgency.id,
-  });
-
-  await upsertApprovedProvider({
-    user: fleetDriver2,
-    type: "DRIVER",
-    fullName: "Ulrich Houngbédji",
-    city: "Cotonou",
-    zones: ["Aéroport Cotonou", "Haie Vive", "Novotel", "Ganhi"],
-    vehicleType: "CAR",
-    vehicleModel: "Toyota Corolla Climatisée",
-    plateNumber: "BJ-2319-AB",
-    experienceYears: 7,
-    agencyId: mainAgency.id,
-    rating: 4.9,
-    jobsCompleted: 27,
-    docKinds: ["CNI", "SELFIE", "PERMIS", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
-    sampleDocPath,
-    inTwoYears,
-    adminId: adminUser?.id,
-  });
-
-  // 5. Coursier / Livreur validé (01 97 00 00 04)
-  const courierUser = await upsertUserWithWallet({
-    phone: "+2290197000004",
-    fullName: "Fifamè Arnaud Zinsou",
-    role: "DRIVER",
-    status: "ACTIVE",
-    balance: 21800,
-    agencyId: mainAgency.id,
-  });
-
-  await upsertApprovedProvider({
-    user: courierUser,
-    type: "COURIER",
-    fullName: "Fifamè Arnaud Zinsou",
-    city: "Cotonou",
-    zones: ["Marché Dantokpa", "St Michel", "Haie Vive", "Fidjrossè", "Akpakpa"],
-    vehicleType: "ZEM",
-    vehicleModel: "Bajaj Boxer 150 Cargo",
-    plateNumber: "BJ-6712-AC",
-    categoryId: "COURSIER_PERSONNEL",
-    experienceYears: 4,
-    agencyId: mainAgency.id,
-    rating: 4.9,
-    jobsCompleted: 38,
-    docKinds: ["CNI", "SELFIE", "PERMIS", "PHOTO_VEHICULE"],
-    sampleDocPath,
-    inTwoYears,
-    adminId: adminUser?.id,
-  });
-
-  // 6. Trois dossiers en attente dans la console Admin (pour démonstration de la validation KYC)
-  const pendingZemUser = await upsertUserWithWallet({
-    phone: "+2290196112233",
-    fullName: "Gildas Agbossou",
-    role: "CLIENT",
-    status: "PENDING_VALIDATION",
-    balance: 5000,
-  });
-  await upsertPendingProvider({
-    user: pendingZemUser,
-    type: "DRIVER",
-    status: "SUBMITTED",
-    fullName: "Gildas Agbossou",
-    city: "Abomey-Calavi",
-    zones: ["Calavi Kpota", "IITA", "Godomey", "Étoile Rouge"],
-    vehicleType: "ZEM",
-    vehicleModel: "TVS HLX 150",
-    plateNumber: "BJ-5540-AD",
-    experienceYears: 4,
-    submittedAt: hoursAgo(6),
-    docKinds: ["CNI", "SELFIE", "PERMIS", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
-    sampleDocPath,
-    inTwoYears,
-  });
-
-  const pendingCourierUser = await upsertUserWithWallet({
-    phone: "+2290196445566",
-    fullName: "Prisca Hounkpatin",
-    role: "CLIENT",
-    status: "PENDING_VALIDATION",
-    balance: 8500,
-  });
-  await upsertPendingProvider({
-    user: pendingCourierUser,
-    type: "COURIER",
-    status: "UNDER_REVIEW",
-    fullName: "Prisca Hounkpatin",
-    city: "Cotonou",
-    zones: ["Cadjèhoun", "St Michel", "Ganhi", "Agla"],
-    vehicleType: "ZEM_ELECTRIC",
-    vehicleModel: "Spiro Électrique Express",
-    plateNumber: "BJ-7782-AE",
-    categoryId: "COURSIER_PERSONNEL",
-    experienceYears: 2,
-    submittedAt: hoursAgo(14),
-    docKinds: ["CNI", "SELFIE", "PERMIS", "PHOTO_VEHICULE"],
-    sampleDocPath,
-    inTwoYears,
-  });
-
-  const pendingAgencyUser = await upsertUserWithWallet({
-    phone: "+2290196778899",
-    fullName: "Honoré Kpadonou",
-    role: "CLIENT",
-    status: "PENDING_VALIDATION",
-    balance: 120000,
-  });
-  await upsertPendingProvider({
-    user: pendingAgencyUser,
-    type: "AGENCY",
-    status: "SUBMITTED",
-    fullName: "Honoré Kpadonou",
-    city: "Porto-Novo & Cotonou",
-    zones: ["Akpakpa", "Sèmè-Podji", "Porto-Novo Centre"],
-    categoryId: "FLOTTE_LIVRAISON",
-    agencyName: "Bénin Express Logistique SARL",
-    plan: "ARGENT",
-    bio: JSON.stringify({
-      representativeFirstName: "Honoré",
-      representativeLastName: "KPADONOU",
-      representativeRole: "Gérant",
-      representativeNpi: "2083914756",
-      agencyType: "FLOTTE_LIVRAISON",
-      legalForm: "SARL",
-      ifuNumber: "3202519402815",
-      rccmNumber: "RB/PNO/25 B 11204",
-      headquartersAddress: "Porto-Novo, Quartier Ouando, Carrefour Beau-Rivage",
-      businessPhone: "+2290196778899",
-      businessEmail: "contact@beninexpress.bj",
-      payoutPhone: "+2290196778899",
-      fleetSize: 14,
-    }),
-    experienceYears: 6,
-    submittedAt: hoursAgo(3),
-    docKinds: ["CNI", "SELFIE", "RCCM", "IFU", "STATUTS"],
-    sampleDocPath,
-    inTwoYears,
-  });
-
-  // 7. Courses réalistes (terminées + en attente pour le Zém Radar)
-  const existingRides = await prisma.ride.count();
-  if (existingRides < 4) {
-    await prisma.ride.createMany({
-      data: [
-        {
-          clientId: client.id,
-          driverId: zemDriver.id,
-          status: "COMPLETED",
-          vehicleType: "ZEM",
-          originLat: 6.3579,
-          originLng: 2.3912,
-          destLat: 6.3541,
-          destLng: 2.4352,
-          price: 700,
-          commission: 105,
-          rating: 5,
-          createdAt: hoursAgo(2),
-        },
-        {
-          clientId: client.id,
-          driverId: fleetDriver1.id,
-          status: "COMPLETED",
-          vehicleType: "ZEM_ELECTRIC",
-          originLat: 6.3654,
-          originLng: 2.4181,
-          destLat: 6.3721,
-          destLng: 2.4391,
-          price: 900,
-          commission: 18,
-          rating: 5,
-          createdAt: hoursAgo(5),
-        },
-        {
-          clientId: client.id,
-          driverId: fleetDriver2.id,
-          status: "COMPLETED",
-          vehicleType: "CAR",
-          originLat: 6.3572,
-          originLng: 2.3844,
-          destLat: 6.3511,
-          destLng: 2.4125,
-          price: 2500,
-          commission: 50,
-          rating: 5,
-          createdAt: daysAgo(1),
-        },
-        // 2 courses en attente (PENDING) visibles immédiatement dans Zém Radar
-        {
-          clientId: client.id,
-          driverId: null,
-          status: "PENDING",
-          vehicleType: "ZEM",
-          originLat: 6.3615,
-          originLng: 2.4085,
-          destLat: 6.3702,
-          destLng: 2.4318,
-          price: 750,
-          commission: 113,
-          createdAt: hoursAgo(0.1),
-        },
-        {
-          clientId: pendingZemUser.id,
-          driverId: null,
-          status: "PENDING",
-          vehicleType: "ZEM_ELECTRIC",
-          originLat: 6.3528,
-          originLng: 2.3961,
-          destLat: 6.3688,
-          destLng: 2.4215,
-          price: 900,
-          commission: 135,
-          createdAt: hoursAgo(0.05),
-        },
-      ],
-    });
-  }
-
-  // 8. Missions de livraison / Coursier réalistes (terminées + en attente sur le Radar Coursier)
-  const existingDeliveries = await prisma.delivery.count();
-  if (existingDeliveries < 3) {
-    await prisma.delivery.createMany({
-      data: [
-        {
-          clientId: client.id,
-          courierId: courierUser.id,
-          packageType: "personal",
-          pickupAddress: "Pharmacie Camp Guézo, Cotonou",
-          dropAddress: "Fidjrossè Calvaire, Von pavée",
-          payer: "SENDER",
-          price: 2000,
-          pickupCode: "4821",
-          deliveryCode: "9034",
-          status: "COMPLETED",
-          createdAt: hoursAgo(3),
-        },
-        // 2 missions PENDING visibles immédiatement dans l'Espace Coursier / Livreur
-        {
-          clientId: client.id,
-          courierId: null,
-          packageType: "personal",
-          pickupAddress: "Supermarché Erevan, Akpakpa",
-          dropAddress: "Haie Vive, près des Cocotiers",
-          payer: "SENDER",
-          price: 2000,
-          pickupCode: "3910",
-          deliveryCode: "7428",
-          status: "PENDING",
-          createdAt: hoursAgo(0.2),
-        },
-        {
-          clientId: pendingAgencyUser.id,
-          courierId: null,
-          packageType: "doc",
-          pickupAddress: "Ganhi, Immeuble BIBE, Cotonou",
-          dropAddress: "Cadjèhoun, Ministère du Plan",
-          payer: "SENDER",
-          price: 1000,
-          pickupCode: "5512",
-          deliveryCode: "8841",
-          status: "PENDING",
-          createdAt: hoursAgo(0.1),
-        },
-      ],
-    });
-  }
-
-  // 9. Transactions réalistes pour le client de démo
-  const clientWallet = await prisma.wallet.findUnique({ where: { userId: client.id } });
-  if (clientWallet) {
-    const txCount = await prisma.transaction.count({ where: { walletId: clientWallet.id } });
-    if (txCount === 0) {
-      await prisma.transaction.createMany({
-        data: [
-          {
-            walletId: clientWallet.id,
-            type: "CREDIT",
-            amount: 50000,
-            label: "Recharge MTN Mobile Money",
-            meta: "Réf. MOMO-BJ-982411",
-            createdAt: daysAgo(2),
-          },
-          {
-            walletId: clientWallet.id,
-            type: "DEBIT",
-            amount: 2500,
-            label: "Course Voiture Confort — Aéroport → Novotel",
-            meta: "Conducteur : Ulrich Houngbédji",
-            createdAt: daysAgo(1),
-          },
-          {
-            walletId: clientWallet.id,
-            type: "DEBIT",
-            amount: 2000,
-            label: "Coursier Personnel — Pharmacie Camp Guézo → Fidjrossè",
-            meta: "Coursier : Fifamè Arnaud Zinsou",
-            createdAt: hoursAgo(3),
-          },
-          {
-            walletId: clientWallet.id,
-            type: "DEBIT",
-            amount: 700,
-            label: "Course Zem Express — Haie Vive → Ganhi",
-            meta: "Conducteur : Romaric Soglo",
-            createdAt: hoursAgo(2),
-          },
-        ],
-      });
+    for (const user of users) {
+      await prisma.$transaction([
+        prisma.transaction.deleteMany({ where: { wallet: { userId: user.id } } }),
+        prisma.notification.deleteMany({ where: { userId: user.id } }),
+        prisma.ride.deleteMany({ where: { OR: [{ clientId: user.id }, { driverId: user.id }] } }),
+        prisma.delivery.deleteMany({ where: { clientId: user.id } }),
+        prisma.rentalBooking.deleteMany({ where: { clientId: user.id } }),
+        prisma.marketplaceOrder.deleteMany({ where: { clientId: user.id } }),
+        prisma.artisanRequest.deleteMany({ where: { clientId: user.id } }),
+        prisma.providerProfile.deleteMany({ where: { userId: user.id } }),
+        prisma.wallet.deleteMany({ where: { userId: user.id } }),
+        prisma.otpCode.deleteMany({ where: { phone: { in: variants } } }),
+        prisma.user.delete({ where: { id: user.id } }),
+      ]);
+      removed += 1;
     }
   }
 
-  console.log("✔ Écosystème réaliste AZƆ̀ Bénin initialisé :");
-  console.log("  • Admin              : +229 01 97 00 00 00 (Direction Générale AZƆ̀ Bénin)");
-  console.log("  • Client             : +229 01 97 00 00 42 (Kossi Boris Adjovi — 48 500 FCFA)");
-  console.log("  • Zem indépendant    : +229 01 97 00 00 01 (Romaric Soglo — Haojue DK 150)");
-  console.log("  • Coursier personnel : +229 01 97 00 00 04 (Fifamè Arnaud Zinsou — Bajaj Boxer)");
-  console.log("  • Agence Or          : +229 01 97 00 00 10 (Atlantique Mobilité & Flotte Cotonou SARL)");
-  console.log("  • 3 dossiers KYC complets avec pièces en attente dans la console Admin");
-}
-
-async function upsertApprovedProvider({
-  user,
-  type,
-  fullName,
-  city,
-  zones,
-  bio = null,
-  vehicleType = null,
-  vehicleModel = null,
-  plateNumber = null,
-  categoryId = null,
-  agencyName = null,
-  plan = null,
-  agencyId = null,
-  experienceYears = 3,
-  rating = 4.9,
-  jobsCompleted = 25,
-  docKinds = [],
-  sampleDocPath,
-  inTwoYears,
-  adminId = null,
-}) {
-  const now = new Date();
-  let profile = await prisma.providerProfile.findUnique({ where: { userId: user.id } });
-  if (!profile) {
-    profile = await prisma.providerProfile.create({
-      data: {
-        userId: user.id,
-        type,
-        status: "APPROVED",
-        fullName,
-        city,
-        zones,
-        bio,
-        vehicleType,
-        vehicleModel,
-        plateNumber,
-        categoryId,
-        agencyName,
-        plan,
-        agencyId,
-        experienceYears,
-        rating,
-        jobsCompleted,
-        kycScore: 100,
-        submittedAt: now,
-        reviewedAt: now,
-        activatedAt: now,
-        reviewedById: adminId,
-      },
-    });
-    await prisma.providerEvent.create({
-      data: {
-        providerId: profile.id,
-        actorId: adminId,
-        type: "APPROVED",
-        comment: "Dossier complet vérifié et approuvé par l'équipe conformité AZƆ̀ Bénin",
-      },
-    });
-  } else {
-    profile = await prisma.providerProfile.update({
-      where: { id: profile.id },
-      data: {
-        type,
-        status: "APPROVED",
-        fullName,
-        city,
-        zones,
-        bio,
-        vehicleType,
-        vehicleModel,
-        plateNumber,
-        categoryId,
-        agencyName,
-        plan,
-        agencyId,
-        rating,
-        jobsCompleted,
-        kycScore: 100,
-      },
-    });
-  }
-
-  for (const kind of docKinds) {
-    const existingDoc = await prisma.providerDocument.findFirst({
-      where: { providerId: profile.id, kind },
-    });
-    if (!existingDoc) {
-      await prisma.providerDocument.create({
-        data: {
-          providerId: profile.id,
-          kind,
-          url: sampleDocPath,
-          mimeType: "image/png",
-          sizeBytes: 18420,
-          status: "VALID",
-          expiresAt: ["CNI", "PERMIS", "ASSURANCE", "VISITE_TECHNIQUE"].includes(kind)
-            ? inTwoYears
-            : null,
-          reviewedAt: now,
-        },
-      });
+  for (const name of LEGACY_DEMO_AGENCY_NAMES) {
+    const agency = await prisma.agency.findFirst({ where: { name } });
+    if (!agency) continue;
+    const [users, providers] = await Promise.all([
+      prisma.user.count({ where: { agencyId: agency.id } }),
+      prisma.providerProfile.count({ where: { agencyId: agency.id } }),
+    ]);
+    if (users === 0 && providers === 0) {
+      await prisma.agency.delete({ where: { id: agency.id } });
     }
   }
-}
 
-async function upsertPendingProvider({
-  user,
-  type,
-  status,
-  fullName,
-  city,
-  zones,
-  bio = null,
-  vehicleType = null,
-  vehicleModel = null,
-  plateNumber = null,
-  categoryId = null,
-  agencyName = null,
-  plan = null,
-  experienceYears = 3,
-  submittedAt,
-  docKinds = [],
-  sampleDocPath,
-  inTwoYears,
-}) {
-  let profile = await prisma.providerProfile.findUnique({ where: { userId: user.id } });
-  if (!profile) {
-    profile = await prisma.providerProfile.create({
-      data: {
-        userId: user.id,
-        type,
-        status,
-        fullName,
-        city,
-        zones,
-        bio,
-        vehicleType,
-        vehicleModel,
-        plateNumber,
-        categoryId,
-        agencyName,
-        plan,
-        experienceYears,
-        kycScore: 80,
-        submittedAt,
-      },
-    });
-    await prisma.providerEvent.create({
-      data: {
-        providerId: profile.id,
-        type: "SUBMITTED",
-        comment: `Dossier ${type} déposé depuis l'application mobile AZƆ̀ (${city})`,
-        createdAt: submittedAt,
-      },
-    });
-  } else if (bio && !profile.bio) {
-    profile = await prisma.providerProfile.update({
-      where: { id: profile.id },
-      data: { bio, categoryId: categoryId ?? profile.categoryId },
-    });
-  }
-
-  for (const kind of docKinds) {
-    const existingDoc = await prisma.providerDocument.findFirst({
-      where: { providerId: profile.id, kind },
-    });
-    if (!existingDoc) {
-      await prisma.providerDocument.create({
-        data: {
-          providerId: profile.id,
-          kind,
-          url: sampleDocPath,
-          mimeType: "image/png",
-          sizeBytes: 24100,
-          status: "PENDING",
-          expiresAt: ["CNI", "PERMIS", "ASSURANCE", "VISITE_TECHNIQUE"].includes(kind)
-            ? inTwoYears
-            : null,
-        },
-      });
-    }
+  if (removed > 0) {
+    console.log(`✔ ${removed} ancien(s) compte(s) de démonstration supprimé(s).`);
   }
 }
 
@@ -842,7 +240,7 @@ async function listProviders() {
 async function approveProvider(rawPhone, forcedType) {
   const phone = normalizePhone(rawPhone);
   if (!phone) {
-    console.error("Usage : npm run providers:approve -- +2290197000042 [DRIVER|COURIER|AGENCY]");
+    console.error("Usage : npm run providers:approve -- +22901XXXXXXXX [DRIVER|COURIER|AGENCY]");
     process.exitCode = 1;
     return;
   }
@@ -942,8 +340,9 @@ async function main() {
       break;
     case undefined: {
       console.log("Initialisation des données AZƆ̀ Bénin…");
-      const admin = await ensureAdmin();
-      await seedRealisticEcosystem(admin);
+      await ensureAdmin();
+      // Les anciens comptes de démonstration (numéros de test) sont retirés de la base.
+      await purgeLegacyDemoData();
       await backfillProviders();
       console.log("\nTerminé. Tape `npm run providers:list` pour voir tous les comptes prêts.");
       break;

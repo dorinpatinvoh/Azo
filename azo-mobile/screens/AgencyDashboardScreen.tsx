@@ -90,7 +90,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
     if (!phoneValid) {
       Alert.alert(
         "Numéro à 10 chiffres requis",
-        "Entre le numéro béninois à 10 chiffres commençant par 01 (ex. 01 97 00 00 42) d'un conducteur ou coursier au dossier validé."
+        "Entre le numéro béninois à 10 chiffres commençant par 01 (ex. 01 XX XX XX XX) d'un conducteur ou coursier au dossier validé."
       );
       return;
     }
@@ -465,7 +465,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                 style={styles.phoneInput}
                 value={phoneInput}
                 onChangeText={(v) => setPhoneInput(formatBeninPhoneInput(v))}
-                placeholder="01 97 00 00 42"
+                placeholder="01 XX XX XX XX"
                 placeholderTextColor={colors.outline}
                 keyboardType="phone-pad"
                 maxLength={14}

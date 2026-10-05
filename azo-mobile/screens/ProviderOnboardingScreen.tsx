@@ -942,7 +942,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                       label="Téléphone pro (01...)"
                       value={form.businessPhone}
                       onChangeText={(businessPhone) => setForm((f) => ({ ...f, businessPhone }))}
-                      placeholder="Ex. 01 97 00 00 05"
+                      placeholder="Ex. 01 XX XX XX XX"
                       keyboardType="number-pad"
                       maxLength={14}
                     />
@@ -973,7 +973,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                   label="Compte Mobile Money Entreprise (Reversements MTN / Moov — 01...)"
                   value={form.payoutPhone}
                   onChangeText={(payoutPhone) => setForm((f) => ({ ...f, payoutPhone }))}
-                  placeholder="Ex. 01 97 00 00 05"
+                  placeholder="Ex. 01 XX XX XX XX"
                   keyboardType="number-pad"
                   maxLength={14}
                 />

@@ -21,7 +21,6 @@ import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
 import {
   DEFAULT_API_URL,
-  ProfileRole,
   ProviderRef,
   authApi,
   errorMessage,
@@ -43,35 +42,13 @@ type Props = {
   onBack: () => void;
 };
 
-const PROFILES: {
-  id: ProfileRole;
-  label: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  demoPhone: string;
-}[] = [
-  { id: "CLIENT", label: "Client", icon: "person", demoPhone: "01 97 00 00 42" },
-  { id: "DRIVER", label: "Zem / Chauffeur", icon: "two-wheeler", demoPhone: "01 97 00 00 01" },
-  { id: "COURIER", label: "Coursier / Livreur", icon: "local-shipping", demoPhone: "01 97 00 00 04" },
-  { id: "AGENCY", label: "Agence", icon: "apartment", demoPhone: "01 97 00 00 10" },
-];
-
-const DEMO_DIGITS = new Set([
-  "",
-  "0197000042",
-  "0197000001",
-  "0197000004",
-  "0197000010",
-  "0197000000",
-]);
-
 const SMS_BANNER_DURATION_SEC = 5;
 
 export default function OtpLoginScreen({ onVerified, onBack }: Props) {
   const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("01 97 00 00 42");
+  const [phone, setPhone] = useState("");
   const [code, setCode] = useState(["", "", "", ""]);
   const [sending, setSending] = useState(false);
-  const [profile, setProfile] = useState<ProfileRole>("CLIENT");
   const inputsRef = useRef<Array<TextInput | null>>([]);
 
   // Bannière SMS simulée (affichée 5 secondes puis disparaît automatiquement)
@@ -120,18 +97,11 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
     setPhone(formatBeninPhoneInput(raw));
   }
 
-  function handleSelectProfile(p: (typeof PROFILES)[number]) {
-    setProfile(p.id);
-    if (DEMO_DIGITS.has(digits)) {
-      setPhone(p.demoPhone);
-    }
-  }
-
   async function handleSendCode() {
     if (!isPhoneValid) {
       Alert.alert(
         "Numéro à 10 chiffres requis",
-        "Entre les 10 chiffres commençant par 01 (ex. 01 97 00 00 42)."
+        "Entre les 10 chiffres commençant par 01 (ex. 01 XX XX XX XX)."
       );
       return;
     }
@@ -159,7 +129,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
 
     try {
       const normalized = toBeninE164(digits);
-      const response = await authApi.verifyOtp(normalized, fullCode, profile);
+      const response = await authApi.verifyOtp(normalized, fullCode);
 
       await SecureStore.setItemAsync("userToken", response.token);
 
@@ -298,46 +268,6 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
             ) : null}
           </View>
 
-          {step === "phone" && (
-            <View style={styles.profileGrid}>
-              {PROFILES.map((p) => {
-                const active = profile === p.id;
-                return (
-                  <Pressable
-                    key={p.id}
-                    onPress={() => handleSelectProfile(p)}
-                    style={[styles.profileChip, active && styles.profileChipActive]}
-                  >
-                    <MaterialIcons
-                      name={p.icon}
-                      size={16}
-                      color={active ? "#fff" : colors.onSurfaceVariant}
-                    />
-                    <Text
-                      style={[styles.profileText, active && styles.profileTextActive]}
-                      numberOfLines={1}
-                    >
-                      {p.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
-          {step === "phone" && profile !== "CLIENT" && (
-            <View style={styles.profileHint}>
-              <MaterialIcons name="shield" size={16} color={colors.primary} />
-              <Text style={styles.profileHintText}>
-                {profile === "DRIVER"
-                  ? "Zem / Conducteur indépendant : tu déposeras un dossier (identité, véhicule, photos) validé par un administrateur AZƆ̀."
-                  : profile === "COURIER"
-                    ? "Coursier / Coursier personnel / Livreur : dépose ton dossier (identité, moto/véhicule, photos) pour activer tes missions."
-                    : "Agence : dépose le dossier de ta flotte (raison sociale, formule, pièces) pour validation par un administrateur AZƆ̀."}
-              </Text>
-            </View>
-          )}
-
           {step === "phone" ? (
             <View style={styles.card}>
               <View style={styles.labelRow}>
@@ -358,7 +288,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
                 </View>
                 <TextInput
                   style={styles.phoneInput}
-                  placeholder="01 97 00 00 42"
+                  placeholder="01 XX XX XX XX"
                   placeholderTextColor={colors.outline}
                   keyboardType="phone-pad"
                   value={phone}
@@ -569,36 +499,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  profileGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: spacing.md,
-  },
-  profileChip: {
-    width: "48.2%",
-    height: 46,
-    flexDirection: "row",
-    gap: 8,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceContainerLow,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-  },
-  profileChipActive: { backgroundColor: colors.primary },
-  profileText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
-  profileTextActive: { color: "#fff" },
-  profileHint: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "flex-start",
-    backgroundColor: colors.primaryFixed,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  profileHintText: { ...typography.labelSm, color: colors.onPrimaryFixed, flex: 1, lineHeight: 18 },
   card: {
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.xl,

@@ -23,12 +23,12 @@ export class AuthService {
     const local = extractLocalBeninDigits(rawPhone);
     if (local.length !== 10 && local.length !== 8) {
       throw new BadRequestException(
-        "Numéro béninois invalide : saisis les 10 chiffres commençant par 01 (ex. 01 97 00 00 42)"
+        "Numéro béninois invalide : saisis les 10 chiffres commençant par 01 (ex. 01 XX XX XX XX)"
       );
     }
     if (local.length === 10 && !local.startsWith("01")) {
       throw new BadRequestException(
-        "Au Bénin (+229), un numéro à 10 chiffres commence par 01 (ex. 01 97 00 00 42)"
+        "Au Bénin (+229), un numéro à 10 chiffres commence par 01 (ex. 01 XX XX XX XX)"
       );
     }
     return {

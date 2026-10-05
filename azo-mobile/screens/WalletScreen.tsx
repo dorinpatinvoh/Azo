@@ -15,9 +15,9 @@ const ACTIONS = [
 ];
 
 const PAYMENT_METHODS = [
-  { id: "momo", label: "MTN Mobile Money", meta: "+229 01 97 •• 00 42", tag: "Par défaut", icon: "MTN" },
-  { id: "celtiis", label: "Celtiis Cash Bénin", meta: "+229 01 40 •• 33 90", tag: "Secondaire", icon: "CLTS" },
-  { id: "moov", label: "Moov Money Bénin", meta: "+229 01 95 •• 11 44", tag: undefined, icon: "MOOV" },
+  { id: "momo", label: "MTN Mobile Money", meta: "+229 01 •• •• •• ••", tag: "Par défaut", icon: "MTN" },
+  { id: "celtiis", label: "Celtiis Cash Bénin", meta: "+229 01 •• •• •• ••", tag: "Secondaire", icon: "CLTS" },
+  { id: "moov", label: "Moov Money Bénin", meta: "+229 01 •• •• •• ••", tag: undefined, icon: "MOOV" },
   { id: "visa", label: "Carte Visa UBA Bénin", meta: "•••• •••• •••• 8902 · Exp 09/28", tag: undefined, icon: "VISA" },
 ];
 

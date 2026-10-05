@@ -1,6 +1,6 @@
 /**
  * Numérotation béninoise (+229) à 10 chiffres : "01" suivi des 8 chiffres de l'abonné
- * (ex. 01 97 00 00 42 -> +2290197000042).
+ * (ex. 01 XX XX XX XX -> +22901XXXXXXXX).
  *
  * Pour ne casser aucun compte créé avant le passage à 10 chiffres, `beninPhoneVariants`
  * renvoie à la fois la forme canonique à 10 chiffres (+22901XXXXXXXX) et l'ancienne

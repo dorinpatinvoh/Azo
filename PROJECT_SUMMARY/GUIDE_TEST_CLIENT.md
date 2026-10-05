@@ -24,26 +24,26 @@ L'application fonctionne actuellement en **mode simulation** (sans facturation d
 
 ---
 
-## 🔑 3. Les 5 Comptes Pré-configurés pour tout tester immédiatement
+## 🔑 3. Comptes et connexion
 
-Sur l'écran de connexion, toucher l'un des boutons (**Client**, **Zem / Chauffeur**, **Coursier / Livreur**, **Agence**) pré-remplit automatiquement le numéro de démonstration correspondant :
+L'écran de connexion ne pré-remplit plus aucun numéro : **chaque utilisateur saisit son propre numéro de mobile béninois à 10 chiffres** (`01 XX XX XX XX`). Le compte est créé automatiquement à la première connexion réussie, puis retrouvé aux connexions suivantes.
 
-| Espace à tester | Numéro à 10 chiffres | Profil pré-chargé |
-|---|---|---|
-| **1. Espace Client** | **`01 97 00 00 42`** | **Kossi Boris Adjovi** — Portefeuille AZƆ̀ Pay crédité de **48 500 FCFA**, historique de courses et livraisons à Cotonou. |
-| **2. Espace Zem / Chauffeur** | **`01 97 00 00 01`** | **Romaric Soglo** — Zem indépendant validé (*Haojue DK 150 · BJ-4821-AA*), solde **34 200 FCFA**, courses en attente dans le radar. |
-| **3. Espace Coursier / Livreur** | **`01 97 00 00 04`** | **Fifamè Arnaud Zinsou** — Coursier personnel & express validé (*Bajaj Boxer · BJ-6712-AC*), missions de livraison en attente. |
-| **4. Espace Agence (Flotte)** | **`01 97 00 00 10`** | **Atlantique Mobilité & Flotte Cotonou SARL** — Formule **AGENCE OR** (100 comptes, commission 2 %), 3 chauffeurs/coursiers actifs. |
-| **5. Espace Administrateur** | **`01 97 00 00 00`** | **Direction Générale AZƆ̀ Bénin** — Validation des dossiers prestataires (KYC) et pilotage global. |
+| Espace | Comment y accéder |
+|---|---|
+| **1. Espace Client** | S'inscrire avec son propre numéro, puis commander des courses, des livraisons et recharger son portefeuille AZƆ̀ Pay. |
+| **2. Espace Zem / Chauffeur** | Depuis **Profil → Devenir Zem / Coursier / Agence**, déposer un dossier véhicule ; l'espace métier s'ouvre après validation Administrateur. |
+| **3. Espace Coursier / Livreur** | Même parcours d'inscription avec un profil Coursier / Livreur, puis validation Administrateur. |
+| **4. Espace Agence (Flotte)** | Même parcours d'inscription avec un profil Agence (raison sociale, formule, pièces), puis validation Administrateur. |
+| **5. Espace Administrateur** | Numéro Administrateur pré-configuré **`01 97 00 00 00`** (Direction Générale AZƆ̀ Bénin) — validation des dossiers KYC et pilotage global. |
 
-*(Pour vous déconnecter et changer de profil : allez dans **Profil → Se déconnecter**, ou appuyez sur l'icône de déconnexion en haut à droite des espaces professionnels).*
+*(Pour vous déconnecter et changer de profil : allez dans **Profil → Se déconnecter**, ou appuyez sur l'icône de déconnexion en haut à droite des espaces professionnels.)*
 
 ---
 
 ## 🧪 4. Parcours de test étape par étape
 
-### Parcours A — Tester l'Espace Client (`01 97 00 00 42`)
-1. Connectez-vous avec **`01 97 00 00 42`** (bouton **Client**).
+### Parcours A — Tester l'Espace Client
+1. Connectez-vous avec **votre propre numéro** (n'importe quel numéro béninois à 10 chiffres commençant par `01`).
 2. **Commander un Zem ou une Voiture** :
    - Sur l'accueil, appuyez sur **Zem** ou **Voiture**.
    - Choisissez une destination à Cotonou (ex. *Aéroport*, *Ganhi*, *Haie Vive*), vérifiez le tarif estimé et confirmez la course.
@@ -53,47 +53,47 @@ Sur l'écran de connexion, toucher l'un des boutons (**Client**, **Zem / Chauffe
    - Choisissez le type de mission : *Document*, *Petit Colis*, *Colis Moyen* ou **Coursier Personnel (Courses, pharmacie, achats)**.
    - Appuyez sur **Commander un coursier** : l'application génère **2 codes de sécurité à 4 chiffres** (un *Code ramassage* pour l'expéditeur et un *Code remise finale* pour le destinataire).
 4. **Portefeuille AZƆ̀ Pay** :
-   - Ouvrez l'onglet **Wallet** en bas : consultez le solde (**48 500 FCFA**), le cashback, les moyens de paiement (*MTN MoMo, Celtiis Cash, Moov Money, Visa UBA*) et testez le bouton **Recharger**.
+   - Ouvrez l'onglet **Wallet** en bas : consultez votre solde, le cashback, les moyens de paiement (*MTN MoMo, Celtiis Cash, Moov Money, Visa UBA*) et testez le bouton **Recharger** (crédit immédiat du solde).
 
 ---
 
-### Parcours B — Tester l'Espace Zem / Conducteur (`01 97 00 00 01`)
-1. Connectez-vous avec **`01 97 00 00 01`** (bouton **Zem / Chauffeur**).
+### Parcours B — Tester l'Espace Zem / Conducteur
+1. Créez d'abord un compte Zem validé (voir **Parcours E**), puis connectez-vous avec ce numéro.
 2. Vous arrivez sur le **Zém Radar** :
    - Activez l'interrupteur **« Prêt à rouler »** (en haut à droite de la carte de statut).
-   - Vous voyez immédiatement les courses en attente des clients à Cotonou avec la distance et le gain net (commission AZƆ̀ déduite).
+   - Les courses en attente des clients de votre zone s'affichent avec la distance et le gain net (commission AZƆ̀ déduite).
    - Appuyez sur **Accepter la course** → **Client à bord (Démarrer)** → **Terminer la course** : votre portefeuille AZƆ̀ Pay est crédité instantanément !
 
 ---
 
-### Parcours C — Tester l'Espace Coursier / Livreur (`01 97 00 00 04`)
-1. Connectez-vous avec **`01 97 00 00 04`** (bouton **Coursier / Livreur**).
+### Parcours C — Tester l'Espace Coursier / Livreur
+1. Créez un compte Coursier / Livreur validé (voir **Parcours E**), puis connectez-vous avec ce numéro.
 2. Vous arrivez sur l'**Espace Coursier & Livreur** :
-   - Consultez les missions disponibles (*Coursier Personnel — Supermarché Erevan → Haie Vive*, *Document — Ganhi → Cadjèhoun*).
+   - Consultez les missions disponibles déposées par les clients.
    - Appuyez sur **Accepter cette mission**.
    - **Étape 1 (Ramassage)** : une bannière affiche pendant **5 secondes** le code client à 4 chiffres (touchez-la ou saisissez les 4 chiffres) puis validez le ramassage.
    - **Étape 2 (Remise finale)** : saisissez le second code à 4 chiffres du destinataire puis appuyez sur **Livrer & encaisser** → votre solde AZƆ̀ Pay augmente du montant net !
 
 ---
 
-### Parcours D — Tester l'Espace Agence de Flotte (`01 97 00 00 10`)
-1. Connectez-vous avec **`01 97 00 00 10`** (bouton **Agence**).
-2. Vous arrivez sur le tableau de bord de **Atlantique Mobilité & Flotte Cotonou SARL** :
-   - Visualisez la formule active (**Agence Or — Commission 2 %**), la jauge de capacité (**3 / 100 comptes**), le chiffre d'affaires de la flotte et la note moyenne (**4,9 ★**).
+### Parcours D — Tester l'Espace Agence de Flotte
+1. Créez un compte Agence validé (voir **Parcours E**), puis connectez-vous avec ce numéro.
+2. Vous arrivez sur le tableau de bord de votre flotte :
+   - Visualisez la formule active (**Agence Pro / Argent / Or / Diamant**), la jauge de capacité, le chiffre d'affaires de la flotte et la note moyenne.
    - Consultez la **Grille officielle AZƆ̀** (*Agence Pro 100 000 F / Agence Argent 215 500 F / Agence Or 450 500 F / Agence Diamant 600 500 F*).
-   - Testez le bouton **« + Ajouter »** pour rattacher un conducteur validé par son numéro à 10 chiffres (`01 97 00 00 01`).
+   - Testez le bouton **« + Ajouter »** pour rattacher un conducteur validé par son numéro à 10 chiffres.
 
 ---
 
 ### Parcours E — Tester l'Inscription d'un Nouveau Prestataire + Validation par l'Admin
 1. **Créer une nouvelle demande prestataire** :
-   - Sur l'écran de connexion, choisissez **Zem / Chauffeur**, **Coursier / Livreur** ou **Agence**, et tapez un **nouveau numéro à 10 chiffres** (ex. `01 96 00 11 22`).
+   - Sur l'écran de connexion, tapez **votre propre numéro à 10 chiffres (ex. `01 XX XX XX XX`)** et connectez-vous.
    - Une fois connecté, allez dans **Profil → Devenir Zem / Coursier / Agence** (ou appuyez sur **Compléter mon dossier**).
    - Remplissez les 5 étapes (Activité, Identité, Véhicule ou Formule d'Agence, Photos obligatoires **CNI + Selfie** avec l'appareil photo ou la galerie, puis Confirmation) et appuyez sur **Soumettre mon dossier**.
 2. **Valider le dossier côté Administrateur (`01 97 00 00 00`)** :
    - Déconnectez-vous et connectez-vous avec le numéro Administrateur **`01 97 00 00 00`** *(astuce : vous pouvez aussi toucher l'icône de réglage en haut à droite de l'écran de connexion → « Se connecter en Administrateur »)*.
    - Dans la **Console de validation des prestataires**, filtrez par statut (*À traiter*) ou par activité (*Zem / Chauffeur*, *Coursier / Livreur*, *Agence*).
-   - Ouvrez un dossier (ex. *Gildas Agbossou*, *Prisca Hounkpatin*, *Bénin Express Logistique SARL* ou le dossier que vous venez de déposer) :
+   - Ouvrez le dossier que vous venez de déposer :
      - Cliquez sur les miniatures photos pour les inspecter en plein écran.
      - Appuyez sur **Valider** sur chaque pièce, puis sur **Approuver et activer le compte**.
    - Appuyez enfin sur le bouton **« Pilotage »** en haut à droite pour voir les statistiques globales AZƆ̀, rechercher/bloquer un utilisateur et consulter le journal d'audit.

@@ -18,7 +18,7 @@ Les travaux réalisés aujourd'hui sur l'application mobile **AZƆ̀ (`azo-mobil
 ### 2.1. Refonte et aération de l'écran de connexion (`OtpLoginScreen.tsx`)
 - **Épuration visuelle (UI/UX)** : Suppression des textes secondaires superflus afin d'offrir une interface respirante, lisible et moderne dès l'ouverture.
 - **Conformité au plan de numérotation national béninois (ARCEP Bénin)** :
-  - Validation stricte au format **10 chiffres** commençant par **`01`** (ex. `01 97 00 00 01`), avec support automatique de l'indicatif international `+229`.
+  - Validation stricte au format **10 chiffres** commençant par **`01`** (ex. `01 XX XX XX XX`), avec support automatique de l'indicatif international `+229`.
   - Formatage visuel dynamique du numéro pendant la saisie.
 - **Bannière SMS OTP simulée (5 secondes)** :
   - Afin de permettre les tests complets sur fichier **APK Android** sans consommation de crédits SMS opérateur, le code OTP généré par le serveur s'affiche dans une **notification flottante en haut de l'écran pendant exactement 5 secondes**, puis disparaît automatiquement.

@@ -85,10 +85,11 @@ La constante `AGENCY_FORMULAS` applique strictement la grille officielle validé
 ## 6. Données Réalistes Bénin (`prisma/seed.ts`) & Déploiement Cloud Render (`render.yaml`)
 
 ### 6.1. Peuplement Automatique (Seed Cotonou / Bénin)
-Le fichier `prisma/seed.ts` initialise automatiquement la base de données avec un écosystème complet et réaliste à **Cotonou** :
-- **Comptes de démonstration prêts à l'emploi** (tous au format béninois 10 chiffres `01...` avec portefeuilles crédités en FCFA) :
-  - Administrateur (`0197000001`), Client (`0197000002`), Chauffeur Zem approuvé (`0197000003`), Coursier approuvé (`0197000004`), Agence OR « Cotonou Flotte Express SARL » (`0197000005`), ainsi que des dossiers candidats déjà soumis avec photos KYC pour tester la validation Admin.
-- **Lieux emblématiques de Cotonou** (*Place de l'Étoile Rouge, Carrefour IITA Calavi, Aéroport Cardinal Bernardin Gantin, Marché Dantokpa, Ganhi, Haie Vive, Fidjrossè, Stade de l'Amitié*), flotte de location, annonces Marketplace et notifications.
+Le fichier `prisma/seed.js` initialise la base de données sans aucun compte de démonstration :
+- **Compte Administrateur** pré-configuré (`ADMIN_PHONE`, par défaut `+229 01 97 00 00 00`) : validation des dossiers prestataires (KYC) et pilotage global.
+- **Aucun numéro de test** : chaque client ou prestataire s'inscrit depuis l'application mobile avec son propre numéro béninois à 10 chiffres (`01...`) ; le rôle métier n'est accordé qu'après approbation du dossier par l'Administrateur.
+- **Nettoyage automatique** : à chaque exécution, le seed purge les anciens comptes de démonstration historiques (et leurs données : courses, livraisons, portefeuilles, dossiers, agences), sans jamais toucher au compte Administrateur.
+- Outils de gestion : `npm run providers:list` (comptes et dossiers) et `npm run providers:approve -- +229...` (approbation d'un dossier par script).
 
 ### 6.2. Infrastructure Cloud Render (`render.yaml`)
 - Configuration **Infrastructure-as-Code** (`render.yaml`) déployant :
