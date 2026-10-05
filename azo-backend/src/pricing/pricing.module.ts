@@ -10,12 +10,13 @@ import { TARIFICATION_CONFIG, loadTarificationConfig } from "./tarification.conf
 export class PricingController {
   constructor(private readonly pricing: PricingService) {}
 
-  /** GET /pricing — gammes, paliers kilométriques et niveaux d'agence. */
+  /** GET /pricing — véhicules, paliers kilométriques et niveaux d'agence. */
   @Get()
   config() {
     return {
       config: this.pricing.getConfig(),
-      gammes: this.pricing.vehicleGammes(),
+      vehicles: this.pricing.vehicleKeys(),
+      zemVehicles: this.pricing.zemVehicleKeys(),
     };
   }
 }

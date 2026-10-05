@@ -57,9 +57,31 @@ export class RidesService {
     });
   }
 
-  // Courses en attente visibles par les chauffeurs (écran "Zém Radar")
-  pending() {
-    return this.prisma.ride.findMany({ where: { status: "PENDING" }, orderBy: { createdAt: "asc" } });
+  /**
+   * Courses en attente visibles par un chauffeur (écran « Radar »).
+   *
+   * Le radar applique la règle de visibilité de la configuration tarifaire
+   * (`pricing.rideVisibleFor`) : par défaut un prestataire ne voit que les demandes du
+   * véhicule EXACT qu'il a déclaré — un Zem à essence ne voit donc pas les demandes de
+   * Zem électrique, et Gazelle ≠ Koala ≠ Léopard. Le mode souple (deux Zem qui
+   * partagent leurs demandes) s'active dans `tarification.json` (`radar.strictVehicleMatch`).
+   *
+   * Les coursiers (livraison) ne reçoivent pas les demandes de transport : leur espace
+   * de missions est `GET /delivery/available`.
+   */
+  async pending(driverId: string) {
+    const driver = await this.prisma.user.findUnique({
+      where: { id: driverId },
+      include: { provider: true },
+    });
+    if (driver?.provider?.type === "COURIER") return [];
+
+    const driverVehicle = driver?.provider?.vehicleType ?? null;
+    const rides = await this.prisma.ride.findMany({
+      where: { status: "PENDING" },
+      orderBy: { createdAt: "asc" },
+    });
+    return rides.filter((ride) => this.pricing.rideVisibleFor(driverVehicle, ride.vehicleType));
   }
 
   // Un chauffeur ne peut conduire qu'une course à la fois
@@ -245,13 +267,11 @@ export class RidesService {
     const type = String(driver.provider.type).toUpperCase();
     if (type === "COURIER") return "COURSIER";
     if (type === "DRIVER") {
-      // Un conducteur de moto-taxi (gamme GAZELLE) sans agence est un Zem
-      // indépendant : il paie 15 % de ses revenus du mois, pas par course.
-      const gamme = driver.provider.vehicleType
-        ? this.pricing.resolveGamme(driver.provider.vehicleType)
-        : null;
+      // Un conducteur de moto-taxi (Zem essence ou électrique) sans agence est un Zem
+      // indépendant : il paie 15 % de ses revenus du mois, pas de commission par course.
+      const isZem = this.pricing.isZem(driver.provider.vehicleType);
       const hasAgency = !!driver.agencyId;
-      return gamme === "GAZELLE" && !hasAgency ? "ZEM_INDEPENDANT" : null;
+      return isZem && !hasAgency ? "ZEM_INDEPENDANT" : null;
     }
     return null;
   }

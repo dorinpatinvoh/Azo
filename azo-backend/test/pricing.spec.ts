@@ -8,9 +8,15 @@ import {
 /**
  * Tests unitaires de la tarification AZƆ̀ (spécification « Tarifs et profils »).
  *
- * Les exemples du point 1 de la spécification sont repris tels quels :
- *   - GAZELLE 10 km : 800 + 10 × 200 = 2 800
- *   - GAZELLE 20 km : 800 + 15 × 200 + 5 × 150 = 4 550
+ * Deux filières distinctes :
+ *   - les MOTOS-TAXIS (Zem) : ZEM_ESSENCE et ZEM_ELECTRIC, au même tarif
+ *     (décision du 5 octobre 2026 : le Zem électrique a le tarif de la moto à essence) ;
+ *   - les VOITURES : GAZELLE (800 + 200/km), KOALA (1 200 + 375/km),
+ *     LEOPARD (2 500 + 900/km), avec le palier à 15 km.
+ *
+ * Exemples de la spécification repris tels quels :
+ *   - 10 km : 800 + 10 × 200 = 2 800
+ *   - 20 km : 800 + 15 × 200 + 5 × 150 = 4 550
  *   - LEOPARD 20 km : 2 500 + 15 × 900 + 5 × 800 = 20 000
  */
 describe("PricingService — prix d'une course (point 1 de la spec)", () => {
@@ -68,6 +74,7 @@ describe("PricingService — prix d'une course (point 1 de la spec)", () => {
     const detail = pricing.breakdown(20, "GAZELLE");
     expect(detail).toMatchObject({
       gamme: "GAZELLE",
+      family: "CAR",
       base: 800,
       kmInFirstBracket: 15,
       kmInSecondBracket: 5,
@@ -84,16 +91,94 @@ describe("PricingService — prix d'une course (point 1 de la spec)", () => {
     expect(pricing.getVehiclePricing("GAZELLE").airConditioned).toBeUndefined();
   });
 
-  it("refuse une gamme inconnue et une distance négative", () => {
-    expect(() => pricing.ridePrice(5, "FUSEE")).toThrow(/inconnue/i);
+  it("refuse un véhicule inconnu et une distance négative", () => {
+    expect(() => pricing.ridePrice(5, "FUSEE")).toThrow(/inconnu/i);
     expect(() => pricing.ridePrice(-1, "GAZELLE")).toThrow(/positif/i);
   });
 
-  it("convertit les anciens types de véhicules vers les gammes", () => {
-    expect(pricing.resolveGamme("ZEM")).toBe("GAZELLE");
-    expect(pricing.resolveGamme("ZEM_ELECTRIC")).toBe("GAZELLE");
-    expect(pricing.resolveGamme("CAR")).toBe("KOALA");
-    expect(pricing.resolveGamme("gazelle")).toBe("GAZELLE");
+  it("convertit les anciens types de véhicules encore en base", () => {
+    // « ZEM » (moto-taxi historique) → Zem à essence ; « CAR » → voiture Koala.
+    expect(pricing.resolveVehicleKey("ZEM")).toBe("ZEM_ESSENCE");
+    expect(pricing.resolveVehicleKey("CAR")).toBe("KOALA");
+    expect(pricing.resolveVehicleKey("gazelle")).toBe("GAZELLE");
+    expect(pricing.resolveVehicleKey("ZEM_ELECTRIC")).toBe("ZEM_ELECTRIC");
+  });
+});
+
+describe("PricingService — filière Zem (motos-taxis)", () => {
+  const pricing = new PricingService(loadTarificationConfig());
+
+  it("facture les deux types de Zem au tarif de la moto à essence (décision validée)", () => {
+    const essence = pricing.getVehiclePricing("ZEM_ESSENCE");
+    const electrique = pricing.getVehiclePricing("ZEM_ELECTRIC");
+    expect(essence).toEqual(electrique);
+
+    // 10 km : 800 + 10 × 200 = 2 800 · 20 km : 800 + 15 × 200 + 5 × 150 = 4 550
+    expect(pricing.ridePrice(10, "ZEM_ESSENCE")).toBe(2800);
+    expect(pricing.ridePrice(20, "ZEM_ESSENCE")).toBe(4550);
+    expect(pricing.ridePrice(10, "ZEM_ELECTRIC")).toBe(2800);
+    expect(pricing.ridePrice(20, "ZEM_ELECTRIC")).toBe(4550);
+  });
+
+  it("classe les deux Zem dans la famille ZEM et les voitures dans la famille CAR", () => {
+    expect(pricing.vehicleFamily("ZEM_ESSENCE")).toBe("ZEM");
+    expect(pricing.vehicleFamily("ZEM_ELECTRIC")).toBe("ZEM");
+    for (const car of ["GAZELLE", "KOALA", "LEOPARD"]) {
+      expect(pricing.vehicleFamily(car)).toBe("CAR");
+      expect(pricing.isZem(car)).toBe(false);
+    }
+    expect(pricing.isZem("ZEM_ESSENCE")).toBe(true);
+    expect(pricing.isZem("ZEM_ELECTRIC")).toBe(true);
+    expect(pricing.isZem(null)).toBe(false);
+    expect(pricing.zemVehicleKeys()).toEqual(["ZEM_ESSENCE", "ZEM_ELECTRIC"]);
+  });
+
+  it("le détail du calcul indique la famille du véhicule", () => {
+    expect(pricing.breakdown(10, "ZEM_ELECTRIC")).toMatchObject({
+      gamme: "ZEM_ELECTRIC",
+      family: "ZEM",
+      base: 800,
+      perKmUpTo15: 200,
+      perKmFrom16: 150,
+      price: 2800,
+    });
+    expect(pricing.breakdown(10, "LEOPARD").family).toBe("CAR");
+  });
+
+  it("radar strict : chaque véhicule ne voit que ses propres demandes", () => {
+    // Zem essence ⇄ Zem électrique : deux véhicules distincts
+    expect(pricing.rideVisibleFor("ZEM_ESSENCE", "ZEM_ESSENCE")).toBe(true);
+    expect(pricing.rideVisibleFor("ZEM_ESSENCE", "ZEM_ELECTRIC")).toBe(false);
+    expect(pricing.rideVisibleFor("ZEM_ELECTRIC", "ZEM_ELECTRIC")).toBe(true);
+    // Voitures : correspondance exacte, jamais de mélange Zem / voiture
+    expect(pricing.rideVisibleFor("KOALA", "KOALA")).toBe(true);
+    expect(pricing.rideVisibleFor("KOALA", "GAZELLE")).toBe(false);
+    expect(pricing.rideVisibleFor("ZEM_ESSENCE", "GAZELLE")).toBe(false);
+    expect(pricing.rideVisibleFor("GAZELLE", "ZEM_ELECTRIC")).toBe(false);
+    // Un ancien type encore en base reste résolu (ZEM → Zem essence)
+    expect(pricing.rideVisibleFor("ZEM_ESSENCE", "ZEM")).toBe(true);
+    // Compte historique sans véhicule déclaré : rien n'est masqué
+    expect(pricing.rideVisibleFor(null, "GAZELLE")).toBe(true);
+  });
+
+  it("radar souple (strictVehicleMatch = false) : les deux Zem partagent leurs demandes", () => {
+    const souple = new PricingService({
+      ...loadTarificationConfig(),
+      radar: { strictVehicleMatch: false },
+    });
+    expect(souple.rideVisibleFor("ZEM_ESSENCE", "ZEM_ELECTRIC")).toBe(true);
+    expect(souple.rideVisibleFor("ZEM_ELECTRIC", "ZEM_ESSENCE")).toBe(true);
+    // Les voitures restent filtrées par gamme exacte
+    expect(souple.rideVisibleFor("KOALA", "GAZELLE")).toBe(false);
+    expect(souple.rideVisibleFor("GAZELLE", "GAZELLE")).toBe(true);
+  });
+
+  it("le tarif des Zem est une règle validée, pas une valeur provisoire", () => {
+    const config = loadTarificationConfig();
+    const règles = provisionalRules(config).map((r) => r.chemin);
+    expect(règles.some((chemin) => chemin.includes("ZEM_ESSENCE"))).toBe(false);
+    expect(règles.some((chemin) => chemin.includes("ZEM_ELECTRIC"))).toBe(false);
+    expect(config.radar?.strictVehicleMatch).toBe(true);
   });
 });
 
@@ -212,9 +297,17 @@ describe("Configuration tarifaire", () => {
     const config = loadTarificationConfig();
     expect(config.currency).toBe("FCFA");
     expect(config.kmThreshold).toBe(15);
-    expect(config.vehicles.GAZELLE).toEqual({ base: 800, perKmUpTo15: 200, perKmFrom16: 150 });
-    expect(config.vehicles.KOALA).toMatchObject({ base: 1200, perKmUpTo15: 375, perKmFrom16: 350 });
-    expect(config.vehicles.LEOPARD).toMatchObject({ base: 2500, perKmUpTo15: 900, perKmFrom16: 800 });
+    expect(config.vehicles.GAZELLE).toEqual({ base: 800, perKmUpTo15: 200, perKmFrom16: 150, family: "CAR" });
+    expect(config.vehicles.KOALA).toMatchObject({ base: 1200, perKmUpTo15: 375, perKmFrom16: 350, family: "CAR" });
+    expect(config.vehicles.LEOPARD).toMatchObject({ base: 2500, perKmUpTo15: 900, perKmFrom16: 800, family: "CAR" });
+    // Motos-taxis : les deux types partagent le tarif de la moto à essence
+    expect(config.vehicles.ZEM_ESSENCE).toEqual({
+      base: 800,
+      perKmUpTo15: 200,
+      perKmFrom16: 150,
+      family: "ZEM",
+    });
+    expect(config.vehicles.ZEM_ELECTRIC).toEqual(config.vehicles.ZEM_ESSENCE);
     expect(Object.keys(config.agencyLevels)).toEqual(["PRO", "SILVER", "OR", "DIAMANT"]);
     expect(config.profiles.ZEM_INDEPENDANT).toMatchObject({ monthlyRevenueSharePct: 15, withdrawalFeePct: 1.5 });
   });
@@ -252,7 +345,14 @@ describe("Configuration tarifaire", () => {
 
   it("n'expose que des montants entiers en FCFA", () => {
     const config = loadTarificationConfig();
-    for (const gamme of ["GAZELLE", "KOALA", "LEOPARD"] as const) {
+    expect(Object.keys(config.vehicles)).toEqual([
+      "ZEM_ESSENCE",
+      "ZEM_ELECTRIC",
+      "GAZELLE",
+      "KOALA",
+      "LEOPARD",
+    ]);
+    for (const gamme of Object.keys(config.vehicles) as (keyof typeof config.vehicles)[]) {
       for (const value of Object.values(config.vehicles[gamme])) {
         if (typeof value === "number") expect(Number.isInteger(value)).toBe(true);
       }

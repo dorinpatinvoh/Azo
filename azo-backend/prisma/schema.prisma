@@ -98,7 +98,12 @@ enum RideStatus {
 // GAZELLE (entrée de gamme), KOALA (intermédiaire climatisé), LEOPARD (haut de gamme).
 // Les anciennes valeurs (ZEM, ZEM_ELECTRIC, CAR) ont été migrées :
 // ZEM / ZEM_ELECTRIC -> GAZELLE, CAR -> KOALA.
+// Types de véhicules AZƆ̀, en deux filières distinctes :
+//   * ZEM_ESSENCE / ZEM_ELECTRIC → motos-taxis (filière Zem, même tarif) ;
+//   * GAZELLE / KOALA / LEOPARD  → voitures (entrée de gamme, climatisée, premium).
 enum VehicleType {
+  ZEM_ESSENCE
+  ZEM_ELECTRIC
   GAZELLE
   KOALA
   LEOPARD

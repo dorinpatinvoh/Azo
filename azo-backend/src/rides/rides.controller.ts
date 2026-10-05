@@ -58,11 +58,11 @@ export class RidesController {
     return this.rides.history(user.userId);
   }
 
-  // GET /rides/pending  -> courses à prendre (chauffeurs)
+  // GET /rides/pending  -> courses à prendre (chauffeurs), filtrées sur leur véhicule
   @Get("pending")
   @Roles(Role.DRIVER)
-  pending() {
-    return this.rides.pending();
+  pending(@CurrentUser() user) {
+    return this.rides.pending(user.userId);
   }
 
   @Post(":id/accept")

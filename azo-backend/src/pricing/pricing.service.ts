@@ -4,16 +4,22 @@ import {
   AgencyLevelPricing,
   ProfilePricing,
   TarificationConfig,
-  VehicleGamme,
+  VehicleFamily,
   VehicleKey,
   VehiclePricing,
+  ZEM_VEHICLE_KEYS,
   TARIFICATION_CONFIG,
   loadTarificationConfig,
 } from "./tarification.config";
 
 /** Détail du calcul d'un prix de course, poste par poste. */
 export type RidePriceBreakdown = {
-  gamme: VehicleGamme;
+  /**
+   * Véhicule facturé : ZEM_ESSENCE, ZEM_ELECTRIC (motos-taxis) ou GAZELLE, KOALA,
+   * LEOPARD (voitures). Le nom de champ `gamme` est conservé pour l'API mobile.
+   */
+  gamme: VehicleKey;
+  family: VehicleFamily;
   distanceKm: number;
   kmThreshold: number;
   base: number;
@@ -70,34 +76,82 @@ export class PricingService {
     return this.config.kmThreshold;
   }
 
-  /** Gammes de véhicules facturables (GAZELLE, KOALA, LEOPARD). */
-  vehicleGammes(): VehicleGamme[] {
-    return Object.keys(this.config.vehicles) as VehicleGamme[];
+  /** Véhicules facturables, dans l'ordre d'affichage (Zem puis voitures). */
+  vehicleKeys(): VehicleKey[] {
+    return Object.keys(this.config.vehicles) as VehicleKey[];
+  }
+
+  /** Filière d'un véhicule : `ZEM` (moto-taxi) ou `CAR` (voiture). */
+  vehicleFamily(vehicleType: string): VehicleFamily {
+    const vehicle = this.resolveVehicleKey(vehicleType);
+    return this.config.vehicles[vehicle].family === "ZEM" ? "ZEM" : "CAR";
+  }
+
+  /** Vrai pour un moto-taxi (Zem essence ou électrique). */
+  isZem(vehicleType?: string | null): boolean {
+    if (!vehicleType) return false;
+    try {
+      return this.vehicleFamily(vehicleType) === "ZEM";
+    } catch {
+      return false;
+    }
+  }
+
+  /** Les deux types de Zem (moto-taxi) : essence et électrique. */
+  zemVehicleKeys(): VehicleKey[] {
+    return [...ZEM_VEHICLE_KEYS];
   }
 
   /**
-   * Ramène tout type de véhicule (y compris les anciens ZEM / ZEM_ELECTRIC / CAR)
-   * à une gamme de facturation.
+   * Ramène tout type de véhicule (y compris les anciens ZEM / CAR encore en base)
+   * à un véhicule facturable de la configuration.
    */
-  resolveGamme(vehicleType: VehicleKey | string): VehicleGamme {
+  resolveVehicleKey(vehicleType: VehicleKey | string): VehicleKey {
     const key = String(vehicleType || "").toUpperCase();
-    if (key in this.config.vehicles) return key as VehicleGamme;
+    if (key in this.config.vehicles) return key as VehicleKey;
     const mapped = this.config.legacyVehicleMapping?.[key];
     if (mapped && mapped in this.config.vehicles) return mapped;
     throw new Error(
-      `Gamme de véhicule inconnue : « ${vehicleType} » (config tarification.vehicles / legacyVehicleMapping)`
+      `Véhicule inconnu : « ${vehicleType} » (config tarification.vehicles / legacyVehicleMapping)`
     );
   }
 
   getVehiclePricing(vehicleType: VehicleKey | string): VehiclePricing {
-    return this.config.vehicles[this.resolveGamme(vehicleType)];
+    return this.config.vehicles[this.resolveVehicleKey(vehicleType)];
   }
 
-  /** Libellé commercial de la gamme (KOALA est la gamme climatisée). */
+  /** Libellé commercial du véhicule (KOALA est la voiture climatisée). */
   vehicleLabel(vehicleType: VehicleKey | string): string {
-    const gamme = this.resolveGamme(vehicleType);
-    const pricing = this.config.vehicles[gamme];
-    return pricing.airConditioned ? `${gamme} (climatisé)` : gamme;
+    const vehicle = this.resolveVehicleKey(vehicleType);
+    const pricing = this.config.vehicles[vehicle];
+    return pricing.airConditioned ? `${vehicle} (climatisé)` : vehicle;
+  }
+
+  /**
+   * Filtrage du radar chauffeur (`GET /rides/pending`) : le prestataire ne reçoit que
+   * les demandes correspondant au véhicule qu'il a déclaré.
+   *
+   *   * `strictVehicleMatch = true` (défaut) : correspondance EXACTE — un Zem électrique
+   *     ne voit pas les demandes de Zem à essence, et Gazelle ≠ Koala ≠ Léopard.
+   *   * `false` (démarrage / démonstration) : les deux Zem partagent leurs demandes ;
+   *     les voitures restent filtrées par gamme exacte.
+   */
+  rideVisibleFor(driverVehicle?: string | null, rideVehicle?: string | null): boolean {
+    if (!rideVehicle) return true;
+    const ride = this.resolveVehicleKey(rideVehicle);
+
+    // Chauffeur sans véhicule déclaré (compte historique) : on ne lui cache rien.
+    if (!driverVehicle) return true;
+    const driver = this.resolveVehicleKey(driverVehicle);
+
+    if (this.config.radar?.strictVehicleMatch ?? true) return driver === ride;
+
+    // Mode souple : les deux types de Zem partagent leurs demandes ; les voitures
+    // restent filtrées par gamme exacte.
+    const driverIsZem = this.vehicleFamily(driver) === "ZEM";
+    const rideIsZem = this.vehicleFamily(ride) === "ZEM";
+    if (rideIsZem) return driverIsZem;
+    return driver === ride;
   }
 
   /**
@@ -118,7 +172,7 @@ export class PricingService {
       throw new Error("La distance d'une course doit être un nombre de km positif");
     }
 
-    const gamme = this.resolveGamme(vehicleType);
+    const gamme = this.resolveVehicleKey(vehicleType);
     const pricing = this.config.vehicles[gamme];
     const threshold = this.config.kmThreshold;
 
@@ -139,6 +193,7 @@ export class PricingService {
 
     return {
       gamme,
+      family: pricing.family === "ZEM" ? "ZEM" : "CAR",
       distanceKm,
       kmThreshold: threshold,
       base: pricing.base,

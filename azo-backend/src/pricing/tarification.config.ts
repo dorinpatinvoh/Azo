@@ -11,13 +11,25 @@ import embeddedConfig from "./tarification.json";
  * volume Render, ou export depuis la base).
  */
 
-/** Gammes de véhicules définies par la spécification AZƆ̀. */
-export type VehicleGamme = "GAZELLE" | "KOALA" | "LEOPARD";
+/**
+ * Véhicules facturables AZƆ̀, en deux filières :
+ *   * `ZEM`  : ZEM_ESSENCE, ZEM_ELECTRIC — motos-taxis (même tarif pour les deux types) ;
+ *   * `CAR`  : GAZELLE, KOALA, LEOPARD — voitures (entrée de gamme, climatisée, premium).
+ */
+export type VehicleFamily = "ZEM" | "CAR";
+
+export type VehicleKey = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | "LEOPARD";
+
+/** Clés de la filière Zem (moto-taxi) : mêmes règles de profil, même radar. */
+export const ZEM_VEHICLE_KEYS: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC"];
+
+/** Tous les véhicules facturables, dans l'ordre d'affichage (Zem puis voitures). */
+export const VEHICLE_KEYS: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"];
 
 /** Types de véhicules historiques encore présents en base (courses/dossiers passés). */
-export type LegacyVehicleType = "ZEM" | "ZEM_ELECTRIC" | "CAR";
+export type LegacyVehicleType = "ZEM" | "CAR";
 
-export type VehicleKey = VehicleGamme | LegacyVehicleType;
+export type VehicleKeyOrLegacy = VehicleKey | LegacyVehicleType;
 
 /** Niveaux d'agence (les niveaux ne concernent QUE les agences). */
 export type AgencyLevel = "PRO" | "SILVER" | "OR" | "DIAMANT";
@@ -30,6 +42,8 @@ export type VehiclePricing = {
   perKmUpTo15: number;
   perKmFrom16: number;
   airConditioned?: boolean;
+  /** Filière du véhicule : `ZEM` (moto-taxi) ou `CAR` (voiture). */
+  family?: VehicleFamily;
 };
 
 export type AgencyLevelPricing = {
@@ -60,10 +74,12 @@ export type ProvisionalRule = {
 export type TarificationConfig = {
   currency: string;
   kmThreshold: number;
-  vehicles: Record<VehicleGamme, VehiclePricing>;
+  vehicles: Record<VehicleKey, VehiclePricing>;
+  /** Répartition des demandes entre prestataires (filtrage du radar chauffeur). */
+  radar?: { strictVehicleMatch?: boolean };
   agencyLevels: Record<AgencyLevel, AgencyLevelPricing>;
   profiles: Record<ProfileKey, ProfilePricing>;
-  legacyVehicleMapping: Record<string, VehicleGamme>;
+  legacyVehicleMapping: Record<string, VehicleKey>;
   unspecifiedProfile: {
     monthlyRevenueSharePct: number;
     withdrawalFeePct: number;
@@ -83,8 +99,8 @@ export const TARIFICATION_CONFIG = "TARIFICATION_CONFIG";
 
 export type TarificationConfigProvider = { provide: string; useFactory: () => TarificationConfig };
 
-const GAMMES: VehicleGamme[] = ["GAZELLE", "KOALA", "LEOPARD"];
 const LEVELS: AgencyLevel[] = ["PRO", "SILVER", "OR", "DIAMANT"];
+const FAMILIES: VehicleFamily[] = ["ZEM", "CAR"];
 
 let cached: TarificationConfig | null = null;
 
@@ -102,13 +118,25 @@ function assertValid(config: TarificationConfig): TarificationConfig {
   if (!isNonNegativeNumber(config.kmThreshold) || config.kmThreshold <= 0)
     fail("`kmThreshold` doit être un nombre > 0");
 
-  for (const gamme of GAMMES) {
-    const pricing = config.vehicles?.[gamme];
-    if (!pricing) fail(`véhicule « ${gamme} » manquant dans \`vehicles\``);
+  for (const vehicle of VEHICLE_KEYS) {
+    const pricing = config.vehicles?.[vehicle];
+    if (!pricing) fail(`véhicule « ${vehicle} » manquant dans \`vehicles\``);
     for (const key of ["base", "perKmUpTo15", "perKmFrom16"] as const) {
-      if (!isNonNegativeNumber(pricing[key])) fail(`\`vehicles.${gamme}.${key}\` doit être un nombre ≥ 0`);
+      if (!isNonNegativeNumber(pricing[key])) fail(`\`vehicles.${vehicle}.${key}\` doit être un nombre ≥ 0`);
     }
+    if (pricing.family && !FAMILIES.includes(pricing.family))
+      fail(`\`vehicles.${vehicle}.family\` doit valoir « ZEM » ou « CAR »`);
   }
+
+  // Les deux types de Zem appartiennent obligatoirement à la filière ZEM : le radar
+  // chauffeur et les règles de profil ZEM_INDEPENDANT s'appuient sur ce champ.
+  for (const zem of ZEM_VEHICLE_KEYS) {
+    const family = config.vehicles?.[zem]?.family;
+    if (family !== "ZEM") fail(`\`vehicles.${zem}.family\` doit valoir « ZEM » (moto-taxi)`);
+  }
+
+  if (config.radar?.strictVehicleMatch != null && typeof config.radar.strictVehicleMatch !== "boolean")
+    fail("`radar.strictVehicleMatch` doit être un booléen");
 
   for (const level of LEVELS) {
     const pricing = config.agencyLevels?.[level];
