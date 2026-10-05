@@ -9,9 +9,14 @@
 import { api } from "./api";
 import reference from "../config/tarification.json";
 
-export type VehicleGamme = "GAZELLE" | "KOALA" | "LEOPARD";
+/** Filière du véhicule : moto-taxi (Zem) ou voiture. */
+export type VehicleFamily = "ZEM" | "CAR";
+
+/** Véhicules facturables : les deux Zem (motos-taxis) puis les voitures. */
+export type VehicleKey = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | "LEOPARD";
+
 /** Les types historiques restent acceptés (anciennes courses en base). */
-export type VehicleKey = VehicleGamme | "ZEM" | "ZEM_ELECTRIC" | "CAR";
+export type LegacyVehicleKey = "ZEM" | "CAR";
 export type AgencyLevel = "PRO" | "SILVER" | "OR" | "DIAMANT";
 
 export type VehiclePricing = {
@@ -19,6 +24,7 @@ export type VehiclePricing = {
   perKmUpTo15: number;
   perKmFrom16: number;
   airConditioned?: boolean;
+  family?: VehicleFamily;
 };
 
 export type AgencyLevelPricing = {
@@ -31,10 +37,10 @@ export type AgencyLevelPricing = {
 export type TarificationConfig = {
   currency: string;
   kmThreshold: number;
-  vehicles: Record<VehicleGamme, VehiclePricing>;
+  vehicles: Record<VehicleKey, VehiclePricing>;
   agencyLevels: Record<AgencyLevel, AgencyLevelPricing>;
   profiles: Record<string, { category?: string; monthlyRevenueSharePct?: number; withdrawalFeePct?: number }>;
-  legacyVehicleMapping: Record<string, VehicleGamme>;
+  legacyVehicleMapping: Record<string, VehicleKey>;
   agencyActivation: { requiredForOperations: boolean };
 };
 
@@ -44,27 +50,41 @@ export function tarification(): TarificationConfig {
   return current;
 }
 
-/** Gammes de véhicules proposées au client (ordre d'affichage). */
-export function vehicleGammes(): VehicleGamme[] {
-  return Object.keys(current.vehicles) as VehicleGamme[];
-}
+/** Les deux types de Zem (motos-taxis), proposés à l'étape 1 de la commande. */
+export const ZEM_VEHICLES: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC"];
 
-export function resolveGamme(vehicle: VehicleKey | string): VehicleGamme {
+/** Les trois voitures. */
+export const CAR_VEHICLES: VehicleKey[] = ["GAZELLE", "KOALA", "LEOPARD"];
+
+export function resolveVehicleKey(vehicle: VehicleKey | string): VehicleKey {
   const key = String(vehicle || "").toUpperCase();
-  if (key in current.vehicles) return key as VehicleGamme;
+  if (key in current.vehicles) return key as VehicleKey;
   const mapped = current.legacyVehicleMapping?.[key];
   if (mapped) return mapped;
-  return "GAZELLE";
+  return "ZEM_ESSENCE";
+}
+
+/** Vrai pour un moto-taxi (Zem essence ou électrique). */
+export function isZem(vehicle?: VehicleKey | string | null): boolean {
+  if (!vehicle) return false;
+  return vehicleFamily(vehicle) === "ZEM";
+}
+
+export function vehicleFamily(vehicle: VehicleKey | string): VehicleFamily {
+  const key = resolveVehicleKey(vehicle);
+  return current.vehicles[key]?.family === "ZEM" || ZEM_VEHICLES.includes(key as VehicleKey)
+    ? "ZEM"
+    : "CAR";
 }
 
 export function vehicleLabel(vehicle: VehicleKey | string): string {
-  const gamme = resolveGamme(vehicle);
-  return current.vehicles[gamme]?.airConditioned ? `${gamme} · climatisé` : gamme;
+  const key = resolveVehicleKey(vehicle);
+  return current.vehicles[key]?.airConditioned ? `${key} · climatisé` : key;
 }
 
 /** Prix d'une course = tarif de base + coût kilométrique par tranche (FCFA entiers). */
 export function ridePrice(distanceKm: number, vehicle: VehicleKey | string): number {
-  const gamme = resolveGamme(vehicle);
+  const gamme = resolveVehicleKey(vehicle);
   const pricing = current.vehicles[gamme];
   const threshold = current.kmThreshold;
   const mmPerKm = 1000;

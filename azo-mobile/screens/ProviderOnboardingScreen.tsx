@@ -137,13 +137,29 @@ const DEFAULT_COURIER_SPECIALTIES = [
   { id: "LIVREUR_COLIS", label: "Livreur de colis", hint: "Livraison de colis et marchandises avec double OTP" },
 ];
 
-const DEFAULT_DRIVER_VEHICLES: { value: VehicleType; label: string; hint: string }[] = [
-  { value: "GAZELLE", label: "Gazelle — Zem / moto-taxi", hint: "Entrée de gamme, courses rapides en ville" },
-  { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Intermédiaire, confort avec climatiseur" },
-  { value: "LEOPARD", label: "Léopard — Berline haut de gamme", hint: "Haut de gamme, trajets premium" },
+type VehicleChoice = { value: VehicleType; label: string; hint: string; family?: "ZEM" | "CAR" };
+
+// Repli hors ligne : mêmes choix que ceux servis par le backend (/providers/requirements).
+// Filière Zem (motos-taxis) puis filière Voiture — le radar ne présente ensuite au
+// chauffeur que les demandes correspondant exactement au véhicule déclaré ici.
+const DEFAULT_DRIVER_VEHICLES: VehicleChoice[] = [
+  { value: "ZEM_ESSENCE", label: "Zem à essence", hint: "Moto-taxi thermique — courses rapides et économiques", family: "ZEM" },
+  { value: "ZEM_ELECTRIC", label: "Zem électrique", hint: "Moto-taxi électrique — même tarif, zéro émission", family: "ZEM" },
+  { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme, trajets en ville", family: "CAR" },
+  { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire, confort avec climatisation", family: "CAR" },
+  { value: "LEOPARD", label: "Léopard — Berline premium", hint: "Berline haut de gamme, trajets VIP", family: "CAR" },
 ];
 
-const DEFAULT_COURIER_VEHICLES: { value: VehicleType; label: string; hint: string }[] = [
+/** Icône MaterialIcons d'un véhicule (moto essence / moto électrique / voiture). */
+function vehicleIcon(value: VehicleType): keyof typeof MaterialIcons.glyphMap {
+  if (value === "ZEM_ELECTRIC") return "electric-moped";
+  if (value === "ZEM_ESSENCE") return "two-wheeler";
+  if (value === "LEOPARD") return "local-taxi";
+  return "directions-car";
+}
+
+// Filière coursier / livreur : choix inchangés pour l'instant (harmonisation à venir).
+const DEFAULT_COURIER_VEHICLES: VehicleChoice[] = [
   { value: "GAZELLE", label: "Gazelle — Moto / Zem (coursier)", hint: "Plis, courses personnelles et colis en ville" },
   { value: "KOALA", label: "Koala — Voiture climatisée (livreur)", hint: "Colis moyens, achats et marchandises" },
   { value: "LEOPARD", label: "Léopard — Berline haut de gamme (livreur)", hint: "Livraisons premium et clients VIP" },
@@ -629,7 +645,9 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                 <Pressable
                   key={t.type}
                   style={[styles.card, selected && styles.cardSelected]}
-                  onPress={() => setForm((f) => ({ ...f, type: t.type, vehicleType: f.vehicleType ?? "GAZELLE" }))}
+                  onPress={() =>
+                    setForm((f) => ({ ...f, type: t.type, vehicleType: f.vehicleType ?? "ZEM_ESSENCE" }))
+                  }
                 >
                   <View style={[styles.cardIconWrap, selected && styles.cardIconWrapSelected]}>
                     <MaterialIcons
@@ -723,33 +741,57 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             {!isAgency && currentType && (
               <View style={styles.subSection}>
                 <Text style={styles.sectionTitle}>Avec quel véhicule vas-tu travailler ?</Text>
-                {(typeConfig?.vehicleChoices ?? DEFAULT_DRIVER_VEHICLES).map((v) => {
-                  const selected = form.vehicleType === v.value;
-                  return (
-                    <Pressable
-                      key={v.value}
-                      style={[styles.choiceRow, selected && styles.choiceRowSelected]}
-                      onPress={() => setForm((f) => ({ ...f, vehicleType: v.value }))}
-                    >
-                      <MaterialIcons
-                        name={
-                          v.value === "KOALA"
-                            ? "directions-car"
-                            : v.value === "LEOPARD"
-                              ? "local-taxi"
-                              : "two-wheeler"
-                        }
-                        size={20}
-                        color={selected ? colors.primary : colors.onSurfaceVariant}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.choiceTitle}>{v.label}</Text>
-                        <Text style={styles.cardMeta}>{v.hint}</Text>
+                {(() => {
+                  const choices =
+                    typeConfig?.vehicleChoices && typeConfig.vehicleChoices.length > 0
+                      ? typeConfig.vehicleChoices
+                      : DEFAULT_DRIVER_VEHICLES;
+                  // Deux familles affichées séparément : motos-taxis (Zem) puis voitures.
+                  const groups: { key: "ZEM" | "CAR"; title: string; items: VehicleChoice[] }[] = [
+                    {
+                      key: "ZEM",
+                      title: "Moto-taxi (Zem)",
+                      items: choices.filter((v) =>
+                        v.family ? v.family === "ZEM" : v.value === "ZEM_ESSENCE" || v.value === "ZEM_ELECTRIC"
+                      ),
+                    },
+                    {
+                      key: "CAR",
+                      title: "Voiture",
+                      items: choices.filter((v) =>
+                        v.family ? v.family === "CAR" : v.value === "GAZELLE" || v.value === "KOALA" || v.value === "LEOPARD"
+                      ),
+                    },
+                  ];
+                  return groups.map((group) =>
+                    group.items.length === 0 ? null : (
+                      <View key={group.key} style={{ gap: 8 }}>
+                        <Text style={styles.groupLabel}>{group.title}</Text>
+                        {group.items.map((v) => {
+                          const selected = form.vehicleType === v.value;
+                          return (
+                            <Pressable
+                              key={v.value}
+                              style={[styles.choiceRow, selected && styles.choiceRowSelected]}
+                              onPress={() => setForm((f) => ({ ...f, vehicleType: v.value }))}
+                            >
+                              <MaterialIcons
+                                name={vehicleIcon(v.value)}
+                                size={20}
+                                color={selected ? colors.primary : colors.onSurfaceVariant}
+                              />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.choiceTitle}>{v.label}</Text>
+                                <Text style={styles.cardMeta}>{v.hint}</Text>
+                              </View>
+                              {selected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
+                            </Pressable>
+                          );
+                        })}
                       </View>
-                      {selected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
-                    </Pressable>
+                    )
                   );
-                })}
+                })()}
               </View>
             )}
           </View>
@@ -1419,6 +1461,7 @@ const styles = StyleSheet.create({
   errorText: { ...typography.bodyMd, color: colors.error, textAlign: "center" },
   warnText: { ...typography.labelSm, color: colors.secondary, marginTop: 2 },
   noteText: { ...typography.labelSm, color: colors.error, marginTop: 2 },
+  groupLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 4 },
   subSection: {
     gap: spacing.sm,
     backgroundColor: colors.surfaceContainerLow,

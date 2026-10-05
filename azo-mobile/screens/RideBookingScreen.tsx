@@ -11,7 +11,13 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { Estimate, Place, VehicleType, errorMessage, placesApi, rideApi, ridesApi, walletApi } from "../services/api";
-import { refreshTarification, ridePrice } from "../services/tarification";
+import {
+  CAR_VEHICLES,
+  ZEM_VEHICLES,
+  refreshTarification,
+  ridePrice,
+  tarification,
+} from "../services/tarification";
 import { useCurrentLocation } from "../hooks/useCurrentLocation";
 
 type Props = {
@@ -21,10 +27,20 @@ type Props = {
 };
 type Target = "origin" | "destination";
 
-const VEHICLES: Record<VehicleType, { label: string; icon: keyof typeof MaterialIcons.glyphMap }> = {
-  GAZELLE: { label: "Gazelle · Zem", icon: "two-wheeler" },
-  KOALA: { label: "Koala · climatisé", icon: "directions-car" },
-  LEOPARD: { label: "Léopard · premium", icon: "local-taxi" },
+/**
+ * Deux filières bien séparées :
+ *   * ZEM_ESSENCE / ZEM_ELECTRIC → les motos-taxis (Zem), choisis à l'étape 1 ;
+ *   * GAZELLE / KOALA / LEOPARD  → les voitures proposées pour une course.
+ */
+const VEHICLES: Record<
+  VehicleType,
+  { label: string; short: string; icon: keyof typeof MaterialIcons.glyphMap }
+> = {
+  ZEM_ESSENCE: { label: "Zem à essence", short: "Moto-taxi thermique, partout en ville", icon: "two-wheeler" },
+  ZEM_ELECTRIC: { label: "Zem électrique", short: "Moto-taxi électrique, silencieux", icon: "electric-moped" },
+  GAZELLE: { label: "Gazelle", short: "Voiture d'entrée de gamme", icon: "directions-car" },
+  KOALA: { label: "Koala · climatisé", short: "Voiture climatisée", icon: "directions-car" },
+  LEOPARD: { label: "Léopard · premium", short: "Berline haut de gamme", icon: "local-taxi" },
 };
 const POPULAR_PLACES: Place[] = [
   { id: "etoile", title: "Place de l'Étoile Rouge", subtitle: "Cotonou Centre", latitude: 6.3725, longitude: 2.4061 },
@@ -44,9 +60,12 @@ export default function RideBookingScreen({ service, onBack, onConfirmed }: Prop
   const insets = useSafeAreaInsets();
   const gps = useCurrentLocation();
   const originTouched = useRef(false);
+  // Étape 1 du parcours Zem : le client choisit d'abord son type de Zem
+  // (électrique ou essence), puis renseigne sa destination.
+  const [zemType, setZemType] = useState<VehicleType | null>(null);
   const options = useMemo<VehicleType[]>(
-    () => (service === "zem" ? ["GAZELLE", "KOALA", "LEOPARD"] : ["KOALA", "LEOPARD", "GAZELLE"]),
-    [service]
+    () => (service === "zem" ? (zemType ? [zemType] : []) : CAR_VEHICLES),
+    [service, zemType]
   );
 
   const [origin, setOrigin] = useState<Place | null>(null);
@@ -67,10 +86,15 @@ export default function RideBookingScreen({ service, onBack, onConfirmed }: Prop
   const [reloadKey, setReloadKey] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const [selected, setSelected] = useState<VehicleType>(options[0]);
+  const [selected, setSelected] = useState<VehicleType>(CAR_VEHICLES[0]);
   const [balance, setBalance] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  /* Le véhicule sélectionné suit la filière (Zem choisi, ou voiture par défaut) */
+  useEffect(() => {
+    if (options.length > 0 && !options.includes(selected)) setSelected(options[0]);
+  }, [options, selected]);
 
   /* Départ = position GPS */
   useEffect(() => {
@@ -308,6 +332,57 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
     );
   };
 
+  /*
+   * Étape 1 du parcours Zem : une interface dédiée demande d'abord le type de Zem
+   * (électrique ou essence). La destination, l'estimation et la confirmation viennent
+   * ensuite, dans l'écran de réservation habituel.
+   */
+  if (service === "zem" && !zemType) {
+    const zemPricing = tarification().vehicles.ZEM_ESSENCE;
+    return (
+      <View style={styles.zemRoot}>
+        <View style={[styles.zemHeader, { paddingTop: insets.top + spacing.sm }]}>
+          <Pressable style={styles.zemBack} onPress={onBack} accessibilityLabel="Retour">
+            <MaterialIcons name="arrow-back" size={24} color={colors.onSurface} />
+          </Pressable>
+          <Text style={styles.zemTitle}>Quel Zem veux-tu ?</Text>
+          <Text style={styles.zemSubtitle}>
+            Choisis ton type de moto-taxi, puis indique ta destination.
+          </Text>
+        </View>
+
+        <View style={styles.zemList}>
+          {ZEM_VEHICLES.map((v) => (
+            <Pressable
+              key={v}
+              style={styles.zemCard}
+              onPress={() => { setZemType(v); setSelected(v); }}
+              accessibilityLabel={VEHICLES[v].label}
+            >
+              <View style={styles.zemCardIcon}>
+                <MaterialIcons name={VEHICLES[v].icon} size={34} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.zemCardTitle}>{VEHICLES[v].label}</Text>
+                <Text style={styles.zemCardSub}>{VEHICLES[v].short}</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={26} color={colors.outline} />
+            </Pressable>
+          ))}
+
+          <View style={styles.zemNote}>
+            <MaterialIcons name="info-outline" size={16} color={colors.onSurfaceVariant} />
+            <Text style={styles.zemNoteText}>
+              Les deux Zem ont le même tarif : {fcfa(zemPricing.base)} de base +{" "}
+              {fcfa(zemPricing.perKmUpTo15)}/km jusqu'à {tarification().kmThreshold} km, puis{" "}
+              {fcfa(zemPricing.perKmFrom16)}/km.
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       <OSMMapView
@@ -342,6 +417,19 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
         <View style={styles.sheetHandle} />
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.sheetTitle}>Où allons-nous ?</Text>
+
+          {/* Rappel de l'étape 1 : le type de Zem choisi, modifiable en un clic */}
+          {service === "zem" && zemType && (
+            <Pressable
+              style={styles.zemChip}
+              onPress={() => { setZemType(null); setEstimates({}); }}
+              accessibilityLabel="Changer de type de Zem"
+            >
+              <MaterialIcons name={VEHICLES[zemType].icon} size={18} color={colors.primary} />
+              <Text style={styles.zemChipText}>{VEHICLES[zemType].label}</Text>
+              <Text style={styles.zemChipAction}>Changer</Text>
+            </Pressable>
+          )}
 
           {(gps.status === "denied" || gps.status === "error") && (
             <View style={styles.banner}>
@@ -424,7 +512,9 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
 
           {!estimating && Object.keys(estimates).length > 0 && (
             <>
-              <Text style={styles.sectionLabel}>Choisis ton véhicule</Text>
+              <Text style={styles.sectionLabel}>
+                {service === "zem" ? "Ton Zem" : "Choisis ta voiture"}
+              </Text>
               {options.map((v) => {
                 const e = estimates[v];
                 if (!e) return null;
@@ -520,6 +610,21 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
+  zemRoot: { flex: 1, backgroundColor: colors.background },
+  zemHeader: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg, gap: 4 },
+  zemBack: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", marginBottom: spacing.sm, elevation: 3, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 6 },
+  zemTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", fontSize: 26 },
+  zemSubtitle: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  zemList: { paddingHorizontal: spacing.md, gap: spacing.md },
+  zemCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
+  zemCardIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
+  zemCardTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", fontSize: 18 },
+  zemCardSub: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 2 },
+  zemNote: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, padding: spacing.sm + 2 },
+  zemNoteText: { ...typography.bodySm, color: colors.onSurfaceVariant, flex: 1 },
+  zemChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 8, alignSelf: "flex-start" },
+  zemChipText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "800" },
+  zemChipAction: { ...typography.labelSm, color: colors.primary, fontWeight: "800", textDecorationLine: "underline" },
   backBtn: { position: "absolute", left: spacing.md, width: 44, height: 44, borderRadius: 22, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", elevation: 4, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 6 },
   pickHint: { position: "absolute", left: 72, right: spacing.md, backgroundColor: colors.onSurface, borderRadius: radius.lg, padding: spacing.sm },
   pickHintText: { ...typography.labelMd, color: "#fff", textAlign: "center" },

@@ -196,14 +196,19 @@ export const placesApi = {
   },
 };
 
-/* ==================== COURSES (ZEM / ZEM ÉLECTRIQUE / VOITURE) ==================== */
+/* ==================== COURSES (ZEM ESSENCE / ZEM ÉLECTRIQUE / VOITURE) ==================== */
 
 /**
- * Gammes de véhicules AZƆ̀ (barème tarifaire). Les anciens types ZEM / ZEM_ELECTRIC /
- * CAR ne sont plus proposés : les courses passées sont rattachées à une gamme
- * (ZEM, ZEM_ELECTRIC → GAZELLE ; CAR → KOALA) via `services/tarification`.
+ * Véhicules AZƆ̀ (barème tarifaire), en deux filières distinctes :
+ *   * ZEM_ESSENCE / ZEM_ELECTRIC → les motos-taxis (Zem), facturés au même tarif ;
+ *   * GAZELLE / KOALA / LEOPARD  → les voitures proposées pour une course.
+ * Les anciens types ZEM / CAR ne sont plus proposés : les courses passées sont
+ * rattachées à un véhicule (ZEM → ZEM_ESSENCE ; CAR → KOALA) via `services/tarification`.
  */
-export type VehicleType = "GAZELLE" | "KOALA" | "LEOPARD";
+export type VehicleType = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | "LEOPARD";
+
+/** Filière d'un véhicule : moto-taxi (Zem) ou voiture. */
+export type VehicleFamily = "ZEM" | "CAR";
 export type RideStatus = "PENDING" | "MATCHED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 // ⚠️ N'ajoute AUCUN autre champ : le backend refuse les champs inconnus.
@@ -216,11 +221,12 @@ export type Estimate = {
   etaMinutes: number;
   price: number;
   durationMin?: number;
-  /** Gamme facturée (GAZELLE / KOALA / LEOPARD), renvoyée par le backend. */
+  /** Véhicule facturé (ZEM_ESSENCE … LEOPARD), renvoyé par le backend. */
   gamme?: VehicleType;
   /** Détail du calcul officiel : base + tranches kilométriques (config tarification). */
   breakdown?: {
     gamme: VehicleType;
+    family?: VehicleFamily;
     distanceKm: number;
     kmThreshold: number;
     base: number;
@@ -509,7 +515,7 @@ export type ProviderRequirements = {
     label: string;
     description: string;
     enabled: boolean;
-    vehicleChoices: { value: VehicleType; label: string; hint: string }[];
+    vehicleChoices: { value: VehicleType; label: string; hint: string; family?: VehicleFamily }[];
     specialties?: { id: string; label: string; hint: string }[];
     requiredFields: { field: string; label: string }[];
     requiredDocuments: { kind: DocumentKind; label: string; photoRequired: boolean }[];

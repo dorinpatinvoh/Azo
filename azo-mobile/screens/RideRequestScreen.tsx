@@ -65,9 +65,9 @@ const VEHICLES: Vehicle[] = [
 
 // Correspondance entre les cartes de l'écran et les types du backend
 const VEHICLE_TYPE: Record<string, VehicleType> = {
-  "zem-express": "GAZELLE",
-  "zem-elec": "KOALA",
-  "car-confort": "LEOPARD",
+  "zem-express": "ZEM_ESSENCE",
+  "zem-elec": "ZEM_ELECTRIC",
+  "car-confort": "KOALA",
 };
 
 // Coordonnées de démonstration (Haie Vive -> Dantokpa, Cotonou).

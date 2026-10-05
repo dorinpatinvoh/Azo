@@ -10,7 +10,7 @@ import { io, Socket } from "socket.io-client";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import {
-  API_URL, Ride, errorMessage, getToken, placesApi, ridesApi, walletApi,
+  API_URL, Ride, VehicleType, errorMessage, getToken, placesApi, providersApi, ridesApi, walletApi,
 } from "../services/api";
 import { fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
 import { distanceKm, fmtKm } from "../utils/geo";
@@ -36,6 +36,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const [history, setHistory] = useState<Ride[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
+  // Véhicule déclaré dans le dossier prestataire : le radar ne présente que les
+  // demandes correspondantes (Zem essence ≠ Zem électrique ; Gazelle ≠ Koala ≠ Léopard).
+  const [myVehicle, setMyVehicle] = useState<VehicleType | null>(null);
   const [position, setPosition] = useState<LatLng | null>(null);
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>("idle");
   const [loading, setLoading] = useState(true);
@@ -105,6 +108,20 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   useEffect(() => {
     loadAccount().finally(() => setLoading(false));
   }, [loadAccount]);
+
+  /* Véhicule du dossier prestataire (pour expliquer le filtrage du radar) */
+  useEffect(() => {
+    let cancelled = false;
+    providersApi
+      .me()
+      .then((dossier) => {
+        if (!cancelled) setMyVehicle(dossier?.provider?.activity?.vehicleType ?? null);
+      })
+      .catch(() => {
+        /* dossier illisible : le radar reste utilisable, sans libellé de véhicule */
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -593,6 +610,14 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
                 <Text style={styles.sectionBadge}>{pending.length}</Text>
               )}
             </View>
+            {myVehicle && (
+              <View style={styles.radarFilter}>
+                <MaterialIcons name={VEHICLE_ICON[myVehicle]} size={16} color={colors.primary} />
+                <Text style={styles.radarFilterText}>
+                  Radar {VEHICLE_LABEL[myVehicle]} — tu ne vois que ces demandes.
+                </Text>
+              </View>
+            )}
 
             {!online ? (
               <Text style={styles.emptyText}>Passe en ligne pour voir les demandes autour de toi.</Text>
@@ -600,7 +625,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
               <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.md }} />
             ) : requests.length === 0 ? (
               <Text style={styles.emptyText}>
-                Aucune demande pour l'instant. Reste en ligne : la liste se met à jour toute seule.
+                {myVehicle
+                  ? `Aucune demande « ${VEHICLE_LABEL[myVehicle]} » autour de toi pour l'instant. Reste en ligne : la liste se met à jour toute seule.`
+                  : "Aucune demande pour l'instant. Reste en ligne : la liste se met à jour toute seule."}
               </Text>
             ) : (
               <View style={{ gap: spacing.sm }}>
@@ -739,6 +766,8 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: spacing.sm, marginTop: spacing.sm },
   sectionTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "700", marginBottom: spacing.sm, marginTop: spacing.sm },
   sectionBadge: { ...typography.labelSm, color: colors.onPrimary, backgroundColor: colors.secondary, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2, fontWeight: "800", overflow: "hidden" },
+  radarFilter: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.primaryFixed, borderRadius: radius.md, paddingHorizontal: spacing.sm + 2, paddingVertical: 8, marginBottom: spacing.sm },
+  radarFilterText: { ...typography.bodySm, color: colors.primary, fontWeight: "700", flex: 1 },
   emptyText: { ...typography.bodySm, color: colors.onSurfaceVariant, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, padding: spacing.md },
   requestCard: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   requestIcon: { width: 44, height: 44, borderRadius: radius.full, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
