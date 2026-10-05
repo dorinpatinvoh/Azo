@@ -138,15 +138,15 @@ const DEFAULT_COURIER_SPECIALTIES = [
 ];
 
 const DEFAULT_DRIVER_VEHICLES: { value: VehicleType; label: string; hint: string }[] = [
-  { value: "ZEM", label: "Zem indépendant (Moto-taxi)", hint: "Courses rapides en ville — commission 15 %" },
-  { value: "ZEM_ELECTRIC", label: "Zem électrique indépendant", hint: "Moto électrique écologique — commission 15 %" },
-  { value: "CAR", label: "Voiture — Conducteur indépendant", hint: "Courses confort & climatisées — commission 15 %" },
+  { value: "GAZELLE", label: "Gazelle — Zem / moto-taxi", hint: "Entrée de gamme, courses rapides en ville" },
+  { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Intermédiaire, confort avec climatiseur" },
+  { value: "LEOPARD", label: "Léopard — Berline haut de gamme", hint: "Haut de gamme, trajets premium" },
 ];
 
 const DEFAULT_COURIER_VEHICLES: { value: VehicleType; label: string; hint: string }[] = [
-  { value: "ZEM", label: "Moto / Zem (Coursier & Livreur)", hint: "Plis, courses personnelles et colis en ville" },
-  { value: "ZEM_ELECTRIC", label: "Moto électrique (Coursier & Livreur)", hint: "Livraisons rapides & écologiques" },
-  { value: "CAR", label: "Voiture / Fourgonnette (Livreur)", hint: "Colis moyens, achats et marchandises" },
+  { value: "GAZELLE", label: "Gazelle — Moto / Zem (coursier)", hint: "Plis, courses personnelles et colis en ville" },
+  { value: "KOALA", label: "Koala — Voiture climatisée (livreur)", hint: "Colis moyens, achats et marchandises" },
+  { value: "LEOPARD", label: "Léopard — Berline haut de gamme (livreur)", hint: "Livraisons premium et clients VIP" },
 ];
 
 // Nouvelle grille officielle AZƆ̀ pour les Agences
@@ -157,8 +157,8 @@ const DEFAULT_AGENCY_PLANS: {
   maxAccounts: number;
   commissionRate: number;
 }[] = [
-  { plan: "PRO", label: "Agence Pro", fee: 100000, maxAccounts: 10, commissionRate: 0.03 },
-  { plan: "ARGENT", label: "Agence Argent", fee: 215500, maxAccounts: 25, commissionRate: 0.025 },
+  { plan: "PRO", label: "Agence Pro", fee: 100000, maxAccounts: 25, commissionRate: 0.03 },
+  { plan: "SILVER", label: "Agence Silver", fee: 215500, maxAccounts: 50, commissionRate: 0.025 },
   { plan: "OR", label: "Agence Or", fee: 450500, maxAccounts: 100, commissionRate: 0.02 },
   { plan: "DIAMANT", label: "Agence Diamant", fee: 600500, maxAccounts: 1000, commissionRate: 0.01 },
 ];
@@ -629,7 +629,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                 <Pressable
                   key={t.type}
                   style={[styles.card, selected && styles.cardSelected]}
-                  onPress={() => setForm((f) => ({ ...f, type: t.type, vehicleType: f.vehicleType ?? "ZEM" }))}
+                  onPress={() => setForm((f) => ({ ...f, type: t.type, vehicleType: f.vehicleType ?? "GAZELLE" }))}
                 >
                   <View style={[styles.cardIconWrap, selected && styles.cardIconWrapSelected]}>
                     <MaterialIcons
@@ -733,10 +733,10 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                     >
                       <MaterialIcons
                         name={
-                          v.value === "CAR"
+                          v.value === "KOALA"
                             ? "directions-car"
-                            : v.value === "ZEM_ELECTRIC"
-                              ? "electric-moped"
+                            : v.value === "LEOPARD"
+                              ? "local-taxi"
                               : "two-wheeler"
                         }
                         size={20}

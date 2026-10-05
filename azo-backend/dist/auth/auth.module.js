@@ -13,6 +13,8 @@ const passport_1 = require("@nestjs/passport");
 const auth_controller_1 = require("./auth.controller");
 const auth_service_1 = require("./auth.service");
 const jwt_strategy_1 = require("./jwt.strategy");
+const providers_module_1 = require("../providers/providers.module");
+const jwt_secret_1 = require("../common/jwt-secret");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -21,8 +23,9 @@ exports.AuthModule = AuthModule = __decorate([
     (0, common_1.Module)({
         imports: [
             passport_1.PassportModule,
+            providers_module_1.ProvidersModule,
             jwt_1.JwtModule.register({
-                secret: process.env.JWT_SECRET || "dev-secret-a-changer",
+                secret: (0, jwt_secret_1.getJwtSecret)(),
                 signOptions: { expiresIn: "30d" },
             }),
         ],

@@ -16,7 +16,9 @@ class RequestOtpDto {
 exports.RequestOtpDto = RequestOtpDto;
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^(\+229)?\s?\d{8,10}$/, { message: "Numéro de téléphone invalide" }),
+    (0, class_validator_1.Matches)(/^(\+?229)?[\s.-]*(\d[\s.-]*){8,10}$/, {
+        message: "Numéro béninois invalide : saisis les 10 chiffres commençant par 01 (ex. 01 XX XX XX XX)",
+    }),
     __metadata("design:type", String)
 ], RequestOtpDto.prototype, "phone", void 0);
 //# sourceMappingURL=request-otp.dto.js.map

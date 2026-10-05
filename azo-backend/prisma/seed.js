@@ -9,6 +9,8 @@
  * Aucun compte de démonstration n'est créé : chaque utilisateur (client ou
  * prestataire) s'inscrit avec son propre numéro depuis l'application mobile.
  */
+const fs = require("fs");
+const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
@@ -20,13 +22,25 @@ const ROLE_FOR_TYPE = {
   ARTISAN: "CLIENT",
 };
 
-// Nouvelle grille officielle AZƆ̀
-const PLANS = {
-  PRO: { fee: 100000, maxAccounts: 10, rate: 0.03 },
-  ARGENT: { fee: 215500, maxAccounts: 25, rate: 0.025 },
-  OR: { fee: 450500, maxAccounts: 100, rate: 0.02 },
-  DIAMANT: { fee: 600500, maxAccounts: 1000, rate: 0.01 },
-};
+// Grille officielle AZƆ̀ : lue depuis la configuration tarifaire (source unique),
+// jamais recopiée ici. Les niveaux ne concernent QUE les agences.
+const tarificationPath = [
+  path.join(__dirname, "..", "src", "pricing", "tarification.json"),
+  path.join(__dirname, "..", "dist", "pricing", "tarification.json"),
+].find((candidate) => fs.existsSync(candidate));
+
+if (!tarificationPath) {
+  console.error("✖ Configuration tarifaire introuvable (src/pricing/tarification.json)");
+  process.exit(1);
+}
+
+const tarification = JSON.parse(fs.readFileSync(tarificationPath, "utf8"));
+const PLANS = Object.fromEntries(
+  Object.entries(tarification.agencyLevels).map(([level, rules]) => [
+    level,
+    { fee: rules.activationFee, maxAccounts: rules.maxAccounts, rate: rules.commissionPct / 100 },
+  ])
+);
 
 function extractLocalDigits(raw) {
   const digits = String(raw || "").replace(/\D/g, "");

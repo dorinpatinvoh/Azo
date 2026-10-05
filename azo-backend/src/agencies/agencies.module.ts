@@ -19,6 +19,8 @@ import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { NotificationsModule, NotificationsService } from "../notifications/notifications.module";
+import { PricingModule, PricingService } from "../pricing/pricing.module";
+import { WalletModule, WalletService } from "../wallet/wallet.module";
 import { PLANS, PLAN_LABELS } from "./plans";
 import { beninPhoneVariants, normalizeBeninPhone } from "../common/phone";
 
@@ -32,7 +34,12 @@ class AttachDriverDto {
 
 @Injectable()
 export class AgenciesService {
-  constructor(private prisma: PrismaService, private notifications: NotificationsService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+    private pricing: PricingService,
+    private wallet: WalletService
+  ) {}
 
   private async ownerAgency(ownerId: string) {
     const owner = await this.prisma.user.findUnique({
@@ -56,10 +63,21 @@ export class AgenciesService {
   //   - il est notifié, et le rattachement est réversible (DELETE) et journalisé.
   async attachDriver(ownerId: string, phone: string) {
     const agency = await this.ownerAgency(ownerId);
-    if (agency.drivers.length >= agency.maxAccounts)
+
+    // Une agence ne peut opérer qu'une fois activée (frais d'activation uniques payés).
+    if (!this.pricing.agencyCanOperate(agency))
       throw new BadRequestException(
-        `Capacité atteinte pour la formule ${PLAN_LABELS[agency.plan]} (${agency.maxAccounts} comptes). ` +
-          "Passe à la formule supérieure pour ajouter des chauffeurs."
+        `Agence non activée : règle d'abord les frais d'activation de la formule ${PLAN_LABELS[agency.plan]} ` +
+          `(${this.pricing.agencyActivationFee(agency.plan).toLocaleString("fr-FR")} FCFA, paiement unique) ` +
+          "pour gérer des comptes."
+      );
+
+    // Plafond de comptes du niveau (PRO 25 … DIAMANT 1 000) : toute création au-delà est refusée.
+    if (!this.pricing.canAgencyAddAccount(agency.plan, agency.drivers.length))
+      throw new BadRequestException(
+        `Limite de comptes atteinte pour ${PLAN_LABELS[agency.plan]} ` +
+          `(${this.pricing.agencyMaxAccounts(agency.plan)} comptes maximum). ` +
+          "Passe au niveau supérieur pour ajouter des chauffeurs."
       );
 
     const normalized = normalizeBeninPhone(phone);
@@ -142,6 +160,65 @@ export class AgenciesService {
     return { detached: driverId, agencyId: agency.id };
   }
 
+  /**
+   * Activation de l'agence : paiement UNIQUE et non récurrent des frais du niveau.
+   * Tant qu'il n'est pas réglé, l'agence ne peut ni gérer de comptes ni opérer.
+   */
+  async activate(ownerId: string) {
+    const agency = await this.ownerAgency(ownerId);
+    if (agency.feePaidAt)
+      throw new BadRequestException(
+        `Agence déjà activée le ${new Date(agency.feePaidAt).toLocaleDateString("fr-FR")} : ` +
+          "l'activation est un paiement unique, non récurrent."
+      );
+
+    const fee = this.pricing.agencyActivationFee(agency.plan);
+    const wallet = await this.wallet.getWallet(ownerId);
+
+    if (wallet.balance < fee)
+      throw new BadRequestException(
+        `Solde AZƆ̀ Pay insuffisant : ${fee.toLocaleString("fr-FR")} FCFA requis pour activer ` +
+          `${PLAN_LABELS[agency.plan]} (solde : ${wallet.balance.toLocaleString("fr-FR")} FCFA). Recharge ton portefeuille.`
+      );
+
+    // Débit du wallet et activation dans LA MÊME transaction (aucun débit orphelin).
+    const [, , updated] = await this.prisma.$transaction([
+      this.prisma.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { decrement: fee } },
+      }),
+      this.prisma.transaction.create({
+        data: {
+          walletId: wallet.id,
+          type: "DEBIT",
+          amount: fee,
+          label: `Activation agence ${PLAN_LABELS[agency.plan]}`,
+          meta: `Paiement unique — ${agency.name}`,
+        },
+      }),
+      this.prisma.agency.update({
+        where: { id: agency.id },
+        data: { feePaidAt: new Date(), activationFee: fee },
+      }),
+    ]);
+
+    await this.notifications.push(
+      ownerId,
+      "Agence activée ✅",
+      `${agency.name} est active (${PLAN_LABELS[agency.plan]} · ${this.pricing.agencyMaxAccounts(agency.plan)} comptes · ` +
+        `commission ${this.pricing.getAgencyLevel(agency.plan).commissionPct} %).`,
+      "AGENCY"
+    );
+
+    return {
+      agencyId: updated.id,
+      plan: updated.plan,
+      activationFee: updated.activationFee,
+      feePaidAt: updated.feePaidAt,
+      canOperate: this.pricing.agencyCanOperate(updated),
+    };
+  }
+
   // Tableau de bord de l'agence : chiffres réels (l'écran mobile était une maquette).
   async dashboard(ownerId: string) {
     const agency = await this.ownerAgency(ownerId);
@@ -191,6 +268,11 @@ export class AgenciesService {
         : null,
       seatsUsed: agency.drivers.length,
       seatsTotal: formula.maxAccounts,
+      commissionPct: this.pricing.getAgencyLevel(agency.plan).commissionPct,
+      withdrawalFeePct: this.pricing.getAgencyLevel(agency.plan).withdrawalFeePct,
+      activationFee: agency.activationFee,
+      feePaidAt: agency.feePaidAt,
+      activated: this.pricing.agencyCanOperate(agency),
       activeRides: activeRides.length,
       roster: agency.drivers.map((d) => {
         const profile = ratings.find((r) => r.userId === d.id);
@@ -233,6 +315,13 @@ export class AgenciesController {
     return this.svc.detachDriver(u.userId, userId);
   }
 
+  // POST /agencies/activate — paie les frais d'activation (une seule fois) du niveau choisi
+  @Post("activate")
+  @Roles(Role.AGENCY)
+  activate(@CurrentUser() u) {
+    return this.svc.activate(u.userId);
+  }
+
   // GET /agencies/dashboard
   @Get("dashboard")
   @Roles(Role.AGENCY)
@@ -242,7 +331,7 @@ export class AgenciesController {
 }
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, PricingModule, WalletModule],
   controllers: [AgenciesController],
   providers: [AgenciesService],
 })

@@ -10,7 +10,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { Estimate, Place, VehicleType, errorMessage, placesApi, rideApi, walletApi } from "../services/api";
+import { Estimate, Place, VehicleType, errorMessage, placesApi, rideApi, ridesApi, walletApi } from "../services/api";
+import { refreshTarification, ridePrice } from "../services/tarification";
 import { useCurrentLocation } from "../hooks/useCurrentLocation";
 
 type Props = {
@@ -21,9 +22,9 @@ type Props = {
 type Target = "origin" | "destination";
 
 const VEHICLES: Record<VehicleType, { label: string; icon: keyof typeof MaterialIcons.glyphMap }> = {
-  CAR: { label: "Voiture", icon: "directions-car" },
-  ZEM: { label: "Zem", icon: "two-wheeler" },
-  ZEM_ELECTRIC: { label: "Zem électrique", icon: "electric-moped" },
+  GAZELLE: { label: "Gazelle · Zem", icon: "two-wheeler" },
+  KOALA: { label: "Koala · climatisé", icon: "directions-car" },
+  LEOPARD: { label: "Léopard · premium", icon: "local-taxi" },
 };
 const POPULAR_PLACES: Place[] = [
   { id: "etoile", title: "Place de l'Étoile Rouge", subtitle: "Cotonou Centre", latitude: 6.3725, longitude: 2.4061 },
@@ -44,7 +45,7 @@ export default function RideBookingScreen({ service, onBack, onConfirmed }: Prop
   const gps = useCurrentLocation();
   const originTouched = useRef(false);
   const options = useMemo<VehicleType[]>(
-    () => (service === "zem" ? ["ZEM", "ZEM_ELECTRIC", "CAR"] : ["CAR", "ZEM", "ZEM_ELECTRIC"]),
+    () => (service === "zem" ? ["GAZELLE", "KOALA", "LEOPARD"] : ["KOALA", "LEOPARD", "GAZELLE"]),
     [service]
   );
 
@@ -95,28 +96,11 @@ function getDirectDistanceKm(lat1: number, lon1: number, lat2: number, lon2: num
   return Math.max(0.5, Math.round(roadDist * 10) / 10);
 }
 
-// Calcul du prix selon ton barème officiel :
-// - 0 à 10 km : 90 FCFA / km
-// - 10 à 25 km : 85 FCFA / km
-// - > 25 km : 80 FCFA / km
+// Prix estimé hors ligne : barème officiel AZƆ̀ partagé avec le backend
+// (tarif de base + coût kilométrique par tranche, voir services/tarification.ts).
+// Aucun tarif codé en dur ici, et le serveur reste la référence dès qu'il répond.
 function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
-  let rate = 90;
-  if (distanceKm > 25) {
-    rate = 80;
-  } else if (distanceKm > 10) {
-    rate = 85;
-  }
-
-  let price = distanceKm * rate;
-
-  if (vehicle === "ZEM_ELECTRIC") {
-    price = Math.max(200, price - 50); // Promo Zem électrique
-  } else if (vehicle === "CAR") {
-    price = price * 1.8; // Tarif voiture
-  }
-
-  // Arrondi propre à 25 FCFA près
-  return Math.max(250, Math.round(price / 25) * 25);
+  return ridePrice(distanceKm, vehicle);
 }
 
   useEffect(() => {
@@ -132,6 +116,11 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
       showSub.remove();
       hideSub.remove();
     };
+  }, []);
+
+  /* Barème officiel : rafraîchi depuis le serveur (GET /pricing), sinon barème embarqué */
+  useEffect(() => {
+    refreshTarification().catch(() => {});
   }, []);
 
   /* Solde du portefeuille */
@@ -176,18 +165,48 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
     const dist = getDirectDistanceKm(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
     const eta = Math.max(3, Math.ceil((dist / 25) * 60));
 
-    // Application du barème sur chaque type de véhicule
-    const directEstimates: Partial<Record<VehicleType, Estimate>> = {};
+    // Barème local (configuration partagée avec le serveur)
+    const localEstimates: Partial<Record<VehicleType, Estimate>> = {};
     options.forEach((v) => {
-      directEstimates[v] = {
+      localEstimates[v] = {
         distanceKm: dist,
         etaMinutes: eta,
         price: getDirectPrice(dist, v),
       };
     });
+    setEstimates(localEstimates);
 
-    setEstimates(directEstimates);
-    setEstimating(false);
+    // Puis prix officiels calculés par le backend (même barème, source de vérité).
+    // En cas d'échec (hors ligne), le calcul local configuré reste affiché.
+    let cancelled = false;
+    (async () => {
+      const serverEstimates: Partial<Record<VehicleType, Estimate>> = { ...localEstimates };
+      let gotServerPrice = false;
+      for (const v of options) {
+        try {
+          const res = await ridesApi.estimate({
+            originLat: origin.latitude,
+            originLng: origin.longitude,
+            destLat: destination.latitude,
+            destLng: destination.longitude,
+            vehicleType: v,
+          });
+          if (typeof res?.price === "number") {
+            serverEstimates[v] = { ...localEstimates[v], ...res };
+            gotServerPrice = true;
+          }
+        } catch {
+          // serveur injoignable : on garde le barème local
+        }
+      }
+      if (cancelled) return;
+      if (gotServerPrice) setEstimates(serverEstimates);
+      setEstimating(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [origin, destination, options, reloadKey]);
 
   const applyPlace = useCallback((target: Target, place: Place) => {
@@ -438,8 +457,19 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
                       <Text style={[styles.summaryValue, { color: colors.primary }]}>{fcfa(est.price)}</Text>
                     </View>
                   </View>
+                  {/* Détail du barème officiel : base + tranche 1 (0–15 km) + tranche 2 (16 km et +) */}
                   <Text style={styles.summaryDetail}>
-                    {est.breakdown.map((l) => `${fmtKm(l.km)} × ${l.perKm}`).join("  +  ")}
+                    {[
+                      `Base ${fcfa(est.breakdown.base)}`,
+                      est.breakdown.kmInFirstBracket > 0
+                        ? `${fmtKm(est.breakdown.kmInFirstBracket)} × ${fcfa(est.breakdown.perKmUpTo15)}/km`
+                        : null,
+                      est.breakdown.kmInSecondBracket > 0
+                        ? `${fmtKm(est.breakdown.kmInSecondBracket)} × ${fcfa(est.breakdown.perKmFrom16)}/km`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join("  +  ")}
                   </Text>
                 </View>
               )}

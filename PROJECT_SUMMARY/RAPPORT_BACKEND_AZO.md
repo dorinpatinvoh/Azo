@@ -52,14 +52,26 @@ Lorsqu'un administrateur approuve un dossier dans une transaction atomique Prism
 ## 4. Nouvelle Grille Officielle des Agences & Gestion de Flotte (`src/agencies/`)
 
 ### 4.1. Grille Tarifaire Officielle AZƆ̀ intégrée au Back-End
-La constante `AGENCY_FORMULAS` applique strictement la grille officielle validée :
+La grille vient de la configuration tarifaire (`src/pricing/tarification.json`, voir
+`PROJECT_SUMMARY/TARIFICATION.md`), jamais codée en dur :
 
-| Formule (`AgencyPlan`) | Frais d'Activation (`activationFee`) | Quota Maximal (`maxAccounts`) | Commission AZƆ̀ (`commissionRate`) |
-| :--- | :---: | :---: | :---: |
-| **`PRO`** | **100 000 FCFA** | **10 comptes** | **3 %** (`0.03`) |
-| **`ARGENT`** | **215 500 FCFA** | **25 comptes** | **2,5 %** (`0.025`) |
-| **`OR`** | **450 500 FCFA** | **100 comptes** | **2 %** (`0.02`) |
-| **`DIAMANT`** | **600 500 FCFA** | **1 000 comptes** | **1 %** (`0.01`) |
+| Niveau (`AgencyPlan`) | Activation (unique) | Quota (`maxAccounts`) | Commission par course | Frais par retrait |
+| :--- | :---: | :---: | :---: | :---: |
+| **`PRO`** | **100 000 FCFA** | **25 comptes** | **3 %** | **1 %** |
+| **`SILVER`** | **215 500 FCFA** | **50 comptes** | **2,5 %** | **0,75 %** |
+| **`OR`** | **450 500 FCFA** | **100 comptes** | **2 %** | **0,50 %** |
+| **`DIAMANT`** | **600 500 FCFA** | **1 000 comptes** | **1 %** | **0,25 %** |
+
+Une agence n'opère qu'une fois ses frais d'activation réglés (`POST /agencies/activate`,
+paiement unique) et la limite de comptes est refusée au-delà du plafond du niveau.
+
+### 4.1bis. Tarification des courses (gammes de véhicules)
+Les gammes **GAZELLE** (800 F + 200 F/km jusqu'à 15 km puis 150 F/km), **KOALA**
+(climatisé : 1 200 F + 375 F/km puis 350 F/km) et **LEOPARD** (2 500 F + 900 F/km puis
+800 F/km) remplacent les anciens types ZEM / ZEM_ELECTRIC / CAR. Les profils
+prestataires (Zem indépendant 15 %/mois + 1,5 % par retrait, LIVREUR et COURSIER en
+catégorie `INDEPENDANT_PERSONNEL`) et les frais de retrait sont implémentés dans
+`src/pricing/`. Tests unitaires : `cd azo-backend && npm test` (35 tests verts).
 
 ### 4.2. Endpoints de Gestion de Flotte Agence
 - `GET /agencies/me` : Retourne le tableau de bord complet de l'agence (formule, quota utilisé/restant, liste des chauffeurs et coursiers rattachés, chiffre d'affaires brut, commissions et net agence).

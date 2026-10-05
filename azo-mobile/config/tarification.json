@@ -1,0 +1,89 @@
+{
+  "_notes": {
+    "source": "Spécification métier AZƆ̀ — Tarifs et profils. Implémenté tel quel.",
+    "currency": "FCFA — montants entiers (aucun sous-franc)",
+    "singleSourceOfTruth": "Ce fichier est la SEULE source des tarifs. Aucune règle de prix ne doit être codée en dur dans la logique métier.",
+    "vehicles": "GAZELLE / KOALA / LEOPARD sont les gammes de véhicules (entrée de gamme, intermédiaire climatisé, haut de gamme).",
+    "legacyVehicleMapping": "Types de véhicules historiques encore présents en base (courses et dossiers passés) : ils sont rattachés à une gamme pour la facturation. Aucun nouveau dossier ne les utilise.",
+    "profiles": "Aucune règle tarifaire n'est définie pour LIVREUR et COURSIER : seul le profil et la catégorie INDEPENDANT_PERSONNEL sont prévus, sans prélèvement.",
+    "unspecifiedProfile": "Profils sans règle définie dans la spécification (ex. conducteur indépendant d'une gamme KOALA/LEOPARD) : aucun prélèvement n'est appliqué tant que le métier ne l'a pas tranché.",
+    "agencyActivation": "Le paiement des frais d'activation est unique et non récurrent ; requiredForOperations = true interdit à une agence non activée d'opérer.",
+    "delivery": "La livraison n'est pas décrite dans la spécification : le taux existant est conservé ici pour rester configurable, en attente d'une règle métier.",
+    "monthlySettlement": "Le prélèvement des Zem indépendants est mensuel (sur les revenus du mois), jamais par course.",
+    "copie": "Copie synchronisée depuis azo-backend/src/pricing/tarification.json — ne pas modifier ici : lancer `npm run sync:tarification`."
+  },
+  "currency": "FCFA",
+  "kmThreshold": 15,
+  "vehicles": {
+    "GAZELLE": {
+      "base": 800,
+      "perKmUpTo15": 200,
+      "perKmFrom16": 150
+    },
+    "KOALA": {
+      "base": 1200,
+      "perKmUpTo15": 375,
+      "perKmFrom16": 350,
+      "airConditioned": true
+    },
+    "LEOPARD": {
+      "base": 2500,
+      "perKmUpTo15": 900,
+      "perKmFrom16": 800
+    }
+  },
+  "agencyLevels": {
+    "PRO": {
+      "activationFee": 100000,
+      "commissionPct": 3,
+      "withdrawalFeePct": 1,
+      "maxAccounts": 25
+    },
+    "SILVER": {
+      "activationFee": 215500,
+      "commissionPct": 2.5,
+      "withdrawalFeePct": 0.75,
+      "maxAccounts": 50
+    },
+    "OR": {
+      "activationFee": 450500,
+      "commissionPct": 2,
+      "withdrawalFeePct": 0.5,
+      "maxAccounts": 100
+    },
+    "DIAMANT": {
+      "activationFee": 600500,
+      "commissionPct": 1,
+      "withdrawalFeePct": 0.25,
+      "maxAccounts": 1000
+    }
+  },
+  "profiles": {
+    "ZEM_INDEPENDANT": {
+      "monthlyRevenueSharePct": 15,
+      "withdrawalFeePct": 1.5
+    },
+    "LIVREUR": {
+      "category": "INDEPENDANT_PERSONNEL"
+    },
+    "COURSIER": {
+      "category": "INDEPENDANT_PERSONNEL"
+    }
+  },
+  "legacyVehicleMapping": {
+    "ZEM": "GAZELLE",
+    "ZEM_ELECTRIC": "GAZELLE",
+    "CAR": "KOALA"
+  },
+  "unspecifiedProfile": {
+    "monthlyRevenueSharePct": 0,
+    "withdrawalFeePct": 0,
+    "rideCommissionPct": 0
+  },
+  "agencyActivation": {
+    "requiredForOperations": true
+  },
+  "delivery": {
+    "commissionPct": 15
+  }
+}

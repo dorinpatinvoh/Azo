@@ -10,6 +10,7 @@ exports.RidesModule = void 0;
 const common_1 = require("@nestjs/common");
 const wallet_module_1 = require("../wallet/wallet.module");
 const notifications_module_1 = require("../notifications/notifications.module");
+const pricing_module_1 = require("../pricing/pricing.module");
 const rides_controller_1 = require("./rides.controller");
 const rides_service_1 = require("./rides.service");
 const rides_gateway_1 = require("./rides.gateway");
@@ -18,7 +19,7 @@ let RidesModule = class RidesModule {
 exports.RidesModule = RidesModule;
 exports.RidesModule = RidesModule = __decorate([
     (0, common_1.Module)({
-        imports: [wallet_module_1.WalletModule, notifications_module_1.NotificationsModule],
+        imports: [wallet_module_1.WalletModule, notifications_module_1.NotificationsModule, pricing_module_1.PricingModule],
         controllers: [rides_controller_1.RidesController],
         providers: [rides_service_1.RidesService, rides_gateway_1.RidesGateway],
         exports: [rides_service_1.RidesService],

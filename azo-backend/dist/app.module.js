@@ -21,6 +21,8 @@ const artisans_module_1 = require("./artisans/artisans.module");
 const agencies_module_1 = require("./agencies/agencies.module");
 const admin_module_1 = require("./admin/admin.module");
 const notifications_module_1 = require("./notifications/notifications.module");
+const providers_module_1 = require("./providers/providers.module");
+const pricing_module_1 = require("./pricing/pricing.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -40,6 +42,8 @@ exports.AppModule = AppModule = __decorate([
             agencies_module_1.AgenciesModule,
             admin_module_1.AdminModule,
             notifications_module_1.NotificationsModule,
+            providers_module_1.ProvidersModule,
+            pricing_module_1.PricingModule,
         ],
     })
 ], AppModule);

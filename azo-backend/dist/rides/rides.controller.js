@@ -30,6 +30,32 @@ __decorate([
     (0, class_validator_1.Max)(5),
     __metadata("design:type", Number)
 ], RateDto.prototype, "stars", void 0);
+class StartRideDto {
+}
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(8),
+    __metadata("design:type", String)
+], StartRideDto.prototype, "pin", void 0);
+class SendChatDto {
+}
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(300),
+    __metadata("design:type", String)
+], SendChatDto.prototype, "text", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SendChatDto.prototype, "senderRole", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(40),
+    __metadata("design:type", String)
+], SendChatDto.prototype, "senderName", void 0);
 let RidesController = class RidesController {
     constructor(rides) {
         this.rides = rides;
@@ -53,8 +79,8 @@ let RidesController = class RidesController {
     accept(id, user) {
         return this.rides.accept(id, user.userId);
     }
-    start(id, user) {
-        return this.rides.start(id, user.userId);
+    start(id, user, dto) {
+        return this.rides.start(id, user.userId, dto?.pin);
     }
     complete(id, user) {
         return this.rides.complete(id, user.userId);
@@ -62,6 +88,18 @@ let RidesController = class RidesController {
     // POST /rides/:id/rate  { "stars": 5 }
     rate(id, user, dto) {
         return this.rides.rate(id, user.userId, dto.stars);
+    }
+    // POST /rides/:id/cancel -> ouvert au client concerné ET au chauffeur assigné
+    cancel(id, user) {
+        return this.rides.cancel(id, user.userId);
+    }
+    // GET /rides/:id/messages -> Messagerie sécurisée in-app (course ou livraison)
+    getMessages(id) {
+        return this.rides.getMessages(id);
+    }
+    // POST /rides/:id/messages -> Envoyer un message sécurisé in-app
+    sendMessage(id, user, dto) {
+        return this.rides.sendMessage(id, user, dto);
     }
     // GET /rides/:id  -> déclaré en DERNIER pour ne pas masquer /history et /pending
     findOne(id, user) {
@@ -113,8 +151,9 @@ __decorate([
     (0, roles_decorator_1.Roles)(client_1.Role.DRIVER),
     __param(0, (0, common_1.Param)("id")),
     __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, Object, StartRideDto]),
     __metadata("design:returntype", void 0)
 ], RidesController.prototype, "start", null);
 __decorate([
@@ -136,6 +175,30 @@ __decorate([
     __metadata("design:paramtypes", [String, Object, RateDto]),
     __metadata("design:returntype", void 0)
 ], RidesController.prototype, "rate", null);
+__decorate([
+    (0, common_1.Post)(":id/cancel"),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "cancel", null);
+__decorate([
+    (0, common_1.Get)(":id/messages"),
+    __param(0, (0, common_1.Param)("id")),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "getMessages", null);
+__decorate([
+    (0, common_1.Post)(":id/messages"),
+    __param(0, (0, common_1.Param)("id")),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, SendChatDto]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "sendMessage", null);
 __decorate([
     (0, common_1.Get)(":id"),
     __param(0, (0, common_1.Param)("id")),
