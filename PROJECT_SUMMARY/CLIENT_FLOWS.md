@@ -32,9 +32,15 @@ Points techniques:
 - Écran 1: Demande (origine/destination) + rappel du Zem choisi (bouton « Changer »)
 - Écran 2: Estimation prix + confirmation (paiement AZƆ̀ Pay)
 
-**Parcours Voiture (`GAZELLE` / `KOALA` / `LEOPARD`)**
-- Écran 1: Demande (origine/destination) + choix de la gamme de voiture
-- Écran 2: Estimation prix + confirmation
+**Parcours Voiture (`GAZELLE` / `KOALA` / `LEOPARD`)** — détail dans
+[`PARCOURS_VOITURE.md`](./PARCOURS_VOITURE.md)
+- Écran 0: Interface « Quelle voiture veux-tu ? » — **Gazelle**, **Koala · climatisé**,
+  **Léopard · premium** présentées en **simples boutons** (aucun tarif à cette étape)
+- Écran 0 bis: « Ce à quoi tu as droit » pour la gamme choisie (sécurité, climatisation si la
+  gamme la déclare, atouts, **tarif officiel** base + paliers, usage idéal) avec le bouton
+  **Accepter et continuer**
+- Écran 1: Demande (origine/destination) + rappel de la voiture choisie (bouton « Changer »)
+- Écran 2: Estimation prix (tarif de la gamme retenue) + confirmation
 
 **Commun**
 - Radar chauffeur : chaque prestataire ne reçoit que les demandes de **son** véhicule

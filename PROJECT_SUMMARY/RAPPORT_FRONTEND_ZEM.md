@@ -57,11 +57,17 @@ destination (recherche, carte ou lieu favori), estimation, solde AZƆ̀ Pay et c
 Un **bandeau de rappel** affiche le Zem retenu avec un bouton **« Changer »** qui ramène à
 l'étape 1 **sans perdre le trajet déjà saisi**.
 
-### 2.3 Filière voiture
+### 2.3 Filière voiture — deux étapes également
 
-Le service « Voiture » ne propose plus que **Gazelle**, **Koala (climatisé)** et
-**Léopard (premium)**, sous le titre « Choisis ta voiture ». Aucun nom de gamme n'apparaît plus
-dans un parcours Zem.
+Le service « Voiture » suit désormais la même logique que le Zem (voir
+[`PARCOURS_VOITURE.md`](./PARCOURS_VOITURE.md)) : un écran plein écran **« Quelle voiture
+veux-tu ? »** liste les gammes **Gazelle**, **Koala · climatisé** et **Léopard · premium** en
+**simples boutons** (aucun tarif à cette étape) ; le clic ouvre l'écran **« Ce à quoi tu as
+droit »** (sécurité, climatisation *si la gamme la déclare*, atouts, **tarif officiel** base +
+paliers, usage idéal), avec le bouton **« Accepter et continuer »**. La suite est le parcours
+habituel : destination, estimation **au tarif de la gamme retenue**, confirmation. Un bandeau
+rappelle la voiture choisie avec un bouton **« Changer »**. Aucun nom de gamme n'apparaît dans un
+parcours Zem, et inversement.
 
 ### 2.4 Transparence du prix
 
@@ -136,7 +142,7 @@ distance, et **jamais** l'inverse.
 
 | Fichier | Rôle & améliorations |
 |---|---|
-| `screens/RideBookingScreen.tsx` | **Étape 1 dédiée** « Quel Zem veux-tu ? » (tarif par type), étape 2 inchangée, bandeau « Changer », détail du prix **par palier**, voitures limitées à Gazelle / Koala / Léopard |
+| `screens/RideBookingScreen.tsx` | **Étape 1 dédiée** « Quel Zem veux-tu ? » (tarif par type) et, pour la voiture, « Quelle voiture veux-tu ? » (boutons seuls) puis « Ce à quoi tu as droit » (`carEntitlements`, tarif officiel) ; bandeau « Changer » commun, détail du prix **par palier** |
 | `screens/DriverHomeScreen.tsx` | Bandeau « Radar *véhicule* — tu ne vois que ces demandes », état vide explicite, lecture du véhicule du dossier |
 | `screens/ProviderOnboardingScreen.tsx` | Choix de véhicule en **deux filières** (Moto-taxi / Voiture), icônes moto essence, moto électrique, voiture |
 | `services/tarification.ts` | `priceBreakdown()` (base remisée + paliers), `isZem` / `vehicleFamily`, résolution des anciens types |
@@ -172,6 +178,7 @@ distance, et **jamais** l'inverse.
 | Document | Contenu |
 |---|---|
 | `PROJECT_SUMMARY/PARCOURS_ZEM.md` | Déroulé complet de la commande d'un Zem, prix de référence, filtrage du radar |
+| `PROJECT_SUMMARY/PARCOURS_VOITURE.md` | Déroulé complet de la commande d'une voiture (boutons de gamme, « Ce à quoi tu as droit », tarifs) |
 | `PROJECT_SUMMARY/TARIFICATION.md` | Barèmes officiels (Zem et voitures), modèle de calcul, profils, migrations |
 | `PROJECT_SUMMARY/RAPPORT_BACKEND_ZEM.md` | Rapport back-end correspondant (modèle, API, tests, migration) |
 | `PROJECT_SUMMARY/GUIDE_TEST_CLIENT.md` | Guide de test pas-à-pas des cinq espaces, mis à jour |

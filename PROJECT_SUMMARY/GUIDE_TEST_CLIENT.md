@@ -56,9 +56,18 @@ L'écran de connexion ne pré-remplit plus aucun numéro : **chaque utilisateur 
      Un bandeau rappelle le Zem choisi, avec un bouton **Changer** pour revenir au choix.
    - Suivez la course en direct sur la carte (vous pouvez aussi l'annuler avant prise en charge).
 3. **Commander une Voiture** :
-   - Sur l'accueil, appuyez sur **Voiture** : les trois gammes disponibles sont **Gazelle**,
-     **Koala (climatisé)** et **Léopard (premium)**. Les noms de gammes ne s'appliquent
-     **jamais** à un Zem.
+   - Sur l'accueil, appuyez sur **Voiture** : un premier écran demande la gamme — **Gazelle**,
+     **Koala · climatisé** ou **Léopard · premium** — sous forme de **boutons** (aucun tarif
+     affiché à cette étape). Les noms de gammes ne s'appliquent **jamais** à un Zem.
+   - Appuyez sur une gamme : l'écran **« Ce à quoi tu as droit »** détaille la sécurité, la
+     climatisation (si la gamme la déclare), les atouts, le **tarif officiel** (base + paliers)
+     et l'usage idéal. Appuyez sur **Accepter et continuer** (ou *Voir les autres voitures*
+     pour changer).
+   - Vous arrivez sur la réservation : choisissez une destination, vérifiez que le prix
+     correspond bien à la gamme retenue, puis confirmez. Un bandeau rappelle la voiture choisie
+     avec un bouton **Changer**.
+     *Repères de prix :* Gazelle 10 km = **2 800 F** · Koala 10 km = **4 950 F** ·
+     Léopard 20 km = **20 000 F**.
 4. **Commander un Coursier / Livraison (Double sécurité OTP)** :
    - Sur l'accueil, appuyez sur **Livraison** ou **Coursier**.
    - Choisissez le type de mission : *Document*, *Petit Colis*, *Colis Moyen* ou **Coursier Personnel (Courses, pharmacie, achats)**.

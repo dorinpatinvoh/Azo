@@ -54,10 +54,10 @@ const ERROR_COLOR = "#B3261B";
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} FCFA`;
 
 /**
- * Tarif d'un type de Zem, construit depuis la configuration partagée
+ * Tarif d'un véhicule (Zem ou voiture), construit depuis la configuration partagée
  * (`config/tarification.json`, synchronisée avec le backend) : aucune valeur en dur.
  */
-function zemTariffLine(vehicle: VehicleType): string {
+function vehicleTariffLine(vehicle: VehicleType): string {
   const zem = tarification().vehicles[vehicle];
   const paliers = zem.brackets
     .map((b, i) => {
@@ -99,6 +99,55 @@ function zemCommonNote(): string {
     ? `Même base pour les deux : seul le prix au kilomètre change — l'électrique coûte ${fcfa(ecartsKm[0])} de moins par km.`
     : `Le prix au kilomètre change d'un type à l'autre.`;
 }
+/**
+ * Note de gamme de la filière voiture (accroche + usage idéal). Les montants, eux,
+ * sont toujours lus dans la configuration partagée.
+ */
+const CAR_PITCH: Record<"GAZELLE" | "KOALA" | "LEOPARD", { atouts: string[]; ideal: string }> = {
+  GAZELLE: {
+    atouts: ["Voiture d'entrée de gamme", "Le tarif le plus accessible de la filière voiture"],
+    ideal: "Les trajets courts et urbains",
+  },
+  KOALA: {
+    atouts: ["Niveau de confort intermédiaire", "Pensée pour les trajets du quotidien"],
+    ideal: "Les trajets quotidiens avec un peu plus de confort",
+  },
+  LEOPARD: {
+    atouts: ["Berline haut de gamme", "Le plus haut niveau de confort AZƆ̀"],
+    ideal: "Les trajets premium et les longues distances",
+  },
+};
+
+/**
+ * « Ce à quoi tu as droit » pour une gamme de voiture : chaque ligne est construite
+ * depuis la configuration partagée (base, paliers, climatisation) — aucun tarif en dur.
+ */
+function carEntitlements(
+  vehicle: VehicleType
+): { icon: keyof typeof MaterialIcons.glyphMap; text: string }[] {
+  const pricing = tarification().vehicles[vehicle];
+  const pitch = CAR_PITCH[vehicle as "GAZELLE" | "KOALA" | "LEOPARD"];
+  const lignesPrix = pricing.brackets.map((b, i) => {
+    const precedent = i === 0 ? 0 : (pricing.brackets[i - 1].upToKm ?? 0);
+    const texte =
+      i === 0
+        ? `Base ${fcfa(pricing.base)} puis ${fcfa(b.perKm)}/km de 0 à ${b.upToKm} km`
+        : b.upToKm === null
+          ? `Au-delà de ${precedent} km : ${fcfa(b.perKm)}/km`
+          : `De ${precedent + 1} à ${b.upToKm} km : ${fcfa(b.perKm)}/km`;
+    return { icon: "payments" as const, text: texte };
+  });
+  return [
+    { icon: "shield", text: "Conducteur vérifié AZƆ̀, trajet suivi en direct" },
+    // La climatisation n'est annoncée que si le barème la déclare (config partagée).
+    ...(pricing.airConditioned ? [{ icon: "stars" as const, text: "Voiture climatisée" }] : []),
+    { icon: "workspace-premium", text: pitch.atouts[0] },
+    { icon: "star", text: pitch.atouts[1] },
+    ...lignesPrix,
+    { icon: "check-circle", text: `Idéal pour : ${pitch.ideal.toLowerCase()}` },
+  ];
+}
+
 const fmtKm = (n: number) => `${n.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`;
 const fmtDuration = (min: number) =>
   min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}`;
@@ -110,9 +159,13 @@ export default function RideBookingScreen({ service, onBack, onConfirmed }: Prop
   // Étape 1 du parcours Zem : le client choisit d'abord son type de Zem
   // (électrique ou essence), puis renseigne sa destination.
   const [zemType, setZemType] = useState<VehicleType | null>(null);
+  // Étape 1 du parcours voiture : le client choisit sa gamme, découvre ce à quoi il a
+  // droit (étape 1 bis), l'accepte, puis renseigne sa destination.
+  const [carDetail, setCarDetail] = useState<VehicleType | null>(null);
+  const [carType, setCarType] = useState<VehicleType | null>(null);
   const options = useMemo<VehicleType[]>(
-    () => (service === "zem" ? (zemType ? [zemType] : []) : CAR_VEHICLES),
-    [service, zemType]
+    () => (service === "zem" ? (zemType ? [zemType] : []) : carType ? [carType] : []),
+    [service, zemType, carType]
   );
 
   const [origin, setOrigin] = useState<Place | null>(null);
@@ -313,6 +366,8 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
     }
   };
 
+  /* Véhicule retenu à l'étape 1 : un type de Zem, ou une gamme de voiture */
+  const chosenVehicle = service === "zem" ? zemType : carType;
   const est = estimates[selected];
   const walletInsufficient = balance !== null && !!est && balance < est.price;
   const canConfirm = !!origin && !!destination && !!est && !estimating && !submitting && !walletInsufficient;
@@ -380,6 +435,103 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
   };
 
   /*
+   * Filière voiture — étape 1 : le client choisit d'abord sa gamme de voiture.
+   * La page ne liste que les gammes (des boutons), sans tarif : l'explication de ce à
+   * quoi il a droit vient à l'écran suivant, avant d'accepter et de continuer.
+   */
+  if (service === "transport" && !carType && !carDetail) {
+    return (
+      <View style={styles.zemRoot}>
+        <View style={[styles.zemHeader, { paddingTop: insets.top + spacing.sm }]}>
+          <Pressable style={styles.zemBack} onPress={onBack} accessibilityLabel="Retour">
+            <MaterialIcons name="arrow-back" size={24} color={colors.onSurface} />
+          </Pressable>
+          <Text style={styles.zemTitle}>Quelle voiture veux-tu ?</Text>
+          <Text style={styles.zemSubtitle}>
+            Choisis ta gamme, découvre ce à quoi tu as droit, puis indique ta destination.
+          </Text>
+        </View>
+
+        <View style={styles.zemList}>
+          {CAR_VEHICLES.map((v) => (
+            <Pressable
+              key={v}
+              style={styles.carTypeBtn}
+              onPress={() => setCarDetail(v)}
+              accessibilityLabel={`${VEHICLES[v].label} — voir ce à quoi j'ai droit`}
+            >
+              <Text style={styles.carTypeBtnText}>{VEHICLES[v].label}</Text>
+              <MaterialIcons name="chevron-right" size={26} color={colors.outline} />
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  /*
+   * Filière voiture — étape 1 bis : ce à quoi le client a droit pour la gamme choisie
+   * (confort, sécurité, tarif appliqué). Il accepte, puis passe à la destination.
+   */
+  if (service === "transport" && !carType && carDetail) {
+    const v = carDetail;
+    return (
+      <ScrollView
+        style={styles.zemRoot}
+        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.lg }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.zemHeader, { paddingTop: insets.top + spacing.sm }]}>
+          <Pressable style={styles.zemBack} onPress={() => setCarDetail(null)} accessibilityLabel="Retour">
+            <MaterialIcons name="arrow-back" size={24} color={colors.onSurface} />
+          </Pressable>
+          <View style={styles.carDetailHead}>
+            <View style={styles.zemCardIcon}>
+              <MaterialIcons name={VEHICLES[v].icon} size={34} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.zemTitle}>{VEHICLES[v].label}</Text>
+              <Text style={styles.zemSubtitle}>{VEHICLES[v].short}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.zemList}>
+          <Text style={styles.sectionLabel}>Ce à quoi tu as droit</Text>
+          <View style={styles.carFeatures}>
+            {carEntitlements(v).map((f, i) => (
+              <View key={`${v}-${i}`} style={styles.carFeatureRow}>
+                <MaterialIcons name={f.icon} size={20} color={colors.primary} />
+                <Text style={styles.carFeatureText}>{f.text}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.zemNote}>
+            <MaterialIcons name="info-outline" size={16} color={colors.onSurfaceVariant} />
+            <Text style={styles.zemNoteText}>
+              Tarif officiel appliqué : {vehicleTariffLine(v)}. Le prix exact de ta course est
+              calculé sur la distance, après le choix de la destination.
+            </Text>
+          </View>
+
+          <Pressable
+            style={styles.confirmBtn}
+            onPress={() => { setCarType(v); setSelected(v); }}
+            accessibilityLabel="Accepter et continuer"
+          >
+            <Text style={styles.confirmText}>Accepter et continuer</Text>
+          </Pressable>
+
+          <Pressable style={styles.carBackLink} onPress={() => setCarDetail(null)}>
+            <Text style={styles.link}>Voir les autres voitures</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  /*
    * Étape 1 du parcours Zem : une interface dédiée demande d'abord le type de Zem
    * (électrique ou essence). La destination, l'estimation et la confirmation viennent
    * ensuite, dans l'écran de réservation habituel.
@@ -411,7 +563,7 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
               <View style={{ flex: 1 }}>
                 <Text style={styles.zemCardTitle}>{VEHICLES[v].label}</Text>
                 <Text style={styles.zemCardSub}>{VEHICLES[v].short}</Text>
-                <Text style={styles.zemCardPrice}>{zemTariffLine(v)}</Text>
+                <Text style={styles.zemCardPrice}>{vehicleTariffLine(v)}</Text>
               </View>
               <MaterialIcons name="chevron-right" size={26} color={colors.outline} />
             </Pressable>
@@ -461,15 +613,19 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.sheetTitle}>Où allons-nous ?</Text>
 
-          {/* Rappel de l'étape 1 : le type de Zem choisi, modifiable en un clic */}
-          {service === "zem" && zemType && (
+          {/* Rappel de l'étape 1 (Zem ou voiture), modifiable en un clic */}
+          {chosenVehicle && (
             <Pressable
               style={styles.zemChip}
-              onPress={() => { setZemType(null); setEstimates({}); }}
-              accessibilityLabel="Changer de type de Zem"
+              onPress={() => {
+                if (service === "zem") setZemType(null);
+                else { setCarType(null); setCarDetail(null); }
+                setEstimates({});
+              }}
+              accessibilityLabel="Changer de véhicule"
             >
-              <MaterialIcons name={VEHICLES[zemType].icon} size={18} color={colors.primary} />
-              <Text style={styles.zemChipText}>{VEHICLES[zemType].label}</Text>
+              <MaterialIcons name={VEHICLES[chosenVehicle].icon} size={18} color={colors.primary} />
+              <Text style={styles.zemChipText}>{VEHICLES[chosenVehicle].label}</Text>
               <Text style={styles.zemChipAction}>Changer</Text>
             </Pressable>
           )}
@@ -556,7 +712,7 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
           {!estimating && Object.keys(estimates).length > 0 && (
             <>
               <Text style={styles.sectionLabel}>
-                {service === "zem" ? "Ton Zem" : "Choisis ta voiture"}
+                {service === "zem" ? "Ton Zem" : "Ta voiture"}
               </Text>
               {options.map((v) => {
                 const e = estimates[v];
@@ -663,6 +819,13 @@ const styles = StyleSheet.create({
   zemCardPrice: { ...typography.labelSm, color: colors.primary, fontWeight: "700", marginTop: 4 },
   zemNote: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, padding: spacing.sm + 2 },
   zemNoteText: { ...typography.bodySm, color: colors.onSurfaceVariant, flex: 1 },
+  carTypeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.surfaceContainer, paddingVertical: spacing.md, paddingHorizontal: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
+  carTypeBtnText: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", fontSize: 20 },
+  carDetailHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  carFeatures: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.surfaceContainer, padding: spacing.md, gap: 12, marginBottom: spacing.md },
+  carFeatureRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  carFeatureText: { ...typography.bodyMd, color: colors.onSurface, flex: 1 },
+  carBackLink: { alignItems: "center", marginTop: spacing.sm, paddingVertical: 8 },
   zemChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 8, alignSelf: "flex-start" },
   zemChipText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "800" },
   zemChipAction: { ...typography.labelSm, color: colors.primary, fontWeight: "800", textDecorationLine: "underline" },

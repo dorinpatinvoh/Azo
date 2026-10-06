@@ -259,6 +259,9 @@ Le déroulé complet de la commande d'un Zem (choix du type, destination, estima
 acceptation, Code Bouclier, paiement, notation) est décrit dans
 [`PARCOURS_ZEM.md`](./PARCOURS_ZEM.md).
 
+Le parcours de commande d'une voiture (boutons de gamme, explication, tarifs appliqués) est
+décrit dans [`PARCOURS_VOITURE.md`](./PARCOURS_VOITURE.md).
+
 Les rapports d'avancement de ce chantier :
 [`RAPPORT_BACKEND_ZEM.md`](./RAPPORT_BACKEND_ZEM.md) (modèle, API, barème, tests, migration) et
 [`RAPPORT_FRONTEND_ZEM.md`](./RAPPORT_FRONTEND_ZEM.md) (parcours client, écrans, radar, valeurs de contrôle).
