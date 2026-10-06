@@ -6,6 +6,12 @@ import { Platform } from "react-native";
 export async function registerForPushNotifications(): Promise<string | null> {
   if (Platform.OS !== "android" && Platform.OS !== "ios") return null;
 
+  // Android Expo Go cannot register remote push tokens from SDK 53 onward.
+  // Skip before touching expo-notifications so the rest of the app stays usable in Expo Go.
+  const isExpoGo =
+    Constants.executionEnvironment === "storeClient" || Constants.appOwnership === "expo";
+  if (Platform.OS === "android" && isExpoGo) return null;
+
   try {
     if (Platform.OS === "android") {
       // Le canal doit exister avant la demande de jeton sous Android.
