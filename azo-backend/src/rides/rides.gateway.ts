@@ -7,6 +7,7 @@ import {
   WebSocketServer,
 } from "@nestjs/websockets";
 import { JwtService } from "@nestjs/jwt";
+import { PrismaService } from "../prisma/prisma.service";
 import { Server, Socket } from "socket.io";
 
 export type RideChatMessage = {
@@ -27,7 +28,7 @@ export class RidesGateway implements OnGatewayConnection {
 
   private chatStore = new Map<string, RideChatMessage[]>();
 
-  constructor(private jwt: JwtService) {}
+  constructor(private jwt: JwtService, private prisma: PrismaService) {}
 
   handleConnection(client: Socket) {
     const raw =
@@ -41,22 +42,36 @@ export class RidesGateway implements OnGatewayConnection {
         const payload = this.jwt.verify(raw);
         client.data.user = { userId: payload.sub, role: payload.role, phone: payload.phone };
       } catch {
-        // Jeton expiré ou invalide : on laisse la connexion en lecture seule sur ride:join
+        // Jeton expiré ou invalide : la socket ne pourra pas rejoindre une course privée.
       }
     }
   }
 
   @SubscribeMessage("ride:join")
-  join(@ConnectedSocket() client: Socket, @MessageBody() data: { rideId?: string }) {
-    if (!data?.rideId || typeof data.rideId !== "string") return { joined: null };
+  async join(@ConnectedSocket() client: Socket, @MessageBody() data: { rideId?: string }) {
+    const userId = client.data?.user?.userId;
+    if (!userId || !data?.rideId || typeof data.rideId !== "string") return { joined: null };
+
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: data.rideId },
+      select: { clientId: true, driverId: true },
+    });
+    if (!ride || (ride.clientId !== userId && ride.driverId !== userId)) return { joined: null };
+
     client.join(`ride:${data.rideId}`);
     return { joined: data.rideId, messages: this.getMessages(data.rideId) };
   }
 
-  // Le chauffeur émet sa position toutes les ~5 secondes
+  // Le chauffeur émet sa position toutes les ~10 secondes pendant une course active.
   @SubscribeMessage("driver:location")
-  location(@MessageBody() data: { rideId?: string; lat?: number; lng?: number }) {
+  async location(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { rideId?: string; lat?: number; lng?: number }
+  ) {
+    const user = client.data?.user;
     if (
+      !user?.userId ||
+      user.role !== "DRIVER" ||
       !data?.rideId ||
       typeof data.lat !== "number" ||
       typeof data.lng !== "number" ||
@@ -67,7 +82,16 @@ export class RidesGateway implements OnGatewayConnection {
     ) {
       return;
     }
-    this.server.to(`ride:${data.rideId}`).emit("driver:location", {
+
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: data.rideId },
+      select: { driverId: true, status: true },
+    });
+    if (!ride || ride.driverId !== user.userId || !["MATCHED", "ARRIVED", "IN_PROGRESS"].includes(ride.status)) {
+      return;
+    }
+
+    this.server?.to(`ride:${data.rideId}`).emit("driver:location", {
       lat: data.lat,
       lng: data.lng,
       at: Date.now(),

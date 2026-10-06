@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { randomInt } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { WalletService } from "../wallet/wallet.module";
 import { NotificationsService } from "../notifications/notifications.module";
@@ -7,13 +8,8 @@ import { RidesGateway } from "./rides.gateway";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { LatLng, buildRadar, isRideExpired, rideAgeMinutes } from "./radar";
 
-export function rideSecurityPin(rideId: string): string {
-  let hash = 2166136261;
-  for (let i = 0; i < rideId.length; i++) {
-    hash ^= rideId.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return String((Math.abs(hash) % 9000) + 1000);
+function createPickupCode(): string {
+  return String(randomInt(0, 10_000)).padStart(4, "0");
 }
 
 @Injectable()
@@ -54,7 +50,7 @@ export class RidesService {
   async create(clientId: string, dto: CreateRideDto) {
     const { price } = this.estimate(dto);
     const ride = await this.prisma.ride.create({
-      data: { ...dto, clientId, price, commission: 0, status: "PENDING" },
+      data: { ...dto, clientId, price, commission: 0, status: "PENDING", pickupCode: createPickupCode() },
     });
 
     // Notification des chauffeurs dont le véhicule correspond (notification in-app :
@@ -71,7 +67,8 @@ export class RidesService {
       originLng: ride.originLng,
     });
 
-    return ride;
+    // Le code reste côté serveur jusqu'à l'arrivée du chauffeur.
+    return this.withoutPickupCode(ride);
   }
 
   /**
@@ -176,13 +173,15 @@ export class RidesService {
 
     // Filtrage par véhicule en dernier : c'est la règle du radar (Zem essence ≠ Zem
     // électrique ; Gazelle ≠ Koala ≠ Léopard ; coursiers sans demandes de transport).
-    return radar.filter((ride) => this.pricing.rideVisibleFor(driverVehicle, ride.vehicleType));
+    return radar
+      .filter((ride) => this.pricing.rideVisibleFor(driverVehicle, ride.vehicleType))
+      .map((ride) => this.withoutPickupCode(ride));
   }
 
   // Un chauffeur ne peut conduire qu'une course à la fois
   private async assertDriverIsFree(driverId: string) {
     const current = await this.prisma.ride.findFirst({
-      where: { driverId, status: { in: ["MATCHED", "IN_PROGRESS"] } },
+      where: { driverId, status: { in: ["MATCHED", "ARRIVED", "IN_PROGRESS"] } },
       select: { id: true },
     });
     if (current) throw new BadRequestException("Tu as déjà une course en cours");
@@ -209,15 +208,46 @@ export class RidesService {
     });
     await this.notifications.push(ride.clientId, "Chauffeur trouvé", "Un chauffeur a accepté ta course et arrive vers toi.", "ride");
     this.gateway.emitStatus(rideId, "MATCHED");
-    return ride;
+    return this.withoutPickupCode(ride);
+  }
+
+  /** Le chauffeur signale son arrivée avant que le client ne révèle son code. */
+  async arrive(rideId: string, driverId: string) {
+    const ride = await this.getOwnedByDriver(rideId, driverId);
+    if (ride.status !== "MATCHED") {
+      throw new BadRequestException("Seul un chauffeur en route vers le client peut signaler son arrivée.");
+    }
+
+    const { count } = await this.prisma.ride.updateMany({
+      where: { id: rideId, driverId, status: "MATCHED" },
+      data: { status: "ARRIVED", driverArrivedAt: new Date() },
+    });
+    if (count === 0) throw new BadRequestException("Le statut de la course a changé. Actualise l'écran.");
+
+    const arrivedRide = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId } });
+    const arrivalTitle = this.pricing.isZem(arrivedRide.vehicleType)
+      ? "Ton Zem est arrivé"
+      : "Ton chauffeur est arrivé";
+    await this.notifications.push(
+      arrivedRide.clientId,
+      arrivalTitle,
+      "Ton chauffeur est au point de prise en charge. Donne-lui le code Bouclier affiché dans l'application pour démarrer.",
+      "ride",
+      { sendPush: true, data: { event: "ride-arrived", rideId } }
+    );
+    this.gateway.emitStatus(rideId, "ARRIVED");
+    return this.withoutPickupCode(arrivedRide);
   }
 
   async start(rideId: string, driverId: string, pin?: string) {
     const ride = await this.getOwnedByDriver(rideId, driverId);
-    if (ride.status !== "MATCHED") throw new BadRequestException("Statut invalide");
+    if (ride.status !== "ARRIVED") {
+      throw new BadRequestException("Le démarrage est interdit avant l'arrivée au point de prise en charge.");
+    }
 
-    if (pin && pin.trim() && pin.trim() !== rideSecurityPin(rideId)) {
-      throw new BadRequestException("Code Bouclier AZƆ̀ incorrect. Demande les 4 chiffres affichés sur l'écran du client.");
+    const cleanPin = typeof pin === "string" ? pin.trim() : "";
+    if (!/^\d{4}$/.test(cleanPin) || !ride.pickupCode || cleanPin !== ride.pickupCode) {
+      throw new BadRequestException("Code Bouclier AZƆ̀ incorrect. Demande au client le code affiché dans son application.");
     }
 
     // On vérifie le solde AVANT le départ : sinon la course se terminait avec un
@@ -227,10 +257,16 @@ export class RidesService {
       throw new BadRequestException("Le client n'a pas assez de solde AZƆ̀ Pay pour cette course");
     }
 
-    const updated = await this.prisma.ride.update({ where: { id: rideId }, data: { status: "IN_PROGRESS" } });
+    const { count } = await this.prisma.ride.updateMany({
+      where: { id: rideId, driverId, status: "ARRIVED", pickupCode: cleanPin },
+      data: { status: "IN_PROGRESS", pickupCode: null },
+    });
+    if (count === 0) throw new BadRequestException("Le statut de la course a changé. Actualise l'écran.");
+
     await this.notifications.push(ride.clientId, "Course démarrée", "Ton chauffeur est en route vers la destination.", "ride");
     this.gateway.emitStatus(rideId, "IN_PROGRESS");
-    return updated;
+    const updated = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId } });
+    return this.withoutPickupCode(updated);
   }
 
   getMessages(rideId: string) {
@@ -286,10 +322,10 @@ export class RidesService {
     await this.notifications.push(ride.clientId, "Course terminée", `${ride.price} FCFA débités de ton portefeuille.`, "payment");
     await this.notifications.push(driverId, "Paiement reçu", `+${driverGain} FCFA (commission AZƆ̀ : ${commission} F).`, "payment");
     this.gateway.emitStatus(rideId, "COMPLETED");
-    return updated;
+    return this.withoutPickupCode(updated);
   }
 
-  // Annulation par le client (course non démarrée) ou par le chauffeur (course acceptée)
+  // Annulation par le client ou le chauffeur avant le démarrage de la course
   async cancel(rideId: string, userId: string) {
     const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
     if (!ride) throw new NotFoundException("Course introuvable");
@@ -297,15 +333,18 @@ export class RidesService {
     const isClient = ride.clientId === userId;
     const isDriver = ride.driverId === userId;
     if (!isClient && !isDriver) throw new ForbiddenException();
-    if (ride.status !== "PENDING" && ride.status !== "MATCHED") {
+    if (ride.status !== "PENDING" && ride.status !== "MATCHED" && ride.status !== "ARRIVED") {
       throw new BadRequestException("Cette course ne peut plus être annulée");
     }
 
     // Client : la course est annulée pour de bon.
-    // Chauffeur : elle repart en recherche pour qu'un autre chauffeur la prenne.
+    // Chauffeur : elle repart en recherche avec un nouveau code (l'ancien a pu être révélé).
     const updated = isClient
       ? await this.prisma.ride.update({ where: { id: rideId }, data: { status: "CANCELLED" } })
-      : await this.prisma.ride.update({ where: { id: rideId }, data: { status: "PENDING", driverId: null } });
+      : await this.prisma.ride.update({
+          where: { id: rideId },
+          data: { status: "PENDING", driverId: null, driverArrivedAt: null, pickupCode: createPickupCode() },
+        });
 
     if (isClient) {
       if (ride.driverId) {
@@ -316,13 +355,14 @@ export class RidesService {
     }
 
     this.gateway.emitStatus(rideId, updated.status);
-    return updated;
+    return this.withoutPickupCode(updated);
   }
 
   async rate(rideId: string, clientId: string, stars: number) {
     const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
     if (!ride || ride.clientId !== clientId) throw new ForbiddenException();
-    return this.prisma.ride.update({ where: { id: rideId }, data: { rating: stars } });
+    const updated = await this.prisma.ride.update({ where: { id: rideId }, data: { rating: stars } });
+    return this.withoutPickupCode(updated);
   }
 
   // Détail d'une course (avec les infos du chauffeur ET du client) — lu par l'écran
@@ -342,20 +382,23 @@ export class RidesService {
     // suivi (aucun débit), et on le lui signale dans la réponse (`expired: true`).
     if (ride.status === "PENDING" && isRideExpired(ride.createdAt, this.pricing.radarSettings().pendingExpiryMinutes)) {
       const cancelled = await this.expireRide(ride);
-      if (cancelled) return { ...ride, status: "CANCELLED", expired: true };
+      if (cancelled) return this.visibleRideToUser({ ...ride, status: "CANCELLED", expired: true }, userId);
     }
 
     // Le client voit combien de temps il reste avant l'expiration de sa demande.
     if (ride.status === "PENDING") {
       const expiryMinutes = this.pricing.radarSettings().pendingExpiryMinutes;
       const ageMinutes = rideAgeMinutes(ride.createdAt);
-      return { ...ride, expiresInMinutes: Math.max(0, Math.ceil(expiryMinutes - ageMinutes)) };
+      return this.visibleRideToUser(
+        { ...ride, expiresInMinutes: Math.max(0, Math.ceil(expiryMinutes - ageMinutes)) },
+        userId
+      );
     }
-    return ride;
+    return this.visibleRideToUser(ride, userId);
   }
 
-  history(userId: string) {
-    return this.prisma.ride.findMany({
+  async history(userId: string) {
+    const rides = await this.prisma.ride.findMany({
       where: { OR: [{ clientId: userId }, { driverId: userId }] },
       include: {
         driver: { select: { fullName: true, phone: true } },
@@ -363,6 +406,8 @@ export class RidesService {
       },
       orderBy: { createdAt: "desc" },
     });
+    // L'historique n'a jamais besoin du code, même si le client possède la course.
+    return rides.map((ride) => this.withoutPickupCode(ride));
   }
 
   /** Profil prestataire (spec tarifaire) d'un conducteur, d'après son dossier et son véhicule. */
@@ -383,6 +428,19 @@ export class RidesService {
       return isZem && !hasAgency ? "ZEM_INDEPENDANT" : null;
     }
     return null;
+  }
+
+  private withoutPickupCode<T extends { pickupCode?: string | null }>(ride: T): Omit<T, "pickupCode"> {
+    const { pickupCode: _pickupCode, ...safeRide } = ride;
+    return safeRide;
+  }
+
+  /** Le code n'est lisible que par le client, et seulement après le statut ARRIVED. */
+  private visibleRideToUser<T extends { clientId: string; status: string; pickupCode?: string | null }>(
+    ride: T,
+    userId: string
+  ) {
+    return userId === ride.clientId && ride.status === "ARRIVED" ? ride : this.withoutPickupCode(ride);
   }
 
   private async getOwnedByDriver(rideId: string, driverId: string) {

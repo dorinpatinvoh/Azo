@@ -227,7 +227,7 @@ export type VehicleType = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" |
 
 /** Filière d'un véhicule : moto-taxi (Zem) ou voiture. */
 export type VehicleFamily = "ZEM" | "CAR";
-export type RideStatus = "PENDING" | "MATCHED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type RideStatus = "PENDING" | "MATCHED" | "ARRIVED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 // ⚠️ N'ajoute AUCUN autre champ : le backend refuse les champs inconnus.
 export type RideRequest = {
@@ -271,6 +271,9 @@ export type Ride = {
   price: number;
   commission?: number;
   rating?: number | null;
+  /** Visible uniquement au client lorsque le chauffeur a signalé son arrivée. */
+  pickupCode?: string | null;
+  driverArrivedAt?: string | null;
   createdAt: string;
   driver?: RidePerson | null;
   client?: RidePerson | null;
@@ -314,7 +317,8 @@ export const ridesApi = {
           : "")
     ),
   accept: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/accept`),
-  start: (rideId: string, pin?: string) => api.post<Ride>(`${P}/rides/${rideId}/start`, pin ? { pin } : {}),
+  arrive: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/arrive`),
+  start: (rideId: string, pin: string) => api.post<Ride>(`${P}/rides/${rideId}/start`, { pin }),
   complete: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/complete`),
 
   /* --- Messagerie sécurisée in-app --- */
@@ -414,6 +418,14 @@ export type AppNotification = { id: string; title: string; body: string; type: s
 export const notificationsApi = {
   list: () => api.get<AppNotification[]>(`${P}/notifications`),
   readAll: () => api.post<{ count: number }>(`${P}/notifications/read-all`),
+  registerPushToken: (token: string, platform: "android" | "ios") =>
+    api.post<{ registered: boolean }>(`${P}/notifications/push-token`, { token, platform }),
+  unregisterPushToken: (token: string, platform: "android" | "ios") =>
+    api.post<{ unregistered: boolean }>(
+      `${P}/notifications/push-token/unregister`,
+      { token, platform },
+      { timeoutMs: 6000 }
+    ),
 };
 
 /* ============ PRESTATAIRES : dossier, pièces, validation admin ============ */

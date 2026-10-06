@@ -52,7 +52,7 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
 |---|---|
 | Auth | `POST /auth/request-otp`, `POST /auth/verify-otp` |
 | Utilisateur | `GET/PATCH /users/me` |
-| Courses | `POST /rides/estimate`, `POST /rides`, `GET /rides/history`, `GET /rides/pending` (filtré par véhicule), `GET /rides/:id`, `POST /rides/:id/accept|start|complete|rate|cancel` |
+| Courses | `POST /rides/estimate`, `POST /rides`, `GET /rides/history`, `GET /rides/pending` (filtré par véhicule), `GET /rides/:id`, `POST /rides/:id/accept|arrive|start|complete|rate|cancel` |
 | Prestataires | `GET /providers/requirements`, `GET /providers/me`, `POST /providers/applications`, `POST /providers/applications/:id/documents`, `POST /providers/applications/:id/documents/:kind/file` (photo, multipart), `GET /providers/documents/:docId/file`, `POST /providers/applications/:id/submit` |
 | Temps réel | WebSocket : `ride:join`, `driver:location`, `ride:status` |
 | Portefeuille | `GET /wallet`, `GET /wallet/transactions`, `POST /wallet/recharge` |
@@ -65,7 +65,7 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
 | Portefeuille | `GET /wallet/withdrawal-quote?amount=`, `POST /wallet/withdraw` |
 | Admin | `GET /admin/stats`, `GET /admin/users`, `POST /admin/settlements/zem-monthly` |
 | Admin — prestataires | `GET /admin/providers`, `GET /admin/providers/stats`, `GET /admin/providers/:id`, `POST /admin/providers/:id/start-review`, `POST /admin/providers/:id/documents/:docId/decision`, `POST /admin/providers/:id/decision`, `POST /admin/providers/:id/reinstate` |
-| Notifications | `GET /notifications`, `POST /notifications/read-all` |
+| Notifications | `GET /notifications`, `POST /notifications/read-all`, `POST /notifications/push-token`, `POST /notifications/push-token/unregister` |
 | Santé | `GET /health` (statut, commit déployé, uptime), `GET /` (résumé) |
 
 ## 5. Règles métier déjà codées
@@ -85,6 +85,8 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
   indépendant, prélèvement **mensuel** de 15 % des revenus du mois (jamais par course),
   plus 1,5 % sur chaque retrait.
 - Fin de course : le client est débité, le chauffeur crédité (prix − commission).
+- **Prise en charge Zem** : `MATCHED → ARRIVED → IN_PROGRESS`. Le backend refuse le départ avant `ARRIVED` et vérifie un code aléatoire à 4 chiffres. Le code n'est renvoyé qu'au client, après l'arrivée.
+- À l'arrivée, la notification est enregistrée dans l'inbox et envoyée via Expo Push Service aux appareils inscrits; le suivi Socket.IO continue en parallèle.
 - Livraison : double code OTP (ramassage + remise).
 - Marketplace : l'argent est bloqué en séquestre jusqu'à validation du client.
 - **Prestataires** : l'inscription crée toujours un compte `CLIENT`. Le rôle métier
@@ -119,4 +121,4 @@ En cas de besoin ponctuel, `npx prisma studio` permet aussi de modifier un compt
 - Brancher un vrai fournisseur SMS dans `auth.service.ts` (`requestOtp`).
 - Brancher FedaPay/CinetPay dans `wallet` + un webhook de confirmation de paiement.
 - Calcul de prix réel (distance/durée) et matching par proximité (PostGIS).
-- Notifications push Firebase dans `notifications.module.ts`.
+- Configurer les credentials de push (FCM v1 Android / APNs iOS) dans EAS pour activer la livraison système en production.

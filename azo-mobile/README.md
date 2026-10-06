@@ -23,8 +23,12 @@ généré par celui fourni ici.
 npx expo start
 ```
 
-Scanne le QR code avec l'app **Expo Go** (Android/iOS) pour tester sur ton
-téléphone en conditions réelles.
+Scanne le QR code avec **Expo Go** pour tester l'interface et le suivi. Les notifications
+push distantes Android ne sont pas prises en charge dans Expo Go depuis le SDK 53 :
+il faut créer un build natif de développement ou APK avec EAS. Pour les push, lie aussi
+le projet à EAS (project ID) et configure les identifiants FCM v1 dans les credentials EAS.
+Le code lit le project ID depuis `extra.eas.projectId`, `Constants.easConfig` ou
+`EXPO_PUBLIC_EAS_PROJECT_ID`.
 
 ## Ce qui est déjà adapté "smartphone"
 
