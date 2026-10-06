@@ -15,6 +15,7 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "autoIncrement": "versionCode",
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
@@ -25,6 +26,7 @@
     },
     "production": {
       "channel": "production",
+      "autoIncrement": "versionCode",
       "android": {
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease"
