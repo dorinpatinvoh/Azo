@@ -167,9 +167,9 @@ export class PricingService {
    *
    * Chaque véhicule porte ses paliers dans la configuration (`brackets`) :
    *
-   *   * **Zem** (motos-taxis) : base **150 F**, puis **90 F/km de 0 à 10 km**,
-   *     **85 F/km de 11 à 25 km**, **80 F/km à partir du 26e km** ; au-delà de **10 km**
-   *     la base subit une **remise de 25 %** (150 F → 112 F après troncature) ;
+   *   * **Zem** (motos-taxis) : **mêmes paliers** pour les deux types — **70 F/km de 0 à
+   *     15 km**, **60 F/km de 16 à 25 km**, **50 F/km à partir du 26e km** ; seule la base
+   *     diffère (150 F à essence, 100 F en électrique), sans remise ;
    *   * **voitures** : base et deux paliers (ex. Gazelle 800 F, 200 F/km jusqu'à 15 km
    *     puis 150 F/km), sans remise de base.
    *

@@ -102,7 +102,7 @@ export type PriceBreakdown = {
   distanceKm: number;
   /** Base effectivement facturée (après remise). */
   base: number;
-  /** Base du barème avant remise (150 F pour un Zem). */
+  /** Base du barème avant remise (150 F pour un Zem à essence, 100 F en électrique). */
   baseFull: number;
   baseDiscountPct: number;
   baseDiscountApplied: boolean;

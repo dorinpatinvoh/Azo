@@ -21,14 +21,14 @@ Points techniques:
 
 ## 2. Course (Ride)
 
-> **Mise à jour du 5 octobre 2026 — deux filières distinctes :**
+> **Mise à jour des 5 et 6 octobre 2026 — deux filières distinctes :**
 > **Zem** (moto-taxi) et **Voiture** ne partagent plus le même parcours.
 > Le détail complet est dans [`PARCOURS_ZEM.md`](./PARCOURS_ZEM.md).
 
 **Parcours Zem (`ZEM_ESSENCE` / `ZEM_ELECTRIC`)**
-- Écran 0: Interface « Quel Zem veux-tu ? » — **Zem à essence** ou **Zem électrique**
-  (base 150 F et −25 % de base au-delà de 10 km pour les deux ; **90/85/80 F/km** en essence,
-  **80/75/70 F/km** en électrique)
+- Écran 0: Interface « Quel Zem veux-tu ? » — **Zem à essence** (**150 F** de base) ou
+  **Zem électrique** (**100 F** de base) ; **mêmes paliers pour les deux** : **70 / 60 / 50 F/km**
+  (0–15, 16–25, 26 km et +), aucune remise — l'électrique est donc toujours 50 F moins cher
 - Écran 1: Demande (origine/destination) + rappel du Zem choisi (bouton « Changer »)
 - Écran 2: Estimation prix + confirmation (paiement AZƆ̀ Pay)
 

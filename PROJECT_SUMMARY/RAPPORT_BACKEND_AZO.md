@@ -74,8 +74,8 @@ d'un Zem de celle d'une voiture :
 
 | Filière | Types | Tarifs |
 | :--- | :--- | :--- |
-| **Moto-taxi (Zem)** | `ZEM_ESSENCE` | **Base 150 F**, puis **90 F/km de 0 à 10 km**, **85 F/km de 11 à 25 km**, **80 F/km au-delà** — **−25 % sur la base dès que le trajet dépasse 10 km** (150 F → 112 F) |
-| **Moto-taxi (Zem)** | `ZEM_ELECTRIC` | **Même base (150 F) et même remise** que le Zem à essence, mais **10 F de moins par kilomètre** : **80 / 75 / 70 F/km** sur les mêmes paliers |
+| **Moto-taxi (Zem)** | `ZEM_ESSENCE` | **Base 150 F**, puis **70 F/km de 0 à 15 km**, **60 F/km de 16 à 25 km**, **50 F/km au-delà** — aucune remise |
+| **Moto-taxi (Zem)** | `ZEM_ELECTRIC` | **Mêmes paliers kilométriques** que le Zem à essence, mais **base réduite à 100 F** (50 F d'écart constant) |
 | **Voiture** | `GAZELLE`, `KOALA`, `LEOPARD` | Gazelle 800 + 200/km puis 150/km · Koala climatisé 1 200 + 375/km puis 350/km · Léopard 2 500 + 900/km puis 800/km |
 
 **Les noms Gazelle / Koala / Léopard ne désignent plus que des voitures** : ils n'apparaissent

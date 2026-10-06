@@ -75,20 +75,29 @@ function zemTariffLine(vehicle: VehicleType): string {
 }
 
 /**
- * Note commune aux deux Zem : la base et la remise sont identiques, seuls les tarifs
- * au kilomètre changent (l'écart est calculé depuis la configuration, jamais en dur).
+ * Note commune aux deux Zem, construite depuis la configuration partagée (jamais en dur) :
+ * si les paliers kilométriques sont identiques, seule la base les sépare.
  */
 function zemCommonNote(): string {
   const essence = tarification().vehicles.ZEM_ESSENCE;
   const electrique = tarification().vehicles.ZEM_ELECTRIC;
-  const ecarts = essence.brackets.map((b, i) => b.perKm - (electrique.brackets[i]?.perKm ?? b.perKm));
-  const ecartUniforme = ecarts.every((e) => e === ecarts[0]);
-  const remise = essence.baseDiscount
-    ? `Même base (${fcfa(essence.base)}) et même remise de ${essence.baseDiscount.pct} % au-delà de ${essence.baseDiscount.aboveKm} km pour les deux`
-    : `Même base pour les deux`;
-  return ecartUniforme && ecarts[0] > 0
-    ? `${remise} : seul le prix au kilomètre change — l'électrique coûte ${fcfa(ecarts[0])} de moins par km.`
-    : `${remise} : seul le prix au kilomètre change.`;
+  const ecartsKm = essence.brackets.map((b, i) => b.perKm - (electrique.brackets[i]?.perKm ?? b.perKm));
+  const memeTarifKm = ecartsKm.every((e) => e === 0);
+  const ecartBase = essence.base - electrique.base;
+  if (memeTarifKm && ecartBase > 0) {
+    return (
+      `Même tarif au kilomètre pour les deux types : seule la base change — ` +
+      `${fcfa(electrique.base)} en électrique, ${fcfa(ecartBase)} de moins qu'à essence ` +
+      `(${fcfa(essence.base)}).`
+    );
+  }
+  if (memeTarifKm) {
+    return `Mêmes tarifs pour les deux types de Zem : ${fcfa(essence.base)} de base.`;
+  }
+  const ecartUniforme = ecartsKm.every((e) => e === ecartsKm[0]);
+  return ecartUniforme && ecartsKm[0] > 0
+    ? `Même base pour les deux : seul le prix au kilomètre change — l'électrique coûte ${fcfa(ecartsKm[0])} de moins par km.`
+    : `Le prix au kilomètre change d'un type à l'autre.`;
 }
 const fmtKm = (n: number) => `${n.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`;
 const fmtDuration = (min: number) =>

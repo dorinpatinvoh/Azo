@@ -19,15 +19,16 @@ son prix**. Trois livraisons structurent cette journée :
    le **Zem** (moto-taxi) existe désormais avec ses **deux types officiels** — `ZEM_ESSENCE` et
    `ZEM_ELECTRIC` — tandis que **Gazelle / Koala / Léopard ne désignent plus que des voitures**.
 2. **Le barème de courses est refondu** autour d'une base et de **paliers kilométriques** propres
-   à chaque véhicule, avec une **remise de 25 % sur la base au-delà de 10 km** pour les Zem et un
-   **tarif au kilomètre réduit pour l'électrique** (80/75/70 F contre 90/85/80 F).
+   à chaque véhicule. Les deux Zem partagent désormais les **mêmes paliers** (70 F/km de 0 à
+   15 km, 60 F/km de 16 à 25 km, 50 F/km au-delà) et **seule la base les distingue** : 150 F pour
+   le Zem à essence, **100 F pour le Zem électrique** — soit 50 F d'écart constant, sans remise.
 3. **Le radar chauffeur est filtré** : un prestataire ne reçoit plus que les demandes
    correspondant **exactement** au véhicule déclaré dans son dossier — et les coursiers ne
    reçoivent plus du tout les demandes de transport.
 
 L'ensemble reste piloté par **une seule source de vérité** (`src/pricing/tarification.json`) :
 aucune règle de prix n'est codée en dur, la configuration est validée au démarrage, et
-**51 tests unitaires** couvrent les cas métier (bornes de paliers, remise, conversions,
+**51 tests unitaires** couvrent les cas métier (bornes de paliers, base par type, conversions,
 niveaux d'agence, profils, radar).
 
 ---
@@ -83,24 +84,27 @@ portant `upToKm: null` = illimité) et, en option, une **remise de base**
 (`baseDiscount: { pct, aboveKm }`). Le champ global `kmThreshold` de l'ancien modèle a disparu :
 les bornes vivent désormais dans le véhicule. Chaque poste est **tronqué en FCFA entiers**
 (`Math.floor`), sans arrondi métier ; le calcul se fait en millimètres entiers pour rester exact
-(20,9 − 15 = 5,9 → 885 F).
+(20,9 km : ⌊5,9 × 60⌋ = 354 F, soit 150 + 1 050 + 354 = 1 554 F à essence).
 
 ### 3.2 Barème officiel
 
-| Véhicule | Base | 0 → 10 km | 11 → 25 km | 26 km et + | Remise de base |
+| Véhicule | Base | 0 → 15 km | 16 → 25 km | 26 km et + | Remise de base |
 |---|---|---|---|---|---|
-| **ZEM_ESSENCE** | 150 | 90 / km | 85 / km | 80 / km | **−25 % au-delà de 10 km** |
-| **ZEM_ELECTRIC** | 150 | **80 / km** | **75 / km** | **70 / km** | **−25 % au-delà de 10 km** |
-| **GAZELLE** | 800 | 200 / km (0–15) | 150 / km | 150 / km | aucune |
-| **KOALA** (climatisé) | 1 200 | 375 / km (0–15) | 350 / km | 350 / km | aucune |
-| **LEOPARD** | 2 500 | 900 / km (0–15) | 800 / km | 800 / km | aucune |
+| **ZEM_ESSENCE** | 150 | 70 / km | 60 / km | 50 / km | aucune |
+| **ZEM_ELECTRIC** | **100** | 70 / km | 60 / km | 50 / km | aucune |
+| **GAZELLE** | 800 | 200 / km | 150 / km | 150 / km | aucune |
+| **KOALA** (climatisé) | 1 200 | 375 / km | 350 / km | 350 / km | aucune |
+| **LEOPARD** | 2 500 | 900 / km | 800 / km | 800 / km | aucune |
 
 **Décisions retenues**
 
-* les deux types de Zem partagent la **même base (150 F)** et la **même remise de 25 %**
-  (150 F → 112 F après troncature) ; **seul le prix au kilomètre change**, l'électrique étant
-  **10 F moins cher par palier** ;
-* la remise ne s'applique **jamais à 10 km ou moins** ;
+* les deux types de Zem partagent **exactement les mêmes paliers** (70 / 60 / 50 F/km, bornes à
+  15 km, 25 km et dernier palier à partir du 26e km) ;
+* **seule la base diffère** : 150 F pour le Zem à essence, **100 F** pour le Zem électrique. Le
+  Zem électrique est donc **toujours 50 F moins cher**, quelle que soit la distance (vérifié par
+  un test sur 0 · 3 · 10 · 15 · 16 · 25 · 26 · 30 · 60 · 100 km) ;
+* **aucune remise de base** dans le barème en vigueur (la remise de 25 % du barème précédent est
+  supprimée) ;
 * la base est due **dès que la course est acceptée** ; le client n'est débité qu'à la **fin** de
   la course ;
 * les voitures conservent leurs grilles de la spécification initiale, leur palier à 15 km et
@@ -110,12 +114,14 @@ les bornes vivent désormais dans le véhicule. Chaque poste est **tronqué en F
 
 | Trajet | Zem à essence | Zem électrique | Écart |
 |---|---|---|---|
-| 5 km | 600 | 550 | 50 |
-| 10 km | 1 050 | 950 | 100 |
-| 12 km | 1 182 | 1 062 | 120 |
-| 25 km | 2 287 | 2 037 | 250 |
-| 30 km | 2 687 | 2 387 | 300 |
-| 100 km | 8 287 | 7 287 | 1 000 |
+| 0 km | 150 | 100 | 50 |
+| 5 km | 500 | 450 | 50 |
+| 10 km | 850 | 800 | 50 |
+| 15 km | 1 200 | 1 150 | 50 |
+| 16 km | 1 260 | 1 210 | 50 |
+| 25 km | 1 800 | 1 750 | 50 |
+| 30 km | 2 050 | 2 000 | 50 |
+| 100 km | 5 550 | 5 500 | 50 |
 
 ### 3.4 Validation de la configuration
 
@@ -191,12 +197,12 @@ cd azo-backend && npm test
 
 **51 tests verts** (`test/pricing.spec.ts`), dont :
 
-* paliers Zem complets : 0 · 5 · 10 · 10,5 · 11 · 12 · 25 · 26 · 30 · 100 km, pour **les deux
+* paliers Zem complets : 0 · 5 · 10 · 15 · 16 · 25 · 26 · 30 · 60 · 100 km, pour **les deux
   types** ;
-* **base et remise communes** aux deux Zem, **bornes de paliers identiques**, et chaque palier
-  électrique **strictement moins cher** que son homologue essence ;
-* remise de base : bornes à 10 km (aucune remise) et 10,5 km (remise appliquée), troncature
-  FCFA (112 F) ;
+* **paliers strictement identiques** pour les deux Zem (bornes et tarifs au km) et **écart
+  constant de 50 F** (base 150 F à essence contre 100 F en électrique), à toutes les distances ;
+* **absence de remise de base** : le champ `baseDiscount` est absent de la configuration et
+  aucun véhicule ne remise sa base ;
 * voitures : grilles de la spécification, **aucune remise**, palier à 15 km ;
 * radar : correspondance exacte, non-mélange Zem / voiture, mode souple, conversion des anciens
   types ;

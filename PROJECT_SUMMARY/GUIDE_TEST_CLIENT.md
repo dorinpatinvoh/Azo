@@ -46,9 +46,10 @@ L'écran de connexion ne pré-remplit plus aucun numéro : **chaque utilisateur 
 1. Connectez-vous avec **votre propre numéro** (n'importe quel numéro béninois à 10 chiffres commençant par `01`).
 2. **Commander un Zem** :
    - Sur l'accueil, appuyez sur **Zem**. Un premier écran demande le type de moto-taxi :
-     **Zem à essence** ou **Zem électrique**. Même **base de 150 F** et même **remise de 25 %**
-     au-delà de 10 km, mais l'électrique est moins cher au kilomètre : **90 / 85 / 80 F/km**
-     (essence) contre **80 / 75 / 70 F/km** (électrique) sur les paliers 0–10, 11–25 et 26 km et +.
+     **Zem à essence** (**150 F** de base) ou **Zem électrique** (**100 F** de base). Les deux
+     ont les **mêmes paliers au kilomètre** : **70 F/km** de 0 à 15 km, **60 F/km** de 16 à
+     25 km, **50 F/km** au-delà. L'électrique est donc **50 F moins cher** quelle que soit la
+     distance (aucune remise de base).
      Le tarif de chaque type est affiché sous sa carte.
    - Vous arrivez ensuite sur la réservation : choisissez une destination à Cotonou
      (ex. *Aéroport*, *Ganhi*, *Haie Vive*), vérifiez le tarif estimé et confirmez la course.

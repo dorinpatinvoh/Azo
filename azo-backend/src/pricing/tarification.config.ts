@@ -13,8 +13,9 @@ import embeddedConfig from "./tarification.json";
 
 /**
  * Véhicules facturables AZƆ̀, en deux filières :
- *   * `ZEM`  : ZEM_ESSENCE, ZEM_ELECTRIC — motos-taxis (même base et même remise, tarifs au
- *     kilomètre propres à chaque type : 90/85/80 F/km en essence, 80/75/70 F/km en électrique) ;
+ *   * `ZEM`  : ZEM_ESSENCE, ZEM_ELECTRIC — motos-taxis (mêmes paliers kilométriques pour les
+ *     deux : 70 F/km de 0 à 15 km, 60 F/km de 16 à 25 km, 50 F/km au-delà ; seule la base
+ *     diffère : 150 F à essence, 100 F en électrique) ;
  *   * `CAR`  : GAZELLE, KOALA, LEOPARD — voitures (entrée de gamme, climatisée, premium).
  */
 export type VehicleFamily = "ZEM" | "CAR";
@@ -57,7 +58,7 @@ export type VehiclePricing = {
   base: number;
   /** Paliers kilométriques, du premier au dernier (dernier = illimité). */
   brackets: VehicleBracket[];
-  /** Remise éventuelle sur la base (Zem : −25 % au-delà de 10 km). */
+  /** Remise éventuelle sur la base (facultative ; aucun véhicule n'en utilise actuellement). */
   baseDiscount?: BaseDiscount;
   airConditioned?: boolean;
   /** Filière du véhicule : `ZEM` (moto-taxi) ou `CAR` (voiture). */

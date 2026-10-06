@@ -1,36 +1,37 @@
 # Parcours d'une commande de Zem — AZƆ̀
 
 Document de référence du parcours **« Je commande un Zem »** tel qu'il fonctionne
-aujourd'hui dans l'application (mise à jour du 5 octobre 2026).
+aujourd'hui dans l'application (mise à jour des 5 et 6 octobre 2026).
 
 ## 1. Principe
 
 Un Zem est un **moto-taxi**. Il existe **deux types**, choisis par le client dès le
 premier écran :
 
-| Type | Libellé client | Base | 0 → 10 km | 11 → 25 km | 26 km et + |
+| Type | Libellé client | Base | 0 → 15 km | 16 → 25 km | 26 km et + |
 |---|---|---|---|---|---|
-| `ZEM_ESSENCE` | **Zem à essence** | 150 F | 90 F/km | 85 F/km | 80 F/km |
-| `ZEM_ELECTRIC` | **Zem électrique** | 150 F | **80 F/km** | **75 F/km** | **70 F/km** |
+| `ZEM_ESSENCE` | **Zem à essence** | 150 F | 70 F/km | 60 F/km | 50 F/km |
+| `ZEM_ELECTRIC` | **Zem électrique** | **100 F** | 70 F/km | 60 F/km | 50 F/km |
 
-**Même base et même remise pour les deux, seul le prix au kilomètre change** (l'électrique est
-10 F moins cher par palier).
+**Mêmes paliers kilométriques pour les deux types : seule la base change** (150 F à essence,
+**100 F** en électrique). Le Zem électrique coûte donc **50 F de moins**, quelle que soit la
+distance.
 
-**Remise de base** : au-delà de **10 km**, la base passe de 150 F à **112 F** (−25 %,
-troncature FCFA) — pour les deux types. Elle ne s'applique jamais à 10 km ou moins.
+**Aucune remise de base** : le barème en vigueur n'en comporte plus.
 
 | Trajet | Prix Zem à essence | Prix Zem électrique |
 |---|---|---|
-| 5 km | 150 + 5 × 90 = **600 F** | 150 + 5 × 80 = **550 F** |
-| 10 km | 150 + 10 × 90 = **1 050 F** | 150 + 10 × 80 = **950 F** |
-| 12 km | 112 + 10 × 90 + 2 × 85 = **1 182 F** | 112 + 10 × 80 + 2 × 75 = **1 062 F** |
-| 25 km | 112 + 10 × 90 + 15 × 85 = **2 287 F** | 112 + 10 × 80 + 15 × 75 = **2 037 F** |
-| 30 km | 112 + 900 + 1 275 + 5 × 80 = **2 687 F** | 112 + 800 + 1 125 + 5 × 70 = **2 387 F** |
+| 5 km | 150 + 5 × 70 = **500 F** | 100 + 5 × 70 = **450 F** |
+| 10 km | 150 + 10 × 70 = **850 F** | 100 + 10 × 70 = **800 F** |
+| 15 km | 150 + 15 × 70 = **1 200 F** | 100 + 15 × 70 = **1 150 F** |
+| 16 km | 150 + 1 050 + 60 = **1 260 F** | 100 + 1 050 + 60 = **1 210 F** |
+| 25 km | 150 + 1 050 + 600 = **1 800 F** | 100 + 1 050 + 600 = **1 750 F** |
+| 30 km | 150 + 1 050 + 600 + 5 × 50 = **2 050 F** | 100 + 1 050 + 600 + 5 × 50 = **2 000 F** |
 
 L'écran « Quel Zem veux-tu ? » affiche le tarif **sous chaque carte**, lu dans la configuration
 partagée (jamais codé en dur).
 
-La base de 150 F est due dès que la course est **acceptée** ; le client n'est débité qu'à la
+La base (150 F à essence, 100 F en électrique) est due dès que la course est **acceptée** ; le client n'est débité qu'à la
 **fin** de la course (aucun débit avant le départ).
 
 Les noms **Gazelle / Koala / Léopard** sont réservés aux **voitures** et n'apparaissent

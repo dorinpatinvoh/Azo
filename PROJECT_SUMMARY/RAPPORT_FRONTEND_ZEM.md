@@ -6,13 +6,13 @@
 essence / électrique), **affichage des barèmes officiels** et **radar chauffeur filtré par
 véhicule**
 **Destinataires :** Direction Générale & Responsables Techniques
-**Date :** 05 Octobre 2026
+**Date :** 06 Octobre 2026
 
 ---
 
 ## 1. Synthèse exécutive
 
-L'application mobile applique désormais la règle métier validée aujourd'hui : **commander un Zem
+L'application mobile applique la règle métier validée par la Direction : **commander un Zem
 n'est plus « commander une course »**. Le client choisit d'abord **son type de moto-taxi**
 (électrique ou essence), puis renseigne sa destination et suit le parcours habituel — tandis que
 les noms **Gazelle / Koala / Léopard** ne sont plus proposés que pour les **voitures**.
@@ -20,9 +20,9 @@ les noms **Gazelle / Koala / Léopard** ne sont plus proposés que pour les **vo
 Trois apports concrets pour l'utilisateur :
 
 1. **Un écran dédié « Quel Zem veux-tu ? »** avec, sous chaque carte, **le tarif exact** du type
-   choisi (base, paliers kilométriques, remise) ;
-2. **Un détail de prix transparent** qui décompose le montant poste par poste (base remisée,
-   puis chaque palier de kilomètres) ;
+   choisi (base et paliers kilométriques) ;
+2. **Un détail de prix transparent** qui décompose le montant poste par poste (base, puis chaque
+   palier de kilomètres) ;
 3. **Un radar chauffeur honnête** : chaque prestataire ne voit que les demandes correspondant au
    véhicule de son dossier, avec un bandeau qui l'indique explicitement.
 
@@ -41,13 +41,13 @@ grandes cartes (icône moto thermique / moto électrique). Le tarif de chaque ty
 **sous sa carte**, construit depuis la configuration partagée :
 
 > **Zem à essence** — *Moto-taxi thermique, partout en ville*
-> `150 FCFA de base · 90 FCFA/km (0–10 km) · 85 FCFA/km (11–25 km) · 80 FCFA/km au-delà · −25 % de base après 10 km`
+> `150 FCFA de base · 70 FCFA/km (0–15 km) · 60 FCFA/km (16–25 km) · 50 FCFA/km au-delà`
 >
 > **Zem électrique** — *Moto-taxi électrique, silencieux*
-> `150 FCFA de base · 80 FCFA/km (0–10 km) · 75 FCFA/km (11–25 km) · 70 FCFA/km au-delà · −25 % de base après 10 km`
+> `100 FCFA de base · 70 FCFA/km (0–15 km) · 60 FCFA/km (16–25 km) · 50 FCFA/km au-delà`
 
-Une note de bas d'écran rappelle que **la base et la remise sont identiques** pour les deux et que
-**seul le prix au kilomètre change** — l'écart (10 F) est lui aussi **calculé depuis la
+Une note de bas d'écran rappelle que **les paliers kilométriques sont identiques** pour les deux
+et que **seule la base change** — l'écart (50 F) est lui aussi **calculé depuis la
 configuration**, jamais écrit en dur.
 
 ### 2.2 Étape 2 — destination et suite du parcours
@@ -68,10 +68,11 @@ dans un parcours Zem.
 Sous le prix estimé, le détail est reconstruit **palier par palier** :
 
 ```
-Base 150 FCFA − 25 % = 112 FCFA  +  10 km × 90 FCFA/km  +  2 km × 85 FCFA/km
+Base 150 FCFA  +  15 km × 70 FCFA/km  +  10 km × 60 FCFA/km  +  5 km × 50 FCFA/km
 ```
 
-*(à 10 km ou moins, la ligne affiche simplement « Base 150 FCFA », sans remise.)*
+*(un trajet de 12 km n'affiche qu'une seule ligne de palier : « Base 150 FCFA + 12 km ×
+70 FCFA/km » ; en électrique, la base est de 100 FCFA.)*
 
 ---
 
@@ -103,9 +104,9 @@ Base 150 FCFA − 25 % = 112 FCFA  +  10 km × 90 FCFA/km  +  2 km × 85 FCFA/km
 | Résolution | Les anciens types restent convertis à l'affichage (`ZEM → ZEM_ESSENCE`, `CAR → KOALA`) |
 
 **Vérification croisée :** le moteur mobile a été exécuté sur toutes les bornes
-(0 · 1 · 2 · 3 · 4 · 5 · 8 · 10 · 10,5 · 12 · 15 · 18 · 20 · 25 · 26 · 30 · 40 · 100 km) pour les
-**deux types de Zem** : montants **identiques au backend**, au franc près. La compilation
-TypeScript de l'application est **sans erreur**.
+(0 · 1 · 5 · 10 · 15 · 16 · 20 · 25 · 26 · 30 · 50 · 100 km) pour les **deux types de Zem** :
+montants **identiques au backend**, au franc près, avec un **écart constant de 50 F**. La
+compilation TypeScript de l'application est **sans erreur**.
 
 ---
 
@@ -113,20 +114,21 @@ TypeScript de l'application est **sans erreur**.
 
 | Distance affichée | Zem à essence | Zem électrique | Écart attendu |
 |---|---|---|---|
-| 3 km | 420 F | 390 F | 30 F |
-| 4 km | 510 F | 470 F | 40 F |
-| 5 km | 600 F | 550 F | 50 F |
-| 8 km | 870 F | 790 F | 80 F |
-| 10 km | 1 050 F | 950 F | 100 F |
-| 12 km | 1 182 F | 1 062 F | 120 F |
-| 20 km | 1 862 F | 1 662 F | 200 F |
-| 30 km | 2 687 F | 2 387 F | 300 F |
+| 3 km | 360 F | 310 F | 50 F |
+| 5 km | 500 F | 450 F | 50 F |
+| 10 km | 850 F | 800 F | 50 F |
+| 15 km | 1 200 F | 1 150 F | 50 F |
+| 16 km | 1 260 F | 1 210 F | 50 F |
+| 18 km | 1 380 F | 1 330 F | 50 F |
+| 25 km | 1 800 F | 1 750 F | 50 F |
+| 30 km | 2 050 F | 2 000 F | 50 F |
 
 **Voitures (inchangées) :** Gazelle 10 km = 2 800 F · Koala 8 km = 4 200 F ·
 Léopard 20 km = 20 000 F.
 
 **À vérifier en priorité :** le même trajet en essence puis en électrique doit toujours donner
-**l'électrique moins cher** (100 F d'écart à 10 km, 300 F à 30 km), et **jamais** l'inverse.
+**exactement 50 F d'écart** (l'électrique moins cher) — ni plus, ni moins — quelle que soit la
+distance, et **jamais** l'inverse.
 
 ---
 
