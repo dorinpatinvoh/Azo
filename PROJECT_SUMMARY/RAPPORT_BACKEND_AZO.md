@@ -4,7 +4,7 @@
 **Périmètre :** Serveur API & Base de Données (`azo-backend` — NestJS / Prisma / PostgreSQL)  
 **URL de Production :** `https://azo-backend.onrender.com`  
 **Destinataires :** Direction Générale & Responsables Techniques  
-**Date :** 02 Octobre 2026 — *mise à jour du 5 octobre 2026 (filière Zem essence / électrique)*  
+**Date :** 02 Octobre 2026  
 
 ---
 
@@ -52,63 +52,14 @@ Lorsqu'un administrateur approuve un dossier dans une transaction atomique Prism
 ## 4. Nouvelle Grille Officielle des Agences & Gestion de Flotte (`src/agencies/`)
 
 ### 4.1. Grille Tarifaire Officielle AZƆ̀ intégrée au Back-End
-La grille vient de la configuration tarifaire (`src/pricing/tarification.json`, voir
-`PROJECT_SUMMARY/TARIFICATION.md`), jamais codée en dur :
+La constante `AGENCY_FORMULAS` applique strictement la grille officielle validée :
 
-| Niveau (`AgencyPlan`) | Activation (unique) | Quota (`maxAccounts`) | Commission par course | Frais par retrait |
-| :--- | :---: | :---: | :---: | :---: |
-| **`PRO`** | **100 000 FCFA** | **25 comptes** | **3 %** | **1 %** |
-| **`SILVER`** | **215 500 FCFA** | **50 comptes** | **2,5 %** | **0,75 %** |
-| **`OR`** | **450 500 FCFA** | **100 comptes** | **2 %** | **0,50 %** |
-| **`DIAMANT`** | **600 500 FCFA** | **1 000 comptes** | **1 %** | **0,25 %** |
-
-Une agence n'opère qu'une fois ses frais d'activation réglés (`POST /agencies/activate`,
-paiement unique) et la limite de comptes est refusée au-delà du plafond du niveau.
-
-### 4.1bis. Tarification des courses — deux filières distinctes (mise à jour du 5 octobre 2026)
-
-> 📄 **Rapport dédié à ce chantier : [`RAPPORT_BACKEND_ZEM.md`](./RAPPORT_BACKEND_ZEM.md)**
-> (modèle de données, barème détaillé, filtrage du radar, migration, tests).
-Les véhicules sont désormais répartis en **deux filières**, ce qui sépare enfin la commande
-d'un Zem de celle d'une voiture :
-
-| Filière | Types | Tarifs |
-| :--- | :--- | :--- |
-| **Moto-taxi (Zem)** | `ZEM_ESSENCE` | **Base 150 F**, puis **70 F/km de 0 à 15 km**, **60 F/km de 16 à 25 km**, **50 F/km au-delà** — aucune remise |
-| **Moto-taxi (Zem)** | `ZEM_ELECTRIC` | **Mêmes paliers kilométriques** que le Zem à essence, mais **base réduite à 100 F** (50 F d'écart constant) |
-| **Voiture** | `GAZELLE`, `KOALA`, `LEOPARD` | Gazelle 800 + 200/km puis 150/km · Koala climatisé 1 200 + 375/km puis 350/km · Léopard, berline premium climatisée, 2 500 + 900/km puis 800/km |
-
-**Les noms Gazelle / Koala / Léopard ne désignent plus que des voitures** : ils n'apparaissent
-jamais dans le parcours de commande d'un Zem. La filière de chaque véhicule est portée par la
-configuration (`family: "ZEM" | "CAR"` dans `tarification.json`), jamais par une liste codée en dur.
-
-**Modèle de prix unifié** : chaque véhicule porte ses propres **paliers kilométriques**
-(`brackets: [{ upToKm, perKm }, …]`, dernier palier illimité) et, en option, une **remise de base**
-(`baseDiscount: { pct, aboveKm }`) — le Zem en a trois paliers et une remise, les voitures deux
-paliers et aucune remise. Un seul moteur de calcul, entièrement piloté par la configuration :
-les nouveaux barèmes se règlent sans toucher au code.
-
-**Filtrage du radar chauffeur** : `GET /rides/pending` n'expose plus toutes les demandes. Le
-service applique `pricing.rideVisibleFor()` — par défaut (`radar.strictVehicleMatch = true`) un
-prestataire ne reçoit que les demandes du **véhicule exact** qu'il a déclaré (un Zem à essence ne
-voit pas les demandes de Zem électrique ; Gazelle ≠ Koala ≠ Léopard), et les **coursiers sont exclus**
-des demandes de transport. Le mode souple (les deux Zem partagent leurs demandes) s'active par
-configuration, sans redéploiement de code.
-
-**Profils prestataires** : le profil `ZEM_INDEPENDANT` (15 % des revenus du mois + 1,5 % par
-retrait, aucune commission par course) s'applique aux **deux** types de Zem, détectés par la
-filière du véhicule. LIVREUR et COURSIER restent en catégorie `INDEPENDANT_PERSONNEL` avec 1,5 %
-par retrait — leurs autres règles restant « à définir ». Les valeurs non arbitrées sont listées
-dans la section `aDefinir` de la configuration et jamais présentées comme validées.
-
-**Migration** `20261005140000_zem_essence_et_electrique` : ajout de `ZEM_ESSENCE` / `ZEM_ELECTRIC`
-à l'enum `VehicleType`, et conversion des données existantes (`Ride.vehicleType` et dossiers DRIVER
-en `GAZELLE` → `ZEM_ESSENCE`, puisque la Gazelle était le moto-taxi jusqu'ici).
-
-Tests : `cd azo-backend && npm test` (**51 tests verts**), dont les trois paliers des deux Zem
-(90/85/80 et 80/75/70), la remise de base (bornes à 10 km et 10,5 km), la base et la remise
-communes aux deux types, l'absence de remise sur les voitures et le filtrage du radar (strict et
-souple).
+| Formule (`AgencyPlan`) | Frais d'Activation (`activationFee`) | Quota Maximal (`maxAccounts`) | Commission AZƆ̀ (`commissionRate`) |
+| :--- | :---: | :---: | :---: |
+| **`PRO`** | **100 000 FCFA** | **10 comptes** | **3 %** (`0.03`) |
+| **`ARGENT`** | **215 500 FCFA** | **25 comptes** | **2,5 %** (`0.025`) |
+| **`OR`** | **450 500 FCFA** | **100 comptes** | **2 %** (`0.02`) |
+| **`DIAMANT`** | **600 500 FCFA** | **1 000 comptes** | **1 %** (`0.01`) |
 
 ### 4.2. Endpoints de Gestion de Flotte Agence
 - `GET /agencies/me` : Retourne le tableau de bord complet de l'agence (formule, quota utilisé/restant, liste des chauffeurs et coursiers rattachés, chiffre d'affaires brut, commissions et net agence).

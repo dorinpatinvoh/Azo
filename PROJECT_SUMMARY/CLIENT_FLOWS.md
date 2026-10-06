@@ -21,33 +21,10 @@ Points techniques:
 
 ## 2. Course (Ride)
 
-> **Mise à jour des 5 et 6 octobre 2026 — deux filières distinctes :**
-> **Zem** (moto-taxi) et **Voiture** ne partagent plus le même parcours.
-> Le détail complet est dans [`PARCOURS_ZEM.md`](./PARCOURS_ZEM.md).
-
-**Parcours Zem (`ZEM_ESSENCE` / `ZEM_ELECTRIC`)**
-- Écran 0: Interface « Quel Zem veux-tu ? » — **Zem à essence** (**150 F** de base) ou
-  **Zem électrique** (**100 F** de base) ; **mêmes paliers pour les deux** : **70 / 60 / 50 F/km**
-  (0–15, 16–25, 26 km et +), aucune remise — l'électrique est donc toujours 50 F moins cher
-- Écran 1: Demande (origine/destination) + rappel du Zem choisi (bouton « Changer »)
-- Écran 2: Estimation prix + confirmation (paiement AZƆ̀ Pay)
-
-**Parcours Voiture (`GAZELLE` / `KOALA` / `LEOPARD`)** — détail dans
-[`PARCOURS_VOITURE.md`](./PARCOURS_VOITURE.md)
-- Écran 0: Interface « Quelle voiture veux-tu ? » — **Gazelle**, **Koala · climatisé**,
-  **Léopard · premium climatisé**,
-  **Léopard · premium** présentées en **simples boutons** (aucun tarif à cette étape)
-- Écran 0 bis: « Ce à quoi tu as droit » pour la gamme choisie (sécurité, climatisation si la
-  gamme la déclare, atouts, **tarif officiel** base + paliers, usage idéal) avec le bouton
-  **Accepter et continuer**
-- Écran 1: Demande (origine/destination) + rappel de la voiture choisie (bouton « Changer »)
-- Écran 2: Estimation prix (tarif de la gamme retenue) + confirmation
-
-**Commun**
-- Radar chauffeur : chaque prestataire ne reçoit que les demandes de **son** véhicule
-  (un Zem à essence ne voit pas les demandes de Zem électrique).
+- Écran 1: Demande (origine/destination) + choix type véhicule
+- Écran 2: Estimation prix + confirmation
 - Backend : création de `Ride` (PENDING)
-- Matching : recherche manuelle (les chauffeurs *pollent* `GET /rides/pending`) -> MATCHED
+- Matching : recherche de driver (algorithme de proximité) -> MATCHED
 - Suivi : position du driver en temps réel via Socket.IO
 - Fin de course : calcul prix final, prélèvement (wallet / PSP), création `Transaction`
 - Notation : écran de notation après la course

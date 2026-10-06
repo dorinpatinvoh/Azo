@@ -3,7 +3,7 @@
 **Projet :** Plateforme de Mobilité, Transport & Livraison Urbaine **AZƆ̀** (Bénin)  
 **Périmètre :** Application Mobile Cross-Platform (`azo-mobile` — React Native / Expo)  
 **Destinataires :** Direction Générale & Responsables Techniques  
-**Date :** 02 Octobre 2026 — *mise à jour du 5 octobre 2026 (commande de Zem)*  
+**Date :** 02 Octobre 2026  
 
 ---
 
@@ -45,11 +45,10 @@ Dès la validation du code OTP (ou à la réouverture de l'application grâce à
   - Prévisualisation miniature instantanée sur chaque pièce justificative.
   - Blocage strict de la soumission tant que les **2 pièces obligatoires (`SELFIE` + `CNI`)** ne sont pas jointes.
 - **Application de la Nouvelle Grille Officielle AZƆ̀ pour les Agences** :
-  - **Niveau PRO** : `100 000 FCFA` (activation unique) — Jusqu'à **25 comptes** — Commission **3 %** — Retrait **1 %**.
-  - **Niveau SILVER** : `215 500 FCFA` — Jusqu'à **50 comptes** — Commission **2,5 %** — Retrait **0,75 %**.
-  - **Niveau OR** : `450 500 FCFA` — Jusqu'à **100 comptes** — Commission **2 %** — Retrait **0,50 %**.
-  - **Niveau DIAMANT** : `600 500 FCFA` — Jusqu'à **1 000 comptes** — Commission **1 %** — Retrait **0,25 %**.
-  - **Grille lue depuis la configuration tarifaire** (`services/tarification.ts`) : aucun montant codé en dur dans l'app.
+  - **Formule PRO** : `100 000 FCFA` — Jusqu'à **10 comptes** — Commission **3 %**.
+  - **Formule ARGENT** : `215 500 FCFA` — Jusqu'à **25 comptes** — Commission **2,5 %**.
+  - **Formule OR** : `450 500 FCFA` — Jusqu'à **100 comptes** — Commission **2 %**.
+  - **Formule DIAMANT** : `600 500 FCFA` — Jusqu'à **1 000 comptes** — Commission **1 %**.
 
 ### 3.2. Console d'Administration Mobile (`AdminProvidersScreen.tsx`)
 - **Tableau de bord analytique (3 onglets)** :
@@ -61,7 +60,7 @@ Dès la validation du code OTP (ou à la réouverture de l'application grâce à
 - **Corrections UI/UX** : Harmonisation de la hauteur des boutons de filtre (`flexGrow: 0`), alignement des cartes et suppression du bouton flottant de développement (`⋮⋮`) pour un rendu 100 % production.
 
 ### 3.3. Tableau de Bord Agence (`AgencyDashboardScreen.tsx`)
-- **Suivi de la formule et du quota** : Affichage en temps réel du plan souscrit (*PRO, SILVER, OR, DIAMANT*), du taux de commission, des frais d'activation et de la jauge d'occupation de la flotte (ex. `3 / 25 comptes`).
+- **Suivi de la formule et du quota** : Affichage en temps réel du plan souscrit (*PRO, ARGENT, OR, DIAMANT*), du taux de commission, des frais d'activation et de la jauge d'occupation de la flotte (ex. `3 / 25 comptes`).
 - **Gestion de la flotte en direct** :
   - Rattachement d'un chauffeur ou coursier approuvé via son numéro béninois à 10 chiffres (`01XXXXXXXX`).
   - Retrait d'un membre de la flotte en un clic.
@@ -72,29 +71,7 @@ Dès la validation du code OTP (ou à la réouverture de l'application grâce à
 - **Cycle de vie complet d'une livraison** :
   - Acceptation de la mission (`ASSIGNED`) $\rightarrow$ Confirmation de collecte (`PICKED_UP`) $\rightarrow$ Confirmation de livraison (`DELIVERED`) avec crédit automatique du portefeuille **AZƆ̀ Pay**.
 
-### 3.5. Commande d'un Zem en deux temps (`RideBookingScreen.tsx`) — 5 octobre 2026
-
-> 📄 **Rapport dédié à ce chantier : [`RAPPORT_FRONTEND_ZEM.md`](./RAPPORT_FRONTEND_ZEM.md)**
-> (parcours client, tarifs affichés, radar chauffeur, valeurs de contrôle).
-Le parcours Zem est désormais séparé de celui des voitures :
-
-1. **Étape 1 — écran dédié « Quel Zem veux-tu ? »** : deux grandes cartes, **Zem à essence** et
-   **Zem électrique**, avec le rappel que les deux ont le même tarif (montants lus dans la
-   configuration tarifaire partagée, jamais codés en dur). Le retour conserve le trajet déjà saisi.
-2. **Étape 2 — destination et suite du parcours** : le trajet, l'estimation officielle, le solde
-   AZƆ̀ Pay et la confirmation. Un bandeau rappelle le Zem choisi avec un bouton **Changer**
-   (retour à l'étape 1 sans rien perdre).
-3. **Filière voiture** : l'écran propose uniquement les trois voitures (**Gazelle**, **Koala**,
-   **Léopard**), avec le libellé « Choisis ta voiture » — les noms de gammes ne s'appliquent plus
-   jamais à un Zem.
-4. **Radar chauffeur** (`DriverHomeScreen.tsx`) : le dossier prestataire déclare un véhicule
-   (Zem essence / Zem électrique / Gazelle / Koala / Léopard) ; l'écran affiche « Radar Zem à
-   essence — tu ne vois que ces demandes » et la liste ne contient que les demandes compatibles.
-5. **Enrôlement prestataire** (`ProviderOnboardingScreen.tsx`) : les véhicules sont présentés en
-   deux groupes, **Moto-taxi (Zem)** puis **Voiture**, avec les icônes moto essence / moto
-   électrique / voiture.
-
-### 3.6. Cartographie OpenStreetMap & Suivi Temps Réel (`RideBookingScreen.tsx` & `LiveTrackingScreen.tsx`)
+### 3.5. Cartographie OpenStreetMap & Suivi Temps Réel (`RideBookingScreen.tsx` & `LiveTrackingScreen.tsx`)
 - **Migration complète vers `OSMMapView` (Leaflet / OpenStreetMap)** :
   - Remplacement définitif de `react-native-maps` dans `LiveTrackingScreen.tsx` et `RideTrackingScreen.tsx` par `OSMMapView`.
   - **Avantage majeur** : Affichage fluide des cartes de Cotonou (Étoile Rouge, Ganhi, Haie Vive, Akpakpa, Fidjrossè, Calavi) **sans nécessiter de clé API Google Maps payante** et sans risque de crash Android lié aux certificats SHA-1.
@@ -121,13 +98,9 @@ Afin de résoudre la fermeture automatique de l'application à l'ouverture sur s
 | :--- | :--- |
 | `azo-mobile/App.tsx` | Routage multi-rôles, restauration de session, `RootErrorBoundary`, masquage du bouton de dev |
 | `azo-mobile/screens/OtpLoginScreen.tsx` | Interface aérée, format Bénin 10 chiffres (`01...`), bannière SMS OTP 5s, sélecteur serveur |
-| `azo-mobile/screens/RideBookingScreen.tsx` | **Commande Zem en 2 temps** : étape « Zem essence / Zem électrique » puis destination, estimation et confirmation ; voitures limitées à Gazelle / Koala / Léopard |
-| `azo-mobile/screens/DriverHomeScreen.tsx` | Radar filtré sur le véhicule déclaré, bandeau « Radar <véhicule> », état vide explicite |
-| `azo-mobile/screens/ProviderOnboardingScreen.tsx` | Choix de véhicule groupé en deux filières : Moto-taxi (Zem essence / électrique) puis Voiture (Gazelle / Koala / Léopard) |
-| `azo-mobile/services/tarification.ts` & `utils/rideDisplay.ts` | Filières `ZEM` / `CAR`, libellés et icônes des 5 véhicules, résolution des anciens types |
 | `azo-mobile/screens/ProviderOnboardingScreen.tsx` | Upload photo caméra/galerie (`SELFIE` + `CNI`), grille officielle Agences AZƆ̀ |
 | `azo-mobile/screens/AdminProvidersScreen.tsx` | Console Admin 3 onglets, aperçu & zoom photos KYC, gestion utilisateurs, UI/UX corrigée |
-| `azo-mobile/screens/AgencyDashboardScreen.tsx` | Gestion de flotte Agence, quotas PRO/SILVER/OR/DIAMANT, activation payante, rattachement chauffeurs |
+| `azo-mobile/screens/AgencyDashboardScreen.tsx` | Gestion de flotte Agence, quotas PRO/ARGENT/OR/DIAMANT, rattachement chauffeurs |
 | `azo-mobile/screens/CourierHomeScreen.tsx` | Espace Coursier/Livreur, radar de colis, suivi des livraisons et gains FCFA |
 | `azo-mobile/screens/LiveTrackingScreen.tsx` | Suivi de course en temps réel migré sur `OSMMapView` (OpenStreetMap) |
 | `azo-mobile/services/api.ts` | Client API pointant sur `https://azo-backend.onrender.com` + tolérance cold-start (45s) |
