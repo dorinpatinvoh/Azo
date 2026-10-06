@@ -35,6 +35,7 @@ Points techniques:
 **Parcours Voiture (`GAZELLE` / `KOALA` / `LEOPARD`)** — détail dans
 [`PARCOURS_VOITURE.md`](./PARCOURS_VOITURE.md)
 - Écran 0: Interface « Quelle voiture veux-tu ? » — **Gazelle**, **Koala · climatisé**,
+  **Léopard · premium climatisé**,
   **Léopard · premium** présentées en **simples boutons** (aucun tarif à cette étape)
 - Écran 0 bis: « Ce à quoi tu as droit » pour la gamme choisie (sécurité, climatisation si la
   gamme la déclare, atouts, **tarif officiel** base + paliers, usage idéal) avec le bouton

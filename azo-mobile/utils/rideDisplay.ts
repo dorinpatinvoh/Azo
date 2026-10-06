@@ -10,7 +10,7 @@ export const VEHICLE_LABEL: Record<VehicleType, string> = {
   ZEM_ELECTRIC: "Zem électrique",
   GAZELLE: "Gazelle · Voiture",
   KOALA: "Koala · Voiture climatisée",
-  LEOPARD: "Léopard · Berline premium",
+  LEOPARD: "Léopard · Berline premium climatisée",
 };
 
 export const VEHICLE_ICON: Record<VehicleType, keyof typeof MaterialIcons.glyphMap> = {

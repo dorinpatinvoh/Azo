@@ -76,7 +76,7 @@ d'un Zem de celle d'une voiture :
 | :--- | :--- | :--- |
 | **Moto-taxi (Zem)** | `ZEM_ESSENCE` | **Base 150 F**, puis **70 F/km de 0 à 15 km**, **60 F/km de 16 à 25 km**, **50 F/km au-delà** — aucune remise |
 | **Moto-taxi (Zem)** | `ZEM_ELECTRIC` | **Mêmes paliers kilométriques** que le Zem à essence, mais **base réduite à 100 F** (50 F d'écart constant) |
-| **Voiture** | `GAZELLE`, `KOALA`, `LEOPARD` | Gazelle 800 + 200/km puis 150/km · Koala climatisé 1 200 + 375/km puis 350/km · Léopard 2 500 + 900/km puis 800/km |
+| **Voiture** | `GAZELLE`, `KOALA`, `LEOPARD` | Gazelle 800 + 200/km puis 150/km · Koala climatisé 1 200 + 375/km puis 350/km · Léopard, berline premium climatisée, 2 500 + 900/km puis 800/km |
 
 **Les noms Gazelle / Koala / Léopard ne désignent plus que des voitures** : ils n'apparaissent
 jamais dans le parcours de commande d'un Zem. La filière de chaque véhicule est portée par la

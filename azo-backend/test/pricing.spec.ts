@@ -90,9 +90,14 @@ describe("PricingService — prix d'une course (point 1 de la spec)", () => {
     ]);
   });
 
-  it("KOALA est la gamme climatisée", () => {
+  it("KOALA et LEOPARD sont les gammes climatisées (voitures de luxe)", () => {
+    // Décision du 6 octobre 2026 : le Koala et le Léopard sont climatisés ;
+    // la Gazelle (entrée de gamme) ne l'est pas.
     expect(pricing.getVehiclePricing("KOALA").airConditioned).toBe(true);
+    expect(pricing.getVehiclePricing("LEOPARD").airConditioned).toBe(true);
     expect(pricing.vehicleLabel("KOALA")).toBe("KOALA (climatisé)");
+    expect(pricing.vehicleLabel("LEOPARD")).toBe("LEOPARD (climatisé)");
+    expect(pricing.vehicleLabel("GAZELLE")).toBe("GAZELLE");
     expect(pricing.getVehiclePricing("GAZELLE").airConditioned).toBeUndefined();
   });
 

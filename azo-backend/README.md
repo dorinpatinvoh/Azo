@@ -73,7 +73,7 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
   chaque véhicule**, en deux filières : **motos-taxis Zem** (`ZEM_ESSENCE`, `ZEM_ELECTRIC` — mêmes
   paliers pour les deux : 70 F/km jusqu'à 15 km, 60 F/km de 16 à 25 km, 50 F/km au-delà ; seule la
   base change : 150 F à essence, 100 F en électrique, sans remise) et **voitures** (`GAZELLE`,
-  `KOALA`, `LEOPARD`, palier à 15 km, sans remise) ;
+  `KOALA` et `LEOPARD` — les deux derniers climatisés — palier à 15 km, sans remise) ;
   niveaux d'agence
   (PRO / SILVER / OR / DIAMANT : activation unique, commission, frais de retrait,
   plafond de comptes), profils prestataires. Tests : `npm test`.

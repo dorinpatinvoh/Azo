@@ -147,7 +147,7 @@ const DEFAULT_DRIVER_VEHICLES: VehicleChoice[] = [
   { value: "ZEM_ELECTRIC", label: "Zem électrique", hint: "Moto-taxi électrique — même tarif, zéro émission", family: "ZEM" },
   { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme, trajets en ville", family: "CAR" },
   { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire, confort avec climatisation", family: "CAR" },
-  { value: "LEOPARD", label: "Léopard — Berline premium", hint: "Berline haut de gamme, trajets VIP", family: "CAR" },
+  { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée, trajets VIP", family: "CAR" },
 ];
 
 /** Icône MaterialIcons d'un véhicule (moto essence / moto électrique / voiture). */

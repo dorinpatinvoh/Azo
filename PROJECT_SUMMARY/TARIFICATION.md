@@ -14,7 +14,7 @@ Depuis le **5 octobre 2026**, les véhicules sont répartis en **deux filières 
 | Filière | Types de véhicules | Usage |
 |---|---|---|
 | **Moto-taxi (Zem)** | `ZEM_ESSENCE`, `ZEM_ELECTRIC` | Commande d'un Zem : le client choisit d'abord *essence* ou *électrique* |
-| **Voiture** | `GAZELLE`, `KOALA`, `LEOPARD` | Courses en voiture (entrée de gamme, climatisée, premium) |
+| **Voiture** | `GAZELLE`, `KOALA`, `LEOPARD` | Courses en voiture (entrée de gamme ; Koala et Léopard climatisés) |
 
 > **Les noms Gazelle / Koala / Léopard ne désignent plus que des voitures.** Ils ne
 > s'appliquent jamais à un Zem.
@@ -68,7 +68,7 @@ FCFA entiers. Les paliers sont cumulatifs depuis l'origine : un trajet de 12 km 
 |---|---|---|---|---|
 | **GAZELLE** (entrée de gamme) | 800 | 200 / km | 150 / km | aucune |
 | **KOALA** (intermédiaire, **climatisé**) | 1 200 | 375 / km | 350 / km | aucune |
-| **LEOPARD** (haut de gamme) | 2 500 | 900 / km | 800 / km | aucune |
+| **LEOPARD** (berline premium, **climatisée**) | 2 500 | 900 / km | 800 / km | aucune |
 
 Montants inchangés (décision du 5 octobre 2026) : les grilles voitures restent celles de la
 spécification initiale, avec leur palier à 15 km et **sans remise de base**.

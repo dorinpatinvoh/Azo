@@ -406,7 +406,7 @@ backend : les endpoints sont les mêmes.
      **Moto-taxi (Zem)** : *Zem à essence* (`ZEM_ESSENCE`, base 150 F) ou *Zem électrique*
      (`ZEM_ELECTRIC`, base 100 F) — mêmes paliers au kilomètre (70 / 60 / 50 F/km), seule la base
      change ; **Voiture** : *Gazelle*,
-     *Koala (climatisée)* ou *Léopard (premium)*.
+     *Koala (climatisée)* ou *Léopard (berline premium climatisée)*.
      Indépendant ou rattaché à une agence. Le radar ne présente que les demandes du véhicule déclaré.
    - **Coursier / Livreur (`COURIER`)** : Coursier Express (plis & colis urgents), Coursier Personnel (courses, pharmacie, achats personnels), Livreur Colis & Marchandises.
    - **Agence de transport / flotte (`AGENCY`)** : gestion d'une flotte de Zem, voitures et coursiers.

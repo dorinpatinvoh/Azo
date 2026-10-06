@@ -3,11 +3,11 @@
     "source": "Spécification métier AZƆ̀ — Tarifs et profils. Implémenté tel quel.",
     "currency": "FCFA — montants entiers (aucun sous-franc)",
     "singleSourceOfTruth": "Ce fichier est la SEULE source des tarifs. Aucune règle de prix ne doit être codée en dur dans la logique métier.",
-    "vehicles": "Deux filières : ZEM_ESSENCE / ZEM_ELECTRIC sont les motos-taxis (filière Zem) ; GAZELLE / KOALA / LEOPARD sont les voitures (entrée de gamme, intermédiaire climatisé, haut de gamme).",
+    "vehicles": "Deux filières : ZEM_ESSENCE / ZEM_ELECTRIC sont les motos-taxis (filière Zem) ; GAZELLE / KOALA / LEOPARD sont les voitures (entrée de gamme, intermédiaire climatisé, berline premium climatisée).",
     "pricingModel": "Prix = base (remisée le cas échéant) + somme des paliers de kilomètres. Chaque véhicule porte ses propres paliers `brackets` (upToKm, perKm) ; le dernier palier a upToKm = null (illimité). `baseDiscount` (facultatif) retire un pourcentage de la base au-delà d'une distance.",
     "zemPricing": "Règle Zem (mise à jour du 6 octobre 2026). MÊME tarif au kilomètre pour les deux types : 70 F/km de 0 à 15 km, 60 F/km de 16 à 25 km, 50 F/km à partir du 26e km — le dernier palier reste le tarif appliqué au-delà (la progression s'arrête à 25 km). Seule la BASE diffère : 150 F pour le Zem à ESSENCE, 100 F pour le Zem ÉLECTRIQUE. Aucune remise de base n'est appliquée. La base est due dès que la course est acceptée (le client n'est débité qu'à la fin de la course).",
 
-    "carPricing": "Voitures (grilles inchangées) : GAZELLE 800 F + 200 F/km jusqu'à 15 km puis 150 F/km · KOALA climatisé 1 200 F + 375 F/km puis 350 F/km · LEOPARD 2 500 F + 900 F/km puis 800 F/km. Aucune remise de base n'est appliquée aux voitures.",
+    "carPricing": "Voitures (grilles inchangées) : GAZELLE 800 F + 200 F/km jusqu'à 15 km puis 150 F/km · KOALA climatisé 1 200 F + 375 F/km puis 350 F/km · LEOPARD, berline premium climatisée, 2 500 F + 900 F/km puis 800 F/km. Aucune remise de base n'est appliquée aux voitures.",
     "legacyVehicleMapping": "Types de véhicules historiques encore présents en base (courses et dossiers passés) : ils sont rattachés à un véhicule facturable. Aucun nouveau dossier ne les utilise.",
     "profilesValidated": "ZEM_INDEPENDANT : règle complète et validée (15 % des revenus du mois + 1,5 % par retrait, aucune commission par course). Elle s'applique aux deux types de Zem (essence et électrique). LIVREUR et COURSIER : frais de retrait identiques au Zem (1,5 %) ; leurs autres règles restent à définir.",
     "provisionalValues": "Toute valeur marquée « règle à définir » (voir la section `aDefinir`) est provisoire : elle n'est PAS une règle validée par le métier. Ne pas la présenter comme telle et ne pas la modifier sans décision.",
@@ -57,6 +57,7 @@
     },
     "LEOPARD": {
       "family": "CAR",
+      "airConditioned": true,
       "base": 2500,
       "brackets": [
         { "upToKm": 15, "perKm": 900 },

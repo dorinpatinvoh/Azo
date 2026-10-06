@@ -57,7 +57,7 @@ L'écran de connexion ne pré-remplit plus aucun numéro : **chaque utilisateur 
    - Suivez la course en direct sur la carte (vous pouvez aussi l'annuler avant prise en charge).
 3. **Commander une Voiture** :
    - Sur l'accueil, appuyez sur **Voiture** : un premier écran demande la gamme — **Gazelle**,
-     **Koala · climatisé** ou **Léopard · premium** — sous forme de **boutons** (aucun tarif
+     **Koala · climatisé** ou **Léopard · premium climatisé** — sous forme de **boutons** (aucun tarif
      affiché à cette étape). Les noms de gammes ne s'appliquent **jamais** à un Zem.
    - Appuyez sur une gamme : l'écran **« Ce à quoi tu as droit »** détaille la sécurité, la
      climatisation (si la gamme la déclare), les atouts, le **tarif officiel** (base + paliers)

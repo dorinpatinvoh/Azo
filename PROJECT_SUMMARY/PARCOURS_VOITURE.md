@@ -14,22 +14,22 @@ sont **réservés aux voitures** et n'apparaissent jamais dans la commande d'un 
 |---|---|---|---|---|---|
 | `GAZELLE` | **Gazelle** | 800 F | 200 F/km | 150 F/km | non |
 | `KOALA` | **Koala · climatisé** | 1 200 F | 375 F/km | 350 F/km | **oui** |
-| `LEOPARD` | **Léopard · premium** | 2 500 F | 900 F/km | 800 F/km | selon le véhicule |
+| `LEOPARD` | **Léopard · premium climatisé** | 2 500 F | 900 F/km | 800 F/km | **oui** |
 
 Aucune remise de base n'est appliquée aux voitures. Le barème est **le même que celui de la
 spécification initiale** : il n'a pas changé avec la refonte de la filière Zem.
 
-> ℹ️ Seule la climatisation est annoncée dans l'application **quand le barème la déclare**
-> (`airConditioned` dans `tarification.json`) : c'est le cas du Koala. Pour annoncer aussi la
-> climatisation du Léopard, il suffit d'ajouter ce drapeau dans la configuration partagée —
-> aucune autre modification n'est nécessaire.
+> ℹ️ La climatisation est annoncée dans l'application **quand le barème la déclare**
+> (`airConditioned` dans `tarification.json`) : c'est le cas du **Koala** et du **Léopard**,
+> les deux voitures de confort. La Gazelle (entrée de gamme) ne l'est pas. Décision du
+> 6 octobre 2026 — le Léopard étant une voiture de luxe, il est climatisé.
 
 ## 2. Déroulé complet
 
 ### Étape 1 — « Quelle voiture veux-tu ? » (nouvelle)
 
 Un écran plein écran, **avant** toute saisie de destination, ne liste que les gammes, sous forme
-de **boutons** : **Gazelle**, **Koala · climatisé**, **Léopard · premium**. Aucun tarif, aucune
+de **boutons** : **Gazelle**, **Koala · climatisé**, **Léopard · premium climatisé**. Aucun tarif, aucune
 description à cette étape : le client choisit d'abord la voiture qu'il veut emprunter.
 
 ### Étape 1 bis — « Ce à quoi tu as droit »
@@ -58,7 +58,7 @@ Le radar applique la même règle que pour les Zem : un conducteur ne reçoit qu
 
 ## 3. Tarifs appliqués (exemples vérifiés)
 
-| Trajet | Gazelle | Koala (climatisé) | Léopard (premium) |
+| Trajet | Gazelle | Koala (climatisé) | Léopard (premium climatisé) |
 |---|---|---|---|
 | 5 km | 800 + 5 × 200 = **1 800 F** | 1 200 + 5 × 375 = **3 075 F** | 2 500 + 5 × 900 = **7 000 F** |
 | 10 km | 800 + 10 × 200 = **2 800 F** | 1 200 + 10 × 375 = **4 950 F** | 2 500 + 10 × 900 = **11 500 F** |

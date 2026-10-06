@@ -40,7 +40,7 @@ const VEHICLES: Record<
   ZEM_ELECTRIC: { label: "Zem électrique", short: "Moto-taxi électrique, silencieux", icon: "electric-moped" },
   GAZELLE: { label: "Gazelle", short: "Voiture d'entrée de gamme", icon: "directions-car" },
   KOALA: { label: "Koala · climatisé", short: "Voiture climatisée", icon: "directions-car" },
-  LEOPARD: { label: "Léopard · premium", short: "Berline haut de gamme", icon: "local-taxi" },
+  LEOPARD: { label: "Léopard · premium climatisé", short: "Berline haut de gamme climatisée", icon: "local-taxi" },
 };
 const POPULAR_PLACES: Place[] = [
   { id: "etoile", title: "Place de l'Étoile Rouge", subtitle: "Cotonou Centre", latitude: 6.3725, longitude: 2.4061 },
