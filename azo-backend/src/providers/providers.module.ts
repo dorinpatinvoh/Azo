@@ -162,14 +162,27 @@ export const PHOTO_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
 };
 
 // Choix de véhicule et spécialité par type d'activité.
-// Les gammes GAZELLE / KOALA / LEOPARD viennent de la configuration tarifaire :
-//   GAZELLE = entrée de gamme · KOALA = intermédiaire climatisé · LEOPARD = haut de gamme.
-const DRIVER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
-  { value: "GAZELLE", label: "Gazelle — Zem / moto-taxi", hint: "Entrée de gamme, courses rapides en ville" },
-  { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Intermédiaire, confort avec climatiseur" },
-  { value: "LEOPARD", label: "Léopard — Berline haut de gamme", hint: "Haut de gamme, trajets premium" },
+//
+// Filière conducteur — deux familles bien distinctes :
+//   * famille « ZEM »  : les deux motos-taxis (ZEM_ESSENCE et ZEM_ELECTRIC), au même tarif ;
+//   * famille « CAR »  : les voitures (GAZELLE entrée de gamme, KOALA et LEOPARD climatisées).
+// Les tarifs correspondants viennent de la configuration tarifaire (`tarification.json`).
+const DRIVER_VEHICLE_CHOICES: {
+  value: VehicleType;
+  label: string;
+  hint: string;
+  family: "ZEM" | "CAR";
+}[] = [
+  { value: "ZEM_ESSENCE", label: "Zem à essence", hint: "Moto-taxi thermique — courses rapides et économiques", family: "ZEM" },
+  { value: "ZEM_ELECTRIC", label: "Zem électrique", hint: "Moto-taxi électrique — même tarif, zéro émission", family: "ZEM" },
+  { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme, trajets en ville", family: "CAR" },
+  { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire, confort avec climatisation", family: "CAR" },
+  { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée, trajets VIP", family: "CAR" },
 ];
 
+// Filière coursier / livreur (colis) : choix volontairement INCHANGÉS pour l'instant
+// (décision du 5 octobre 2026 — l'harmonisation « moto essence / moto électrique » de la
+// livraison est renvoyée à un chantier ultérieur, elle toucherait les dossiers existants).
 const COURIER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
   { value: "GAZELLE", label: "Gazelle — Moto / Zem (coursier)", hint: "Plis, courses personnelles et colis en ville" },
   { value: "KOALA", label: "Koala — Voiture climatisée (livreur)", hint: "Colis moyens, achats et marchandises" },
@@ -269,7 +282,9 @@ class SaveApplicationDto {
   @IsOptional() @IsArray() @IsString({ each: true }) zones?: string[];
   @IsOptional() @IsString() @MaxLength(4000) bio?: string;
   @IsOptional() @IsInt() @Min(0) @Max(60) experienceYears?: number;
-  @IsOptional() @IsIn(["GAZELLE", "KOALA", "LEOPARD"]) vehicleType?: VehicleType;
+  @IsOptional()
+  @IsIn(["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"])
+  vehicleType?: VehicleType;
   @IsOptional() @IsString() @MaxLength(60) vehicleModel?: string;
   @IsOptional() @IsString() @MaxLength(30) plateNumber?: string;
   @IsOptional() @IsString() @MaxLength(60) categoryId?: string;

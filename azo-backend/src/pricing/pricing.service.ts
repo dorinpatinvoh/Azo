@@ -1,28 +1,47 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
+import type { RadarSettings } from "../rides/radar";
 import {
   AgencyLevel,
   AgencyLevelPricing,
   ProfilePricing,
   TarificationConfig,
-  VehicleGamme,
+  VehicleFamily,
   VehicleKey,
   VehiclePricing,
+  ZEM_VEHICLE_KEYS,
   TARIFICATION_CONFIG,
   loadTarificationConfig,
 } from "./tarification.config";
 
+/** Une ligne du calcul : kilomètres parcourus dans un palier et montant correspondant. */
+export type RidePriceBracketLine = {
+  /** Borne haute du palier (incluse), `null` pour le dernier palier (illimité). */
+  upToKm: number | null;
+  perKm: number;
+  /** Kilomètres facturés dans ce palier (0 si le trajet n'y entre pas). */
+  km: number;
+  amount: number;
+};
+
 /** Détail du calcul d'un prix de course, poste par poste. */
 export type RidePriceBreakdown = {
-  gamme: VehicleGamme;
+  /**
+   * Véhicule facturé : ZEM_ESSENCE, ZEM_ELECTRIC (motos-taxis) ou GAZELLE, KOALA,
+   * LEOPARD (voitures). Le nom de champ `gamme` est conservé pour l'API mobile.
+   */
+  gamme: VehicleKey;
+  family: VehicleFamily;
   distanceKm: number;
-  kmThreshold: number;
+  /** Base effectivement facturée (après remise). */
   base: number;
-  perKmUpTo15: number;
-  perKmFrom16: number;
-  kmInFirstBracket: number;
-  kmInSecondBracket: number;
-  amountInFirstBracket: number;
-  amountInSecondBracket: number;
+  /** Base du barème avant remise (150 F pour un Zem). */
+  baseFull: number;
+  /** Remise appliquée à la base (0 ou 25 % pour un Zem au-delà de 10 km). */
+  baseDiscountPct: number;
+  baseDiscountApplied: boolean;
+  /** Distance à partir de laquelle la remise de base s'applique. */
+  baseDiscountAboveKm: number | null;
+  brackets: RidePriceBracketLine[];
   price: number;
   currency: string;
 };
@@ -66,48 +85,114 @@ export class PricingService {
     return this.config.currency;
   }
 
-  get kmThreshold(): number {
-    return this.config.kmThreshold;
+  /** Véhicules facturables, dans l'ordre d'affichage (Zem puis voitures). */
+  vehicleKeys(): VehicleKey[] {
+    return Object.keys(this.config.vehicles) as VehicleKey[];
   }
 
-  /** Gammes de véhicules facturables (GAZELLE, KOALA, LEOPARD). */
-  vehicleGammes(): VehicleGamme[] {
-    return Object.keys(this.config.vehicles) as VehicleGamme[];
+  /** Filière d'un véhicule : `ZEM` (moto-taxi) ou `CAR` (voiture). */
+  vehicleFamily(vehicleType: string): VehicleFamily {
+    const vehicle = this.resolveVehicleKey(vehicleType);
+    return this.config.vehicles[vehicle].family === "ZEM" ? "ZEM" : "CAR";
+  }
+
+  /** Vrai pour un moto-taxi (Zem essence ou électrique). */
+  isZem(vehicleType?: string | null): boolean {
+    if (!vehicleType) return false;
+    try {
+      return this.vehicleFamily(vehicleType) === "ZEM";
+    } catch {
+      return false;
+    }
+  }
+
+  /** Les deux types de Zem (moto-taxi) : essence et électrique. */
+  zemVehicleKeys(): VehicleKey[] {
+    return [...ZEM_VEHICLE_KEYS];
   }
 
   /**
-   * Ramène tout type de véhicule (y compris les anciens ZEM / ZEM_ELECTRIC / CAR)
-   * à une gamme de facturation.
+   * Ramène tout type de véhicule (y compris les anciens ZEM / CAR encore en base)
+   * à un véhicule facturable de la configuration.
    */
-  resolveGamme(vehicleType: VehicleKey | string): VehicleGamme {
+  resolveVehicleKey(vehicleType: VehicleKey | string): VehicleKey {
     const key = String(vehicleType || "").toUpperCase();
-    if (key in this.config.vehicles) return key as VehicleGamme;
+    if (key in this.config.vehicles) return key as VehicleKey;
     const mapped = this.config.legacyVehicleMapping?.[key];
     if (mapped && mapped in this.config.vehicles) return mapped;
     throw new Error(
-      `Gamme de véhicule inconnue : « ${vehicleType} » (config tarification.vehicles / legacyVehicleMapping)`
+      `Véhicule inconnu : « ${vehicleType} » (config tarification.vehicles / legacyVehicleMapping)`
     );
   }
 
   getVehiclePricing(vehicleType: VehicleKey | string): VehiclePricing {
-    return this.config.vehicles[this.resolveGamme(vehicleType)];
+    return this.config.vehicles[this.resolveVehicleKey(vehicleType)];
   }
 
-  /** Libellé commercial de la gamme (KOALA est la gamme climatisée). */
+  /** Libellé commercial du véhicule (KOALA est la voiture climatisée). */
   vehicleLabel(vehicleType: VehicleKey | string): string {
-    const gamme = this.resolveGamme(vehicleType);
-    const pricing = this.config.vehicles[gamme];
-    return pricing.airConditioned ? `${gamme} (climatisé)` : gamme;
+    const vehicle = this.resolveVehicleKey(vehicleType);
+    const pricing = this.config.vehicles[vehicle];
+    return pricing.airConditioned ? `${vehicle} (climatisé)` : vehicle;
   }
 
   /**
-   * Prix d'une course = tarif de base + coût kilométrique par tranche.
+   * Filtrage du radar chauffeur (`GET /rides/pending`) : le prestataire ne reçoit que
+   * les demandes correspondant au véhicule qu'il a déclaré.
    *
-   *   km_tranche1 = min(distance_km, seuil)
-   *   km_tranche2 = max(distance_km - seuil, 0)
-   *   prix = base + km_tranche1 × prix_0_seuil + km_tranche2 × prix_seuil_plus
+   *   * `strictVehicleMatch = true` (défaut) : correspondance EXACTE — un Zem électrique
+   *     ne voit pas les demandes de Zem à essence, et Gazelle ≠ Koala ≠ Léopard.
+   *   * `false` (démarrage / démonstration) : les deux Zem partagent leurs demandes ;
+   *     les voitures restent filtrées par gamme exacte.
+   */
+  rideVisibleFor(driverVehicle?: string | null, rideVehicle?: string | null): boolean {
+    if (!rideVehicle) return true;
+    const ride = this.resolveVehicleKey(rideVehicle);
+
+    // Chauffeur sans véhicule déclaré (compte historique) : on ne lui cache rien.
+    if (!driverVehicle) return true;
+    const driver = this.resolveVehicleKey(driverVehicle);
+
+    if (this.config.radar?.strictVehicleMatch ?? true) return driver === ride;
+
+    // Mode souple : les deux types de Zem partagent leurs demandes ; les voitures
+    // restent filtrées par gamme exacte.
+    const driverIsZem = this.vehicleFamily(driver) === "ZEM";
+    const rideIsZem = this.vehicleFamily(ride) === "ZEM";
+    if (rideIsZem) return driverIsZem;
+    return driver === ride;
+  }
+
+  /**
+   * Réglages du radar des demandes, avec leurs valeurs par défaut.
    *
-   * Retourne un entier FCFA : le coût kilométrique est tronqué (aucun arrondi).
+   * Utilisés par `RidesService` : filtrage par véhicule (`strictVehicleMatch`), rayon de
+   * recherche autour du chauffeur (`searchRadiusKm`), expiration d'une demande sans
+   * chauffeur (`pendingExpiryMinutes`) et nombre de chauffeurs prévenus à la publication
+   * (`driverNotificationMax`).
+   */
+  radarSettings(): RadarSettings {
+    const radar = this.config.radar ?? {};
+    return {
+      strictVehicleMatch: radar.strictVehicleMatch ?? true,
+      searchRadiusKm: radar.searchRadiusKm ?? 0,
+      pendingExpiryMinutes: radar.pendingExpiryMinutes ?? 30,
+      driverNotificationMax: radar.driverNotificationMax ?? 30,
+    };
+  }
+
+  /**
+   * Prix d'une course = base (remisée le cas échéant) + somme des paliers kilométriques.
+   *
+   * Chaque véhicule porte ses paliers dans la configuration (`brackets`) :
+   *
+   *   * **Zem** (motos-taxis) : **mêmes paliers** pour les deux types — **70 F/km de 0 à
+   *     15 km**, **60 F/km de 16 à 25 km**, **50 F/km à partir du 26e km** ; seule la base
+   *     diffère (150 F à essence, 100 F en électrique), sans remise ;
+   *   * **voitures** : base et deux paliers (ex. Gazelle 800 F, 200 F/km jusqu'à 15 km
+   *     puis 150 F/km), sans remise de base.
+   *
+   * Retourne un entier FCFA : chaque poste est tronqué, aucun arrondi métier.
    */
   ridePrice(distanceKm: number, vehicleType: VehicleKey | string): number {
     return this.breakdown(distanceKm, vehicleType).price;
@@ -118,37 +203,53 @@ export class PricingService {
       throw new Error("La distance d'une course doit être un nombre de km positif");
     }
 
-    const gamme = this.resolveGamme(vehicleType);
+    const gamme = this.resolveVehicleKey(vehicleType);
     const pricing = this.config.vehicles[gamme];
-    const threshold = this.config.kmThreshold;
 
     // Calcul en millimètres entiers : la distance est ramenée au mètre près et les
     // multiplications restent exactes (20,9 − 15 = 5,899999… donnerait 884 au lieu de
     // 885 en flottant). Le montant rendu est un entier FCFA tronqué, sans arrondi métier.
     const mmPerKm = 1000;
     const kmMm = Math.round(distanceKm * mmPerKm);
-    const thresholdMm = Math.round(threshold * mmPerKm);
-    const firstBracketMm = Math.min(kmMm, thresholdMm);
-    const secondBracketMm = Math.max(kmMm - thresholdMm, 0);
 
-    const kmInFirstBracket = firstBracketMm / mmPerKm;
-    const kmInSecondBracket = secondBracketMm / mmPerKm;
-    const amountInFirstBracket = Math.floor((firstBracketMm * pricing.perKmUpTo15) / mmPerKm);
-    const amountInSecondBracket = Math.floor((secondBracketMm * pricing.perKmFrom16) / mmPerKm);
-    const price = pricing.base + amountInFirstBracket + amountInSecondBracket;
+    // Paliers : chaque borne est cumulée depuis le début du trajet (0 → 10 km, puis le
+    // 11e au tarif suivant, etc.). Le dernier palier (upToKm = null) prend le reste.
+    const brackets: RidePriceBracketLine[] = [];
+    let previousLimitMm = 0;
+    let kmAmount = 0;
+
+    for (const bracket of pricing.brackets) {
+      const upperLimitMm = bracket.upToKm === null ? kmMm : Math.round(bracket.upToKm * mmPerKm);
+      const bracketMm = Math.max(Math.min(kmMm, upperLimitMm) - previousLimitMm, 0);
+      const amount = Math.floor((bracketMm * bracket.perKm) / mmPerKm);
+      brackets.push({
+        upToKm: bracket.upToKm,
+        perKm: bracket.perKm,
+        km: bracketMm / mmPerKm,
+        amount,
+      });
+      kmAmount += amount;
+      previousLimitMm = bracket.upToKm === null ? kmMm : upperLimitMm;
+    }
+
+    // Remise de base : uniquement au-delà de la distance configurée (Zem : plus de 10 km).
+    const discount = pricing.baseDiscount;
+    const discountApplied = !!discount && distanceKm > discount.aboveKm;
+    const base = discountApplied
+      ? Math.floor((pricing.base * (100 - discount!.pct)) / 100)
+      : pricing.base;
 
     return {
       gamme,
+      family: pricing.family === "ZEM" ? "ZEM" : "CAR",
       distanceKm,
-      kmThreshold: threshold,
-      base: pricing.base,
-      perKmUpTo15: pricing.perKmUpTo15,
-      perKmFrom16: pricing.perKmFrom16,
-      kmInFirstBracket,
-      kmInSecondBracket,
-      amountInFirstBracket,
-      amountInSecondBracket,
-      price,
+      base,
+      baseFull: pricing.base,
+      baseDiscountPct: discount?.pct ?? 0,
+      baseDiscountApplied: discountApplied,
+      baseDiscountAboveKm: discount?.aboveKm ?? null,
+      brackets,
+      price: base + kmAmount,
       currency: this.config.currency,
     };
   }

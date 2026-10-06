@@ -24,8 +24,8 @@ type Props = {
 const MAIN_SERVICES = [
   {
     id: "zem",
-    label: "Zem Rapide",
-    sub: "Dès 250 F • ~3 min",
+    label: "Zem",
+    sub: "Essence ou électrique",
     badge: "Populaire",
     icon: "two-wheeler" as const,
     bg: colors.secondaryFixed,

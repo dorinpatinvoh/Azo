@@ -8,9 +8,16 @@ import {
 /**
  * Tests unitaires de la tarification AZƆ̀ (spécification « Tarifs et profils »).
  *
- * Les exemples du point 1 de la spécification sont repris tels quels :
- *   - GAZELLE 10 km : 800 + 10 × 200 = 2 800
- *   - GAZELLE 20 km : 800 + 15 × 200 + 5 × 150 = 4 550
+ * Deux filières distinctes :
+ *   - les MOTOS-TAXIS (Zem) : ZEM_ESSENCE et ZEM_ELECTRIC — **mêmes paliers kilométriques**
+ *     (70 F/km de 0 à 15 km, 60 F/km de 16 à 25 km, 50 F/km à partir du 26e km, dernier
+ *     palier) ; **seule la base diffère** : 150 F à essence, 100 F en électrique ;
+ *   - les VOITURES : GAZELLE (800 + 200/km), KOALA (1 200 + 375/km),
+ *     LEOPARD (2 500 + 900/km), avec le palier à 15 km et sans remise de base.
+ *
+ * Exemples voitures de la spécification repris tels quels :
+ *   - 10 km : 800 + 10 × 200 = 2 800
+ *   - 20 km : 800 + 15 × 200 + 5 × 150 = 4 550
  *   - LEOPARD 20 km : 2 500 + 15 × 900 + 5 × 800 = 20 000
  */
 describe("PricingService — prix d'une course (point 1 de la spec)", () => {
@@ -64,36 +71,208 @@ describe("PricingService — prix d'une course (point 1 de la spec)", () => {
     expect(pricing.ridePrice(20.9, "GAZELLE")).toBe(800 + 15 * 200 + 885);
   });
 
-  it("expose le détail du calcul poste par poste", () => {
+  it("expose le détail du calcul poste par poste (une ligne par palier)", () => {
     const detail = pricing.breakdown(20, "GAZELLE");
     expect(detail).toMatchObject({
       gamme: "GAZELLE",
+      family: "CAR",
       base: 800,
-      kmInFirstBracket: 15,
-      kmInSecondBracket: 5,
-      amountInFirstBracket: 3000,
-      amountInSecondBracket: 750,
+      baseFull: 800,
+      baseDiscountPct: 0,
+      baseDiscountApplied: false,
+      baseDiscountAboveKm: null,
       price: 4550,
       currency: "FCFA",
     });
+    expect(detail.brackets).toEqual([
+      { upToKm: 15, perKm: 200, km: 15, amount: 3000 },
+      { upToKm: null, perKm: 150, km: 5, amount: 750 },
+    ]);
   });
 
-  it("KOALA est la gamme climatisée", () => {
+  it("KOALA et LEOPARD sont les gammes climatisées (voitures de luxe)", () => {
+    // Décision du 6 octobre 2026 : le Koala et le Léopard sont climatisés ;
+    // la Gazelle (entrée de gamme) ne l'est pas.
     expect(pricing.getVehiclePricing("KOALA").airConditioned).toBe(true);
+    expect(pricing.getVehiclePricing("LEOPARD").airConditioned).toBe(true);
     expect(pricing.vehicleLabel("KOALA")).toBe("KOALA (climatisé)");
+    expect(pricing.vehicleLabel("LEOPARD")).toBe("LEOPARD (climatisé)");
+    expect(pricing.vehicleLabel("GAZELLE")).toBe("GAZELLE");
     expect(pricing.getVehiclePricing("GAZELLE").airConditioned).toBeUndefined();
   });
 
-  it("refuse une gamme inconnue et une distance négative", () => {
-    expect(() => pricing.ridePrice(5, "FUSEE")).toThrow(/inconnue/i);
+  it("refuse un véhicule inconnu et une distance négative", () => {
+    expect(() => pricing.ridePrice(5, "FUSEE")).toThrow(/inconnu/i);
     expect(() => pricing.ridePrice(-1, "GAZELLE")).toThrow(/positif/i);
   });
 
-  it("convertit les anciens types de véhicules vers les gammes", () => {
-    expect(pricing.resolveGamme("ZEM")).toBe("GAZELLE");
-    expect(pricing.resolveGamme("ZEM_ELECTRIC")).toBe("GAZELLE");
-    expect(pricing.resolveGamme("CAR")).toBe("KOALA");
-    expect(pricing.resolveGamme("gazelle")).toBe("GAZELLE");
+  it("convertit les anciens types de véhicules encore en base", () => {
+    // « ZEM » (moto-taxi historique) → Zem à essence ; « CAR » → voiture Koala.
+    expect(pricing.resolveVehicleKey("ZEM")).toBe("ZEM_ESSENCE");
+    expect(pricing.resolveVehicleKey("CAR")).toBe("KOALA");
+    expect(pricing.resolveVehicleKey("gazelle")).toBe("GAZELLE");
+    expect(pricing.resolveVehicleKey("ZEM_ELECTRIC")).toBe("ZEM_ELECTRIC");
+  });
+});
+
+describe("PricingService — filière Zem (motos-taxis)", () => {
+  const pricing = new PricingService(loadTarificationConfig());
+
+  it("les deux Zem partagent les paliers kilométriques ; seule la base diffère", () => {
+    const essence = pricing.getVehiclePricing("ZEM_ESSENCE");
+    const electrique = pricing.getVehiclePricing("ZEM_ELECTRIC");
+    // Bases distinctes : 150 F à essence, 100 F en électrique
+    expect(essence.base).toBe(150);
+    expect(electrique.base).toBe(100);
+    // Aucune remise de base dans le barème en vigueur
+    expect(essence.baseDiscount).toBeUndefined();
+    expect(electrique.baseDiscount).toBeUndefined();
+    // Paliers STRICTEMENT identiques : mêmes bornes ET mêmes tarifs au kilomètre
+    expect(essence.brackets).toEqual([
+      { upToKm: 15, perKm: 70 },
+      { upToKm: 25, perKm: 60 },
+      { upToKm: null, perKm: 50 },
+    ]);
+    expect(electrique.brackets).toEqual(essence.brackets);
+    // Distance nulle : seule la base est due
+    expect(pricing.ridePrice(0, "ZEM_ESSENCE")).toBe(150);
+    expect(pricing.ridePrice(0, "ZEM_ELECTRIC")).toBe(100);
+  });
+
+  it("premier palier : 70 F/km de 0 à 15 km", () => {
+    // 5 km : essence 150 + 5 × 70 = 500 · électrique 100 + 350 = 450
+    expect(pricing.ridePrice(5, "ZEM_ESSENCE")).toBe(500);
+    expect(pricing.ridePrice(5, "ZEM_ELECTRIC")).toBe(450);
+    // 15 km : essence 150 + 15 × 70 = 1 200 · électrique 100 + 1 050 = 1 150
+    expect(pricing.ridePrice(15, "ZEM_ESSENCE")).toBe(1200);
+    expect(pricing.ridePrice(15, "ZEM_ELECTRIC")).toBe(1150);
+  });
+
+  it("deuxième palier : 60 F/km de 16 à 25 km", () => {
+    // 16 km : essence 150 + 1 050 + 60 = 1 260 · électrique 100 + 1 050 + 60 = 1 210
+    expect(pricing.ridePrice(16, "ZEM_ESSENCE")).toBe(1260);
+    expect(pricing.ridePrice(16, "ZEM_ELECTRIC")).toBe(1210);
+    // 25 km : essence 150 + 1 050 + 10 × 60 = 1 800 · électrique 1 750
+    expect(pricing.ridePrice(25, "ZEM_ESSENCE")).toBe(1800);
+    expect(pricing.ridePrice(25, "ZEM_ELECTRIC")).toBe(1750);
+  });
+
+  it("troisième palier : 50 F/km à partir du 26e km (dernier palier)", () => {
+    // 26 km : essence 150 + 1 050 + 600 + 50 = 1 850 · électrique 1 800
+    expect(pricing.ridePrice(26, "ZEM_ESSENCE")).toBe(1850);
+    expect(pricing.ridePrice(26, "ZEM_ELECTRIC")).toBe(1800);
+    // 30 km : essence 150 + 1 050 + 600 + 5 × 50 = 2 050 · électrique 2 000
+    expect(pricing.ridePrice(30, "ZEM_ESSENCE")).toBe(2050);
+    expect(pricing.ridePrice(30, "ZEM_ELECTRIC")).toBe(2000);
+    // 100 km : essence 150 + 1 050 + 600 + 75 × 50 = 5 550 · électrique 5 500
+    expect(pricing.ridePrice(100, "ZEM_ESSENCE")).toBe(5550);
+    expect(pricing.ridePrice(100, "ZEM_ELECTRIC")).toBe(5500);
+  });
+
+  it("l'électrique est exactement 50 F moins cher, quelle que soit la distance", () => {
+    // Mêmes kilomètres facturés et mêmes tarifs au km : le seul écart est la base
+    for (const km of [0, 3, 10, 15, 16, 25, 26, 30, 60, 100]) {
+      const essence = pricing.ridePrice(km, "ZEM_ESSENCE");
+      const electrique = pricing.ridePrice(km, "ZEM_ELECTRIC");
+      expect(essence - electrique).toBe(50);
+      expect(electrique).toBeLessThan(essence);
+    }
+  });
+
+  it("détaille les trois paliers Zem, sans remise de base", () => {
+    const detail = pricing.breakdown(30, "ZEM_ESSENCE");
+    expect(detail).toMatchObject({
+      gamme: "ZEM_ESSENCE",
+      family: "ZEM",
+      base: 150,
+      baseFull: 150,
+      baseDiscountPct: 0,
+      baseDiscountApplied: false,
+      baseDiscountAboveKm: null,
+      price: 2050,
+      currency: "FCFA",
+    });
+    expect(detail.brackets).toEqual([
+      { upToKm: 15, perKm: 70, km: 15, amount: 1050 },
+      { upToKm: 25, perKm: 60, km: 10, amount: 600 },
+      { upToKm: null, perKm: 50, km: 5, amount: 250 },
+    ]);
+
+    // À 15 km et moins : seul le premier palier est facturé
+    const court = pricing.breakdown(8, "ZEM_ELECTRIC");
+    expect(court.base).toBe(100);
+    expect(court.baseDiscountApplied).toBe(false);
+    expect(court.brackets.map((b) => b.km)).toEqual([8, 0, 0]);
+
+    // Électrique : mêmes kilomètres et MÊMES tarifs au km, base 50 F plus basse
+    const electrique = pricing.breakdown(30, "ZEM_ELECTRIC");
+    expect(electrique.brackets).toEqual(detail.brackets);
+    expect(electrique.base).toBe(100);
+    expect(electrique.price).toBe(2000);
+    expect(detail.price - electrique.price).toBe(50);
+  });
+
+  it("classe les deux Zem dans la famille ZEM et les voitures dans la famille CAR", () => {
+    expect(pricing.vehicleFamily("ZEM_ESSENCE")).toBe("ZEM");
+    expect(pricing.vehicleFamily("ZEM_ELECTRIC")).toBe("ZEM");
+    for (const car of ["GAZELLE", "KOALA", "LEOPARD"]) {
+      expect(pricing.vehicleFamily(car)).toBe("CAR");
+      expect(pricing.isZem(car)).toBe(false);
+    }
+    expect(pricing.isZem("ZEM_ESSENCE")).toBe(true);
+    expect(pricing.isZem("ZEM_ELECTRIC")).toBe(true);
+    expect(pricing.isZem(null)).toBe(false);
+    expect(pricing.zemVehicleKeys()).toEqual(["ZEM_ESSENCE", "ZEM_ELECTRIC"]);
+  });
+
+  it("le détail du calcul indique la famille du véhicule", () => {
+    expect(pricing.breakdown(10, "ZEM_ELECTRIC").family).toBe("ZEM");
+    expect(pricing.breakdown(10, "LEOPARD").family).toBe("CAR");
+  });
+
+  it("les voitures ne subissent aucune remise de base", () => {
+    for (const car of ["GAZELLE", "KOALA", "LEOPARD"] as const) {
+      expect(pricing.getVehiclePricing(car).baseDiscount).toBeUndefined();
+      const detail = pricing.breakdown(40, car);
+      expect(detail.baseDiscountApplied).toBe(false);
+      expect(detail.base).toBe(detail.baseFull);
+    }
+  });
+
+  it("radar strict : chaque véhicule ne voit que ses propres demandes", () => {
+    // Zem essence ⇄ Zem électrique : deux véhicules distincts
+    expect(pricing.rideVisibleFor("ZEM_ESSENCE", "ZEM_ESSENCE")).toBe(true);
+    expect(pricing.rideVisibleFor("ZEM_ESSENCE", "ZEM_ELECTRIC")).toBe(false);
+    expect(pricing.rideVisibleFor("ZEM_ELECTRIC", "ZEM_ELECTRIC")).toBe(true);
+    // Voitures : correspondance exacte, jamais de mélange Zem / voiture
+    expect(pricing.rideVisibleFor("KOALA", "KOALA")).toBe(true);
+    expect(pricing.rideVisibleFor("KOALA", "GAZELLE")).toBe(false);
+    expect(pricing.rideVisibleFor("ZEM_ESSENCE", "GAZELLE")).toBe(false);
+    expect(pricing.rideVisibleFor("GAZELLE", "ZEM_ELECTRIC")).toBe(false);
+    // Un ancien type encore en base reste résolu (ZEM → Zem essence)
+    expect(pricing.rideVisibleFor("ZEM_ESSENCE", "ZEM")).toBe(true);
+    // Compte historique sans véhicule déclaré : rien n'est masqué
+    expect(pricing.rideVisibleFor(null, "GAZELLE")).toBe(true);
+  });
+
+  it("radar souple (strictVehicleMatch = false) : les deux Zem partagent leurs demandes", () => {
+    const souple = new PricingService({
+      ...loadTarificationConfig(),
+      radar: { strictVehicleMatch: false },
+    });
+    expect(souple.rideVisibleFor("ZEM_ESSENCE", "ZEM_ELECTRIC")).toBe(true);
+    expect(souple.rideVisibleFor("ZEM_ELECTRIC", "ZEM_ESSENCE")).toBe(true);
+    // Les voitures restent filtrées par gamme exacte
+    expect(souple.rideVisibleFor("KOALA", "GAZELLE")).toBe(false);
+    expect(souple.rideVisibleFor("GAZELLE", "GAZELLE")).toBe(true);
+  });
+
+  it("le tarif des Zem est une règle validée, pas une valeur provisoire", () => {
+    const config = loadTarificationConfig();
+    const règles = provisionalRules(config).map((r) => r.chemin);
+    expect(règles.some((chemin) => chemin.includes("ZEM_ESSENCE"))).toBe(false);
+    expect(règles.some((chemin) => chemin.includes("ZEM_ELECTRIC"))).toBe(false);
+    expect(config.radar?.strictVehicleMatch).toBe(true);
   });
 });
 
@@ -211,10 +390,52 @@ describe("Configuration tarifaire", () => {
   it("porte les valeurs de référence de la spécification", () => {
     const config = loadTarificationConfig();
     expect(config.currency).toBe("FCFA");
-    expect(config.kmThreshold).toBe(15);
-    expect(config.vehicles.GAZELLE).toEqual({ base: 800, perKmUpTo15: 200, perKmFrom16: 150 });
-    expect(config.vehicles.KOALA).toMatchObject({ base: 1200, perKmUpTo15: 375, perKmFrom16: 350 });
-    expect(config.vehicles.LEOPARD).toMatchObject({ base: 2500, perKmUpTo15: 900, perKmFrom16: 800 });
+    expect(config.vehicles.GAZELLE).toEqual({
+      base: 800,
+      family: "CAR",
+      brackets: [
+        { upToKm: 15, perKm: 200 },
+        { upToKm: null, perKm: 150 },
+      ],
+    });
+    expect(config.vehicles.KOALA).toMatchObject({
+      base: 1200,
+      family: "CAR",
+      brackets: [
+        { upToKm: 15, perKm: 375 },
+        { upToKm: null, perKm: 350 },
+      ],
+    });
+    expect(config.vehicles.LEOPARD).toMatchObject({
+      base: 2500,
+      family: "CAR",
+      brackets: [
+        { upToKm: 15, perKm: 900 },
+        { upToKm: null, perKm: 800 },
+      ],
+    });
+    // Motos-taxis : mêmes paliers kilométriques, seule la base diffère
+    expect(config.vehicles.ZEM_ESSENCE).toEqual({
+      base: 150,
+      family: "ZEM",
+      brackets: [
+        { upToKm: 15, perKm: 70 },
+        { upToKm: 25, perKm: 60 },
+        { upToKm: null, perKm: 50 },
+      ],
+    });
+    expect(config.vehicles.ZEM_ELECTRIC).toEqual({
+      base: 100,
+      family: "ZEM",
+      brackets: [
+        { upToKm: 15, perKm: 70 },
+        { upToKm: 25, perKm: 60 },
+        { upToKm: null, perKm: 50 },
+      ],
+    });
+    // Les deux Zem partagent exactement les mêmes paliers ; l'électrique n'a que la base en moins
+    expect(config.vehicles.ZEM_ELECTRIC.brackets).toEqual(config.vehicles.ZEM_ESSENCE.brackets);
+    expect(config.vehicles.ZEM_ELECTRIC.base).toBeLessThan(config.vehicles.ZEM_ESSENCE.base);
     expect(Object.keys(config.agencyLevels)).toEqual(["PRO", "SILVER", "OR", "DIAMANT"]);
     expect(config.profiles.ZEM_INDEPENDANT).toMatchObject({ monthlyRevenueSharePct: 15, withdrawalFeePct: 1.5 });
   });
@@ -252,10 +473,24 @@ describe("Configuration tarifaire", () => {
 
   it("n'expose que des montants entiers en FCFA", () => {
     const config = loadTarificationConfig();
-    for (const gamme of ["GAZELLE", "KOALA", "LEOPARD"] as const) {
-      for (const value of Object.values(config.vehicles[gamme])) {
-        if (typeof value === "number") expect(Number.isInteger(value)).toBe(true);
+    expect(Object.keys(config.vehicles)).toEqual([
+      "ZEM_ESSENCE",
+      "ZEM_ELECTRIC",
+      "GAZELLE",
+      "KOALA",
+      "LEOPARD",
+    ]);
+    for (const gamme of Object.keys(config.vehicles) as (keyof typeof config.vehicles)[]) {
+      const vehicle = config.vehicles[gamme];
+      expect(Number.isInteger(vehicle.base)).toBe(true);
+      expect(vehicle.base).toBeGreaterThan(0);
+      for (const bracket of vehicle.brackets) expect(Number.isInteger(bracket.perKm)).toBe(true);
+      if (vehicle.baseDiscount) {
+        expect(Number.isInteger(vehicle.baseDiscount.pct)).toBe(true);
+        expect(Number.isInteger(vehicle.baseDiscount.aboveKm)).toBe(true);
       }
+      // Le dernier palier est toujours illimité
+      expect(vehicle.brackets[vehicle.brackets.length - 1].upToKm).toBeNull();
     }
     for (const level of Object.values(config.agencyLevels)) {
       const rules = level as { activationFee: number; maxAccounts: number };

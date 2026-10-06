@@ -106,13 +106,10 @@ export class WalletService {
     });
     if (!user) throw new BadRequestException("Compte introuvable");
 
-    const gamme = user.provider?.vehicleType
-      ? this.pricing.resolveGamme(user.provider.vehicleType)
-      : null;
     const profile =
       user.provider?.type === "COURIER"
         ? "COURSIER"
-        : user.provider?.type === "DRIVER" && gamme === "GAZELLE" && !user.agencyId
+        : user.provider?.type === "DRIVER" && this.pricing.isZem(user.provider.vehicleType) && !user.agencyId
           ? "ZEM_INDEPENDANT"
           : null;
 
@@ -178,10 +175,8 @@ export class WalletService {
     const charged: { userId: string; period: string; revenue: number; share: number }[] = [];
 
     for (const driver of drivers) {
-      const gamme = driver.provider?.vehicleType
-        ? this.pricing.resolveGamme(driver.provider.vehicleType)
-        : null;
-      if (gamme !== "GAZELLE") continue; // seuls les Zem indépendants sont prélevés
+      // Seuls les Zem indépendants (moto-taxi essence ou électrique) sont prélevés.
+      if (!this.pricing.isZem(driver.provider?.vehicleType)) continue;
 
       const wallet = await this.getWallet(driver.id);
       const already = await this.prisma.transaction.findFirst({

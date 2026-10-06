@@ -44,25 +44,54 @@ L'écran de connexion ne pré-remplit plus aucun numéro : **chaque utilisateur 
 
 ### Parcours A — Tester l'Espace Client
 1. Connectez-vous avec **votre propre numéro** (n'importe quel numéro béninois à 10 chiffres commençant par `01`).
-2. **Commander un Zem ou une Voiture** :
-   - Sur l'accueil, appuyez sur **Zem** ou **Voiture**.
-   - Choisissez une destination à Cotonou (ex. *Aéroport*, *Ganhi*, *Haie Vive*), vérifiez le tarif estimé et confirmez la course.
+2. **Commander un Zem** :
+   - Sur l'accueil, appuyez sur **Zem**. Un premier écran demande le type de moto-taxi :
+     **Zem à essence** (**150 F** de base) ou **Zem électrique** (**100 F** de base). Les deux
+     ont les **mêmes paliers au kilomètre** : **70 F/km** de 0 à 15 km, **60 F/km** de 16 à
+     25 km, **50 F/km** au-delà. L'électrique est donc **50 F moins cher** quelle que soit la
+     distance (aucune remise de base).
+     Le tarif de chaque type est affiché sous sa carte.
+   - Vous arrivez ensuite sur la réservation : choisissez une destination à Cotonou
+     (ex. *Aéroport*, *Ganhi*, *Haie Vive*), vérifiez le tarif estimé et confirmez la course.
+     Un bandeau rappelle le Zem choisi, avec un bouton **Changer** pour revenir au choix.
    - Suivez la course en direct sur la carte (vous pouvez aussi l'annuler avant prise en charge).
-3. **Commander un Coursier / Livraison (Double sécurité OTP)** :
+3. **Commander une Voiture** :
+   - Sur l'accueil, appuyez sur **Voiture** : un premier écran demande la gamme — **Gazelle**,
+     **Koala · climatisé** ou **Léopard · premium climatisé** — sous forme de **boutons** (aucun tarif
+     affiché à cette étape). Les noms de gammes ne s'appliquent **jamais** à un Zem.
+   - Appuyez sur une gamme : l'écran **« Ce à quoi tu as droit »** détaille la sécurité, la
+     climatisation (si la gamme la déclare), les atouts, le **tarif officiel** (base + paliers)
+     et l'usage idéal. Appuyez sur **Accepter et continuer** (ou *Voir les autres voitures*
+     pour changer).
+   - Vous arrivez sur la réservation : choisissez une destination, vérifiez que le prix
+     correspond bien à la gamme retenue, puis confirmez. Un bandeau rappelle la voiture choisie
+     avec un bouton **Changer**.
+     *Repères de prix :* Gazelle 10 km = **2 800 F** · Koala 10 km = **4 950 F** ·
+     Léopard 20 km = **20 000 F**.
+4. **Commander un Coursier / Livraison (Double sécurité OTP)** :
    - Sur l'accueil, appuyez sur **Livraison** ou **Coursier**.
    - Choisissez le type de mission : *Document*, *Petit Colis*, *Colis Moyen* ou **Coursier Personnel (Courses, pharmacie, achats)**.
    - Appuyez sur **Commander un coursier** : l'application génère **2 codes de sécurité à 4 chiffres** (un *Code ramassage* pour l'expéditeur et un *Code remise finale* pour le destinataire).
-4. **Portefeuille AZƆ̀ Pay** :
+5. **Portefeuille AZƆ̀ Pay** :
    - Ouvrez l'onglet **Wallet** en bas : consultez votre solde, le cashback, les moyens de paiement (*MTN MoMo, Celtiis Cash, Moov Money, Visa UBA*) et testez le bouton **Recharger** (crédit immédiat du solde).
 
 ---
 
 ### Parcours B — Tester l'Espace Zem / Conducteur
 1. Créez d'abord un compte Zem validé (voir **Parcours E**), puis connectez-vous avec ce numéro.
+   ⚠️ **Important** : le dossier demande de choisir le véhicule — **Zem à essence** ou
+   **Zem électrique**. Il faut un chauffeur dont le dossier **correspond exactement** au type
+   de Zem commandé par le client, sinon la demande n'apparaît pas sur son radar.
 2. Vous arrivez sur le **Zém Radar** :
    - Activez l'interrupteur **« Prêt à rouler »** (en haut à droite de la carte de statut).
-   - Les courses en attente des clients de votre zone s'affichent avec la distance et le gain net (commission AZƆ̀ déduite).
-   - Appuyez sur **Accepter la course** → **Client à bord (Démarrer)** → **Terminer la course** : votre portefeuille AZƆ̀ Pay est crédité instantanément !
+   - Un bandeau indique votre véhicule : « **Radar Zem à essence — tu ne vois que ces demandes** ».
+   - Les demandes compatibles s'affichent avec la distance et le gain net ; si aucun client n'a
+     commandé ce type de Zem, l'écran l'explique explicitement.
+   - Appuyez sur **Accepter la course** → saisir le **Code Bouclier AZƆ̀** à 4 chiffres affiché
+     chez le client → **Terminer la course** : votre portefeuille AZƆ̀ Pay est crédité instantanément !
+3. **Mode démonstration à un seul chauffeur** : pour qu'un Zem essence voie aussi les demandes
+   de Zem électrique, passez `"radar": { "strictVehicleMatch": false }` dans
+   `azo-backend/src/pricing/tarification.json` (puis `npm run sync:tarification` côté mobile).
 
 ---
 

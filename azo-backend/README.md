@@ -52,7 +52,7 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
 |---|---|
 | Auth | `POST /auth/request-otp`, `POST /auth/verify-otp` |
 | Utilisateur | `GET/PATCH /users/me` |
-| Courses | `POST /rides/estimate`, `POST /rides`, `GET /rides/history`, `GET /rides/pending`, `GET /rides/:id`, `POST /rides/:id/accept|start|complete|rate|cancel` |
+| Courses | `POST /rides/estimate`, `POST /rides`, `GET /rides/history`, `GET /rides/pending` (filtré par véhicule), `GET /rides/:id`, `POST /rides/:id/accept|start|complete|rate|cancel` |
 | Prestataires | `GET /providers/requirements`, `GET /providers/me`, `POST /providers/applications`, `POST /providers/applications/:id/documents`, `POST /providers/applications/:id/documents/:kind/file` (photo, multipart), `GET /providers/documents/:docId/file`, `POST /providers/applications/:id/submit` |
 | Temps réel | WebSocket : `ride:join`, `driver:location`, `ride:status` |
 | Portefeuille | `GET /wallet`, `GET /wallet/transactions`, `POST /wallet/recharge` |
@@ -61,18 +61,26 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
 | Marketplace | `POST /marketplace/orders`, `POST /marketplace/orders/:id/validate` |
 | Artisans | `GET /artisans`, `POST /artisans/requests` |
 | Agences | `POST /agencies/activate`, `POST /agencies/drivers`, `DELETE /agencies/drivers/:userId`, `GET /agencies/dashboard` |
-| Tarification | `GET /pricing` (barème public : gammes, paliers km, niveaux d'agence, profils) |
+| Tarification | `GET /pricing` (barème public : véhicules et filières, paliers km, niveaux d'agence, profils, radar) |
 | Portefeuille | `GET /wallet/withdrawal-quote?amount=`, `POST /wallet/withdraw` |
 | Admin | `GET /admin/stats`, `GET /admin/users`, `POST /admin/settlements/zem-monthly` |
 | Admin — prestataires | `GET /admin/providers`, `GET /admin/providers/stats`, `GET /admin/providers/:id`, `POST /admin/providers/:id/start-review`, `POST /admin/providers/:id/documents/:docId/decision`, `POST /admin/providers/:id/decision`, `POST /admin/providers/:id/reinstate` |
 | Notifications | `GET /notifications`, `POST /notifications/read-all` |
+| Santé | `GET /health` (statut, commit déployé, uptime), `GET /` (résumé) |
 
 ## 5. Règles métier déjà codées
 - **Tarification** : tout le barème vient de `src/pricing/tarification.json`
-  (voir `PROJECT_SUMMARY/TARIFICATION.md`) — prix des courses par gamme de véhicule
-  (GAZELLE / KOALA / LEOPARD) et par tranche de 15 km, niveaux d'agence
+  (voir `PROJECT_SUMMARY/TARIFICATION.md`) — prix des courses par **paliers kilométriques propres à
+  chaque véhicule**, en deux filières : **motos-taxis Zem** (`ZEM_ESSENCE`, `ZEM_ELECTRIC` — mêmes
+  paliers pour les deux : 70 F/km jusqu'à 15 km, 60 F/km de 16 à 25 km, 50 F/km au-delà ; seule la
+  base change : 150 F à essence, 100 F en électrique, sans remise) et **voitures** (`GAZELLE`,
+  `KOALA` et `LEOPARD` — les deux derniers climatisés — palier à 15 km, sans remise) ;
+  niveaux d'agence
   (PRO / SILVER / OR / DIAMANT : activation unique, commission, frais de retrait,
   plafond de comptes), profils prestataires. Tests : `npm test`.
+- **Radar chauffeur** : `GET /rides/pending` ne renvoie que les demandes du **véhicule exact**
+  déclaré dans le dossier prestataire (réglable par `radar.strictVehicleMatch`), et jamais les
+  demandes de transport aux coursiers. Parcours détaillé : `PROJECT_SUMMARY/PARCOURS_ZEM.md`.
 - Commission : taux du niveau d'agence pour un chauffeur de flotte ; pour un Zem
   indépendant, prélèvement **mensuel** de 15 % des revenus du mois (jamais par course),
   plus 1,5 % sur chaque retrait.

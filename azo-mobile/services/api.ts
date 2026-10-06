@@ -36,8 +36,26 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Rend lisibles les erreurs techniques les plus fréquentes. En particulier : un
+ * **backend resté sur une version antérieure** refuse encore les types de véhicules
+ * actuels (`ZEM_ESSENCE`, `ZEM_ELECTRIC`, `GAZELLE`…) et répond par la liste de ses
+ * anciennes valeurs — message incompréhensible pour l'utilisateur comme pour le client.
+ */
+function friendlyApiMessage(message: string): string {
+  if (/vehicleType must be one of the following values/i.test(message)) {
+    return (
+      "Le serveur AZƆ̀ n'est pas à jour : il ne connaît pas encore ce type de véhicule.\n" +
+      "Mets le backend à jour puis redémarre-le : git pull, npm install, " +
+      "npx prisma generate, npx prisma migrate deploy.\n" +
+      `(détail technique : ${message})`
+    );
+  }
+  return message;
+}
+
 export const errorMessage = (e: unknown) =>
-  e instanceof Error ? e.message : "Une erreur est survenue.";
+  friendlyApiMessage(e instanceof Error ? e.message : "Une erreur est survenue.");
 
 async function request<T>(
   path: string,
@@ -196,14 +214,19 @@ export const placesApi = {
   },
 };
 
-/* ==================== COURSES (ZEM / ZEM ÉLECTRIQUE / VOITURE) ==================== */
+/* ==================== COURSES (ZEM ESSENCE / ZEM ÉLECTRIQUE / VOITURE) ==================== */
 
 /**
- * Gammes de véhicules AZƆ̀ (barème tarifaire). Les anciens types ZEM / ZEM_ELECTRIC /
- * CAR ne sont plus proposés : les courses passées sont rattachées à une gamme
- * (ZEM, ZEM_ELECTRIC → GAZELLE ; CAR → KOALA) via `services/tarification`.
+ * Véhicules AZƆ̀ (barème tarifaire), en deux filières distinctes :
+ *   * ZEM_ESSENCE / ZEM_ELECTRIC → les motos-taxis (Zem), facturés au même tarif ;
+ *   * GAZELLE / KOALA / LEOPARD  → les voitures proposées pour une course.
+ * Les anciens types ZEM / CAR ne sont plus proposés : les courses passées sont
+ * rattachées à un véhicule (ZEM → ZEM_ESSENCE ; CAR → KOALA) via `services/tarification`.
  */
-export type VehicleType = "GAZELLE" | "KOALA" | "LEOPARD";
+export type VehicleType = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | "LEOPARD";
+
+/** Filière d'un véhicule : moto-taxi (Zem) ou voiture. */
+export type VehicleFamily = "ZEM" | "CAR";
 export type RideStatus = "PENDING" | "MATCHED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 // ⚠️ N'ajoute AUCUN autre champ : le backend refuse les champs inconnus.
@@ -216,20 +239,21 @@ export type Estimate = {
   etaMinutes: number;
   price: number;
   durationMin?: number;
-  /** Gamme facturée (GAZELLE / KOALA / LEOPARD), renvoyée par le backend. */
+  /** Véhicule facturé (ZEM_ESSENCE … LEOPARD), renvoyé par le backend. */
   gamme?: VehicleType;
   /** Détail du calcul officiel : base + tranches kilométriques (config tarification). */
   breakdown?: {
     gamme: VehicleType;
+    family?: VehicleFamily;
     distanceKm: number;
-    kmThreshold: number;
+    /** Base facturée (après remise éventuelle). */
     base: number;
-    perKmUpTo15: number;
-    perKmFrom16: number;
-    kmInFirstBracket: number;
-    kmInSecondBracket: number;
-    amountInFirstBracket: number;
-    amountInSecondBracket: number;
+    baseFull: number;
+    baseDiscountPct: number;
+    baseDiscountApplied: boolean;
+    baseDiscountAboveKm: number | null;
+    /** Une ligne par palier kilométrique (km facturés et montant). */
+    brackets: { upToKm: number | null; perKm: number; km: number; amount: number }[];
     price: number;
     currency: string;
   };
@@ -250,6 +274,15 @@ export type Ride = {
   createdAt: string;
   driver?: RidePerson | null;
   client?: RidePerson | null;
+  /* --- Champs calculés par le radar du serveur (voir GET /rides/pending) --- */
+  /** Distance entre la position transmise et le point de départ, en km. */
+  distanceKm?: number | null;
+  /** Âge de la demande, en minutes. */
+  ageMinutes?: number;
+  /** Minutes restantes avant que la demande n'expire (elle est alors annulée). */
+  expiresInMinutes?: number;
+  /** `true` quand la demande a expiré sans chauffeur : elle vient d'être annulée. */
+  expired?: boolean;
 };
 
 export type RideChatMessage = {
@@ -272,7 +305,14 @@ export const ridesApi = {
   cancel: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/cancel`),
 
   /* --- Conducteur --- */
-  pending: () => api.get<Ride[]>(`${P}/rides/pending`),
+  /** Radar du chauffeur : sa position est transmise pour filtrer et classer par proximité. */
+  pending: (position?: { latitude: number; longitude: number }) =>
+    api.get<Ride[]>(
+      `${P}/rides/pending` +
+        (position
+          ? `?lat=${encodeURIComponent(position.latitude)}&lng=${encodeURIComponent(position.longitude)}`
+          : "")
+    ),
   accept: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/accept`),
   start: (rideId: string, pin?: string) => api.post<Ride>(`${P}/rides/${rideId}/start`, pin ? { pin } : {}),
   complete: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/complete`),
@@ -509,7 +549,7 @@ export type ProviderRequirements = {
     label: string;
     description: string;
     enabled: boolean;
-    vehicleChoices: { value: VehicleType; label: string; hint: string }[];
+    vehicleChoices: { value: VehicleType; label: string; hint: string; family?: VehicleFamily }[];
     specialties?: { id: string; label: string; hint: string }[];
     requiredFields: { field: string; label: string }[];
     requiredDocuments: { kind: DocumentKind; label: string; photoRequired: boolean }[];
