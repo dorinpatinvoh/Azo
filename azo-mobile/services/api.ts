@@ -36,8 +36,26 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Rend lisibles les erreurs techniques les plus fréquentes. En particulier : un
+ * **backend resté sur une version antérieure** refuse encore les types de véhicules
+ * actuels (`ZEM_ESSENCE`, `ZEM_ELECTRIC`, `GAZELLE`…) et répond par la liste de ses
+ * anciennes valeurs — message incompréhensible pour l'utilisateur comme pour le client.
+ */
+function friendlyApiMessage(message: string): string {
+  if (/vehicleType must be one of the following values/i.test(message)) {
+    return (
+      "Le serveur AZƆ̀ n'est pas à jour : il ne connaît pas encore ce type de véhicule.\n" +
+      "Mets le backend à jour puis redémarre-le : git pull, npm install, " +
+      "npx prisma generate, npx prisma migrate deploy.\n" +
+      `(détail technique : ${message})`
+    );
+  }
+  return message;
+}
+
 export const errorMessage = (e: unknown) =>
-  e instanceof Error ? e.message : "Une erreur est survenue.";
+  friendlyApiMessage(e instanceof Error ? e.message : "Une erreur est survenue.");
 
 async function request<T>(
   path: string,

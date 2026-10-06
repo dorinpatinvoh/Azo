@@ -148,3 +148,33 @@ nécessaire : la copie mobile du barème est relue par `GET /pricing`.
    portefeuille en cours de course bloque la fin de course (le chauffeur n'est pas payé).
 5. **Filière coursier** : libellés de véhicules volontairement inchangés dans l'immédiat
    (harmonisation « moto essence / moto électrique » prévue séparément).
+
+---
+
+## 7. Dépannage — erreur « vehicleType must be one of the following values »
+
+**Symptôme** : la réservation s'affiche correctement (prix calculé par l'app) mais la
+confirmation échoue avec un message du type
+`vehicleType must be one of the following values: ZEM, ZEM_ELECTRIC, CAR, LEOPARD`.
+
+**Cause** : le serveur qui répond est une **version antérieure du backend**. La liste des
+véhicules acceptés vient du **client Prisma généré** (`@IsEnum(VehicleType)` dans
+`azo-backend/src/rides/dto/create-ride.dto.ts`) ; un client généré avant la migration Zem
+connaît encore les anciens noms (`ZEM`, `CAR`) et refuse donc `ZEM_ESSENCE`.
+
+**Remède** (dans `azo-backend`, après avoir arrêté le serveur) :
+
+```powershell
+git pull
+npm install
+npx prisma generate        # INDISPENSABLE : régénère la liste des véhicules connus
+npx prisma migrate deploy  # applique la migration Zem si ce n'est pas déjà fait
+npm run start:dev
+```
+
+**Vérification** : `http://localhost:3000/pricing` doit contenir `ZEM_ESSENCE` et
+`ZEM_ELECTRIC`. Le message exact renvoyé par le serveur est désormais traduit dans
+l'application (`friendlyApiMessage` dans `azo-mobile/services/api.ts`).
+
+> ℹ️ Le prix affiché avant l'erreur reste juste : l'application calcule l'estimation avec le
+> barème embarqué (`config/tarification.json`) quand le serveur ne répond pas.
