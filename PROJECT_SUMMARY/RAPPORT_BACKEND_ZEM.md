@@ -6,7 +6,7 @@
 gammes voitures, **nouveau barème de courses** et **filtrage du radar chauffeur**
 **URL de Production :** `https://azo-backend.onrender.com`
 **Destinataires :** Direction Générale & Responsables Techniques
-**Date :** 05 Octobre 2026
+**Date :** 06 Octobre 2026
 
 ---
 
