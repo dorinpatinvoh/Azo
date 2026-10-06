@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
+import type { RadarSettings } from "../rides/radar";
 import {
   AgencyLevel,
   AgencyLevelPricing,
@@ -160,6 +161,24 @@ export class PricingService {
     const rideIsZem = this.vehicleFamily(ride) === "ZEM";
     if (rideIsZem) return driverIsZem;
     return driver === ride;
+  }
+
+  /**
+   * Réglages du radar des demandes, avec leurs valeurs par défaut.
+   *
+   * Utilisés par `RidesService` : filtrage par véhicule (`strictVehicleMatch`), rayon de
+   * recherche autour du chauffeur (`searchRadiusKm`), expiration d'une demande sans
+   * chauffeur (`pendingExpiryMinutes`) et nombre de chauffeurs prévenus à la publication
+   * (`driverNotificationMax`).
+   */
+  radarSettings(): RadarSettings {
+    const radar = this.config.radar ?? {};
+    return {
+      strictVehicleMatch: radar.strictVehicleMatch ?? true,
+      searchRadiusKm: radar.searchRadiusKm ?? 0,
+      pendingExpiryMinutes: radar.pendingExpiryMinutes ?? 30,
+      driverNotificationMax: radar.driverNotificationMax ?? 30,
+    };
   }
 
   /**

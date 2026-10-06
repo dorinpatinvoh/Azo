@@ -96,6 +96,11 @@ CLIENT                                      BACKEND                    CHAUFFEUR
 | Fin + paiement | `DriverHomeScreen.tsx` | `POST /rides/:id/complete` |
 | Notation | `screens/RideRatingScreen.tsx` | `POST /rides/:id/rate` |
 
+Le radar du chauffeur ne montre que les demandes de **son** véhicule, situées dans son **rayon
+de recherche**, et une demande sans chauffeur **expire** au bout de 20 minutes : elle est alors
+annulée automatiquement, sans aucun débit. Réglages et notifications :
+[`MATCHING_ET_NOTIFICATIONS.md`](./MATCHING_ET_NOTIFICATIONS.md).
+
 Statuts de la course : `PENDING` → `MATCHED` → `IN_PROGRESS` → `COMPLETED`
 (ou `CANCELLED`). Une annulation **client** clôt la course ; une annulation **chauffeur**
 la remet en `PENDING` pour un autre chauffeur.

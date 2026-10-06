@@ -93,8 +93,16 @@ export type ProvisionalRule = {
 export type TarificationConfig = {
   currency: string;
   vehicles: Record<VehicleKey, VehiclePricing>;
-  /** Répartition des demandes entre prestataires (filtrage du radar chauffeur). */
-  radar?: { strictVehicleMatch?: boolean };
+  /** Réglages du radar des demandes (filtrage, proximité, expiration). */
+  radar?: {
+    strictVehicleMatch?: boolean;
+    /** Rayon de recherche autour du chauffeur, en km — `0` = aucune limite. */
+    searchRadiusKm?: number;
+    /** Délai d'expiration d'une demande sans chauffeur, en minutes. */
+    pendingExpiryMinutes?: number;
+    /** Nombre maximal de chauffeurs prévenus à la publication d'une demande. */
+    driverNotificationMax?: number;
+  };
   agencyLevels: Record<AgencyLevel, AgencyLevelPricing>;
   profiles: Record<ProfileKey, ProfilePricing>;
   legacyVehicleMapping: Record<string, VehicleKey>;
@@ -180,6 +188,15 @@ function assertValid(config: TarificationConfig): TarificationConfig {
 
   if (config.radar?.strictVehicleMatch != null && typeof config.radar.strictVehicleMatch !== "boolean")
     fail("`radar.strictVehicleMatch` doit être un booléen");
+  if (config.radar?.searchRadiusKm != null && !isNonNegativeNumber(config.radar.searchRadiusKm))
+    fail("`radar.searchRadiusKm` doit être un nombre ≥ 0 (0 = aucune limite)");
+  if (config.radar?.pendingExpiryMinutes != null && !(config.radar.pendingExpiryMinutes >= 1))
+    fail("`radar.pendingExpiryMinutes` doit être un nombre ≥ 1 (minutes)");
+  if (
+    config.radar?.driverNotificationMax != null &&
+    !(Number.isInteger(config.radar.driverNotificationMax) && config.radar.driverNotificationMax >= 1)
+  )
+    fail("`radar.driverNotificationMax` doit être un entier ≥ 1");
 
   for (const level of LEVELS) {
     const pricing = config.agencyLevels?.[level];

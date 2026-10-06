@@ -5,6 +5,7 @@ import { NotificationsService } from "../notifications/notifications.module";
 import { PricingService } from "../pricing/pricing.module";
 import { RidesGateway } from "./rides.gateway";
 import { CreateRideDto } from "./dto/create-ride.dto";
+import { LatLng, buildRadar, isRideExpired, rideAgeMinutes } from "./radar";
 
 export function rideSecurityPin(rideId: string): string {
   let hash = 2166136261;
@@ -52,9 +53,84 @@ export class RidesService {
 
   async create(clientId: string, dto: CreateRideDto) {
     const { price } = this.estimate(dto);
-    return this.prisma.ride.create({
+    const ride = await this.prisma.ride.create({
       data: { ...dto, clientId, price, commission: 0, status: "PENDING" },
     });
+
+    // Notification des chauffeurs dont le véhicule correspond (notification in-app :
+    // elle apparaît dans l'écran « Notifications » et alimente le badge du radar).
+    await this.notifyMatchingDrivers(ride.vehicleType, ride.price).catch(() => 0);
+
+    // Diffusion temps réel : les radars ouverts se rafraîchissent sans attendre le
+    // prochain cycle de rafraîchissement (8 s côté chauffeur).
+    this.gateway.emitNewRequest({
+      rideId: ride.id,
+      vehicleType: ride.vehicleType,
+      price: ride.price,
+      originLat: ride.originLat,
+      originLng: ride.originLng,
+    });
+
+    return ride;
+  }
+
+  /**
+   * Prévient les chauffeurs disponibles qu'une demande vient d'être publiée.
+   *
+   * Seuls les chauffeurs dont le dossier est **validé** (`APPROVED`) et dont le véhicule
+   * correspond à la demande sont prévenus — la même règle que le radar
+   * (`pricing.rideVisibleFor`), dans la limite de `radar.driverNotificationMax` pour ne
+   * pas inonder la base sur une place très fréquentée.
+   */
+  private async notifyMatchingDrivers(vehicleType: string, price: number): Promise<number> {
+    const settings = this.pricing.radarSettings();
+    const candidates = await this.prisma.user.findMany({
+      where: { role: "DRIVER", provider: { is: { status: "APPROVED" } } },
+      select: { id: true, provider: { select: { vehicleType: true } } },
+      take: 500,
+    });
+    const targets = candidates
+      .filter((candidate) => this.pricing.rideVisibleFor(candidate.provider?.vehicleType ?? null, vehicleType))
+      .slice(0, settings.driverNotificationMax);
+
+    await Promise.all(
+      targets.map((target) =>
+        this.notifications.push(
+          target.id,
+          "Nouvelle demande de course",
+          `${this.pricing.vehicleLabel(vehicleType)} · ${price} FCFA — ouvre ton radar pour la prendre.`,
+          "ride"
+        )
+      )
+    );
+    return targets.length;
+  }
+
+  /**
+   * Annule les demandes restées trop longtemps sans chauffeur.
+   *
+   * Le balayage est « paresseux » : il a lieu quand un chauffeur ouvre son radar ou quand
+   * le client recharge le suivi de sa course — inutile d'ajouter une tâche planifiée pour
+   * un besoin qui n'a de sens que devant un écran. L'écriture est conditionnée au statut
+   * `PENDING` (`updateMany`) : une course acceptée entre-temps n'est jamais annulée.
+   * Aucun débit : le client n'est facturé qu'à la fin de la course.
+   */
+  private async expireRide(ride: { id: string; clientId: string }): Promise<boolean> {
+    const { count } = await this.prisma.ride.updateMany({
+      where: { id: ride.id, status: "PENDING" },
+      data: { status: "CANCELLED" },
+    });
+    if (count === 0) return false;
+
+    const minutes = this.pricing.radarSettings().pendingExpiryMinutes;
+    await this.notifications.push(
+      ride.clientId,
+      "Aucun chauffeur trouvé",
+      `Ta demande est restée ${minutes} min sans chauffeur disponible : elle a été annulée. Aucun montant n'a été débité — relance une recherche.`,
+      "ride"
+    );
+    this.gateway.emitStatus(ride.id, "CANCELLED");
+    return true;
   }
 
   /**
@@ -69,7 +145,7 @@ export class RidesService {
    * Les coursiers (livraison) ne reçoivent pas les demandes de transport : leur espace
    * de missions est `GET /delivery/available`.
    */
-  async pending(driverId: string) {
+  async pending(driverId: string, position?: LatLng) {
     const driver = await this.prisma.user.findUnique({
       where: { id: driverId },
       include: { provider: true },
@@ -77,11 +153,30 @@ export class RidesService {
     if (driver?.provider?.type === "COURIER") return [];
 
     const driverVehicle = driver?.provider?.vehicleType ?? null;
+    const settings = this.pricing.radarSettings();
     const rides = await this.prisma.ride.findMany({
       where: { status: "PENDING" },
       orderBy: { createdAt: "asc" },
     });
-    return rides.filter((ride) => this.pricing.rideVisibleFor(driverVehicle, ride.vehicleType));
+
+    // Le calcul (expiration, proximité) porte sur TOUTES les demandes en attente :
+    // n'importe quel radar ouvert nettoie ainsi les demandes trop anciennes, quel que
+    // soit le véhicule du chauffeur qui interroge le serveur.
+    const { rides: radar, expired } = buildRadar(rides, {
+      expiryMinutes: settings.pendingExpiryMinutes,
+      radiusKm: settings.searchRadiusKm,
+      driver: position ?? null,
+    });
+
+    // Les demandes trop anciennes sont annulées au passage (aucun débit client) :
+    // elles ne traînent ni dans le radar, ni dans l'historique du client.
+    if (expired.length > 0) {
+      await Promise.all(expired.map((ride) => this.expireRide(ride).catch(() => false)));
+    }
+
+    // Filtrage par véhicule en dernier : c'est la règle du radar (Zem essence ≠ Zem
+    // électrique ; Gazelle ≠ Koala ≠ Léopard ; coursiers sans demandes de transport).
+    return radar.filter((ride) => this.pricing.rideVisibleFor(driverVehicle, ride.vehicleType));
   }
 
   // Un chauffeur ne peut conduire qu'une course à la fois
@@ -242,6 +337,20 @@ export class RidesService {
     });
     if (!ride) throw new NotFoundException("Course introuvable");
     if (ride.clientId !== userId && ride.driverId !== userId) throw new ForbiddenException();
+
+    // Demande restée sans chauffeur : on l'annule au moment où le client recharge son
+    // suivi (aucun débit), et on le lui signale dans la réponse (`expired: true`).
+    if (ride.status === "PENDING" && isRideExpired(ride.createdAt, this.pricing.radarSettings().pendingExpiryMinutes)) {
+      const cancelled = await this.expireRide(ride);
+      if (cancelled) return { ...ride, status: "CANCELLED", expired: true };
+    }
+
+    // Le client voit combien de temps il reste avant l'expiration de sa demande.
+    if (ride.status === "PENDING") {
+      const expiryMinutes = this.pricing.radarSettings().pendingExpiryMinutes;
+      const ageMinutes = rideAgeMinutes(ride.createdAt);
+      return { ...ride, expiresInMinutes: Math.max(0, Math.ceil(expiryMinutes - ageMinutes)) };
+    }
     return ride;
   }
 

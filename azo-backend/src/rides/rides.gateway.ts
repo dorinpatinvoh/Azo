@@ -129,4 +129,22 @@ export class RidesGateway implements OnGatewayConnection {
   emitStatus(rideId: string, status: string) {
     this.server.to(`ride:${rideId}`).emit("ride:status", { rideId, status });
   }
+
+  /**
+   * Nouvelle demande publiée : tous les appareils connectés sont prévenus
+   * (`ride:new`). L'application mobile filtre sur le véhicule de son dossier et
+   * rafraîchit son radar immédiatement, sans attendre le cycle de 8 secondes.
+   *
+   * Aucune donnée personnelle n'est diffusée : ni le nom du client, ni son numéro,
+   * uniquement ce qui figure déjà dans le radar (course, véhicule, prix, départ).
+   */
+  emitNewRequest(payload: {
+    rideId: string;
+    vehicleType: string;
+    price: number;
+    originLat: number;
+    originLng: number;
+  }) {
+    this.server?.emit("ride:new", { ...payload, at: new Date().toISOString() });
+  }
 }

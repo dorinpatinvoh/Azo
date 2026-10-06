@@ -66,6 +66,7 @@ curl localhost:3000/wallet   -H "Authorization: Bearer TON_TOKEN"
 | Admin | `GET /admin/stats`, `GET /admin/users`, `POST /admin/settlements/zem-monthly` |
 | Admin — prestataires | `GET /admin/providers`, `GET /admin/providers/stats`, `GET /admin/providers/:id`, `POST /admin/providers/:id/start-review`, `POST /admin/providers/:id/documents/:docId/decision`, `POST /admin/providers/:id/decision`, `POST /admin/providers/:id/reinstate` |
 | Notifications | `GET /notifications`, `POST /notifications/read-all` |
+| Santé | `GET /health` (statut, commit déployé, uptime), `GET /` (résumé) |
 
 ## 5. Règles métier déjà codées
 - **Tarification** : tout le barème vient de `src/pricing/tarification.json`

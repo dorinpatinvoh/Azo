@@ -126,10 +126,12 @@ Le **même calcul** existe côté application (`azo-mobile/services/tarification
 identiques au backend, **pour les deux types de Zem**, sur toutes les bornes
 (0 · 1 · 5 · 10 · 15 · 16 · 20 · 25 · 26 · 30 · 50 · 100 km), avec un écart constant de 50 F.
 
-## 3. Radar des demandes (filtrage par véhicule)
+## 3. Radar des demandes (véhicule, proximité, expiration)
 
 `GET /rides/pending` ne renvoie plus toutes les demandes : chaque prestataire reçoit
-uniquement les courses correspondant au **véhicule déclaré dans son dossier**.
+uniquement les courses correspondant au **véhicule déclaré dans son dossier**, situées dans son
+**rayon de recherche** et **non expirées**. Le détail complet est dans
+[`MATCHING_ET_NOTIFICATIONS.md`](./MATCHING_ET_NOTIFICATIONS.md).
 
 | Situation | Visibilité |
 |---|---|
@@ -142,12 +144,27 @@ uniquement les courses correspondant au **véhicule déclaré dans son dossier**
 Le comportement se règle dans `tarification.json` :
 
 ```json
-"radar": { "strictVehicleMatch": true }
+"radar": {
+  "strictVehicleMatch": true,
+  "searchRadiusKm": 8,
+  "pendingExpiryMinutes": 20,
+  "driverNotificationMax": 30
+}
 ```
 
-`false` (mode démarrage / démonstration) fait **partager les demandes entre les deux
-types de Zem** — pratique quand un seul type de Zem est enrôlé — tout en gardant les
+`strictVehicleMatch: false` (mode démarrage / démonstration) fait **partager les demandes entre
+les deux types de Zem** — pratique quand un seul type de Zem est enrôlé — tout en gardant les
 voitures filtrées par gamme exacte.
+
+| Réglage | Rôle | `0` signifie |
+|---|---|---|
+| `searchRadiusKm` | rayon de recherche autour de la position du chauffeur (km) | **aucune limite** |
+| `pendingExpiryMinutes` | délai avant annulation d'une demande sans chauffeur (min) | minimum appliqué : 1 min |
+| `driverNotificationMax` | chauffeurs prévenus à la publication d'une demande | — (entier ≥ 1) |
+
+Une demande expirée est **annulée automatiquement** (statut `CANCELLED`) : le client en est
+prévenu et **n'est jamais débité**, la base est due seulement après l'acceptation. Les valeurs
+sont validées au démarrage et modifiables **sans redéploiement**.
 
 ## 4. Profils prestataires
 

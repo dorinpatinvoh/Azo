@@ -204,7 +204,23 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
         {searching && (
           <View style={styles.searchRow}>
             <Pulse />
-            <Text style={[styles.muted, { flex: 1 }]}>Nous contactons les chauffeurs proches de toi.</Text>
+            <Text style={[styles.muted, { flex: 1 }]}>
+              Nous contactons les chauffeurs proches de toi.
+              {typeof ride.expiresInMinutes === "number" && ride.expiresInMinutes > 0
+                ? ` Recherche encore ${ride.expiresInMinutes} min : sans chauffeur, la demande est annulée sans aucun débit.`
+                : ""}
+            </Text>
+          </View>
+        )}
+
+        {/* Demande expirée faute de chauffeur : le serveur vient de l'annuler. */}
+        {ride.expired && (
+          <View style={styles.expiredBanner}>
+            <MaterialIcons name="search-off" size={18} color={ERROR_COLOR} />
+            <Text style={styles.expiredText}>
+              Aucun chauffeur n'a accepté ta demande : elle a expiré et a été annulée.
+              {" "}Aucun montant n'a été débité — tu peux relancer une recherche.
+            </Text>
           </View>
         )}
 
@@ -263,7 +279,9 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
         {finished ? (
           // Course terminée -> notation ; course annulée -> simple fermeture (rien à noter).
           <Pressable style={styles.primaryBtn} onPress={done ? (onFinish ?? onClose) : onClose}>
-            <Text style={styles.primaryText}>{done ? "Terminer" : "Fermer"}</Text>
+            <Text style={styles.primaryText}>
+              {done ? "Terminer" : ride.expired ? "Relancer une recherche" : "Fermer"}
+            </Text>
           </Pressable>
         ) : (
           <>
@@ -298,6 +316,8 @@ const styles = StyleSheet.create({
   sheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: colors.surfaceContainerLowest, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.md, elevation: 12, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 12, gap: 12 },
   status: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
   muted: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  expiredBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#FDECEA", padding: spacing.sm, borderRadius: radius.lg },
+  expiredText: { ...typography.bodySm, color: ERROR_COLOR, flex: 1 },
   errorText: { ...typography.bodyMd, color: ERROR_COLOR, textAlign: "center" },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 16 },
   pulseWrap: { width: 56, height: 56, alignItems: "center", justifyContent: "center" },

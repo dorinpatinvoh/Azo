@@ -145,10 +145,22 @@ une configuration erronée fait échouer le démarrage, jamais tourner l'API ave
 | Coursier / livreur | **aucune** demande de transport (espace mission : `GET /delivery/available`) |
 | Conducteur sans véhicule déclaré (compte historique) | aucune demande masquée |
 
-Le comportement se règle **sans redéploiement**, dans `tarification.json` :
+Le filtrage par véhicule complète deux autres règles, réglables **sans redéploiement** dans
+`tarification.json` (détail : [`MATCHING_ET_NOTIFICATIONS.md`](./MATCHING_ET_NOTIFICATIONS.md)) :
+
+* **proximité** — `searchRadiusKm` (8 km par défaut, `0` = aucune limite) : les demandes hors
+  rayon sont écartées et les autres classées de la plus proche à la plus lointaine, quand
+  l'application transmet sa position (`GET /rides/pending?lat=…&lng=…`) ;
+* **expiration** — `pendingExpiryMinutes` (20 min par défaut) : une demande sans chauffeur est
+  **annulée automatiquement**, le client en est notifié et n'est jamais débité.
 
 ```json
-"radar": { "strictVehicleMatch": true }
+"radar": {
+  "strictVehicleMatch": true,
+  "searchRadiusKm": 8,
+  "pendingExpiryMinutes": 20,
+  "driverNotificationMax": 30
+}
 ```
 
 * `true` (défaut) — correspondance **exacte** : un Zem à essence ne voit pas les demandes de Zem
@@ -180,7 +192,9 @@ Le comportement se règle **sans redéploiement**, dans `tarification.json` :
 | `GET /pricing` | Barème complet : véhicules + filières, paliers, niveaux d'agence, profils, radar |
 | `POST /rides/estimate` | Renvoie la **base remisée** (`base`, `baseFull`, `baseDiscountPct`, `baseDiscountApplied`, `baseDiscountAboveKm`) et **une ligne par palier** (`brackets[]`) |
 | `POST /rides` | Accepte les 5 véhicules (dont les deux Zem) |
-| `GET /rides/pending` | **Filtré** sur le véhicule du chauffeur ; exclut les coursiers |
+| `GET /rides/pending?lat=…&lng=…` | **Filtré** sur le véhicule du chauffeur, son rayon de recherche et l'expiration ; classé par proximité ; exclut les coursiers |
+| `GET /health` | Sonde de disponibilité : statut, commit déployé (`RENDER_GIT_COMMIT`), uptime |
+| `POST /rides` | Notifie les chauffeurs du bon véhicule (`driverNotificationMax`) et diffuse `ride:new` en temps réel |
 | `POST /rides/:id/accept · start · complete · cancel · rate` | Inchangés (commission via profil / niveau d'agence) |
 | `GET /providers/requirements` | Choix de véhicules avec `family: ZEM | CAR` |
 | `POST /providers/applications` | Validation des 5 véhicules |
@@ -195,7 +209,7 @@ Le comportement se règle **sans redéploiement**, dans `tarification.json` :
 cd azo-backend && npm test
 ```
 
-**51 tests verts** (`test/pricing.spec.ts`), dont :
+**66 tests verts** (`test/pricing.spec.ts` + `test/radar.spec.ts`), dont :
 
 * paliers Zem complets : 0 · 5 · 10 · 15 · 16 · 25 · 26 · 30 · 60 · 100 km, pour **les deux
   types** ;
@@ -205,7 +219,10 @@ cd azo-backend && npm test
   aucun véhicule ne remise sa base ;
 * voitures : grilles de la spécification, **aucune remise**, palier à 15 km ;
 * radar : correspondance exacte, non-mélange Zem / voiture, mode souple, conversion des anciens
-  types ;
+  types ; **15 tests dédiés** (`test/radar.spec.ts`) : âge et expiration d'une demande (bornes
+  19,9 / 20 / 45 min), temps restant affiché, rayons de recherche sur trois points réels de
+  Cotonou, classement par distance, rayon à 0, absence de position, égalité de distance, et
+  garde-fous (aucun effet de bord, radar vide, délai aberrant) ;
 * cas transverses déjà couverts : niveaux d'agence (un test par niveau), profils prestataires,
   valeurs provisoires « à définir », conversion des véhicules historiques.
 

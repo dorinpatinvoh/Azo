@@ -53,8 +53,9 @@ liste des gammes. La confirmation crée la course et l'écran de suivi prend le 
 ### Côté chauffeur
 
 Le radar applique la même règle que pour les Zem : un conducteur ne reçoit que les demandes de
-**son** véhicule (Gazelle ≠ Koala ≠ Léopard), selon `radar.strictVehicleMatch` dans
-`tarification.json`.
+**son** véhicule (Gazelle ≠ Koala ≠ Léopard), dans son **rayon de recherche** (8 km par défaut)
+et **non expirées** (20 min par défaut). Réglages et notifications :
+[`MATCHING_ET_NOTIFICATIONS.md`](./MATCHING_ET_NOTIFICATIONS.md).
 
 ## 3. Tarifs appliqués (exemples vérifiés)
 

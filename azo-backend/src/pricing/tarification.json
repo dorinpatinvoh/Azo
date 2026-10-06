@@ -14,7 +14,7 @@
     "unspecifiedProfile": "Profils sans règle définie dans la spécification (ex. conducteur indépendant d'une gamme KOALA/LEOPARD) : aucun prélèvement n'est appliqué tant que le métier ne l'a pas tranché.",
     "agencyActivation": "Le paiement des frais d'activation est unique et non récurrent ; requiredForOperations = true interdit à une agence non activée d'opérer.",
     "monthlySettlement": "Le prélèvement des Zem indépendants est mensuel (sur les revenus du mois), jamais par course.",
-    "radar": "strictVehicleMatch = true : un prestataire ne reçoit que les demandes du véhicule EXACT qu'il a déclaré. Passer à false (démarrage / démonstration) pour que les deux types de Zem partagent leurs demandes ; les voitures restent filtrées par gamme exacte."
+    "radar": "Reglages du radar des demandes. strictVehicleMatch = true : un prestataire ne reçoit que les demandes du véhicule EXACT qu'il a déclaré ; passer a false (demarrage / demonstration) pour que les deux types de Zem partagent leurs demandes, les voitures restant filtrees par gamme exacte. searchRadiusKm : rayon de recherche autour du chauffeur en km (0 = aucune limite) quand l'application transmet sa position ; pendingExpiryMinutes : delai au bout duquel une demande sans chauffeur est annulee automatiquement (aucun debit client) ; driverNotificationMax : nombre maximal de chauffeurs prevenus a la publication d'une demande."
   },
 
   "currency": "FCFA",
@@ -67,7 +67,10 @@
   },
 
   "radar": {
-    "strictVehicleMatch": true
+    "strictVehicleMatch": true,
+    "searchRadiusKm": 8,
+    "pendingExpiryMinutes": 20,
+    "driverNotificationMax": 30
   },
 
   "agencyLevels": {

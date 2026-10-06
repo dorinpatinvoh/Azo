@@ -41,8 +41,19 @@ export type AgencyLevelPricing = {
   maxAccounts: number;
 };
 
+/** Réglages du radar des demandes (le serveur reste la référence). */
+export type RadarSettings = {
+  strictVehicleMatch?: boolean;
+  /** Rayon de recherche autour du chauffeur, en km — 0 = aucune limite. */
+  searchRadiusKm?: number;
+  /** Délai d'expiration d'une demande sans chauffeur, en minutes. */
+  pendingExpiryMinutes?: number;
+  driverNotificationMax?: number;
+};
+
 export type TarificationConfig = {
   currency: string;
+  radar?: RadarSettings;
   vehicles: Record<VehicleKey, VehiclePricing>;
   agencyLevels: Record<AgencyLevel, AgencyLevelPricing>;
   profiles: Record<string, { category?: string; monthlyRevenueSharePct?: number; withdrawalFeePct?: number }>;

@@ -89,6 +89,12 @@ Base 150 FCFA  +  15 km × 70 FCFA/km  +  10 km × 60 FCFA/km  +  5 km × 50 FCF
   puis **Voiture** — Gazelle, Koala, Léopard. Le repli hors ligne embarque la même liste que
   celle servie par le serveur (`/providers/requirements`), avec les icônes moto thermique /
   moto électrique / voiture.
+* Le radar transmet la **position du chauffeur** (`GET /rides/pending?lat=…&lng=…`) : le serveur
+  écarte les demandes hors rayon et les classe de la plus proche à la plus lointaine ; l'écran
+  affiche la distance (`à 1,2 km`), rappelle le **rayon de recherche** et le **délai
+  d'expiration** en vigueur, et signale les demandes qui expirent dans moins de 5 minutes.
+* Il se rafraîchit **immédiatement** à la publication d'une demande (`ride:new`, socket) au lieu
+  d'attendre le cycle de 8 s.
 * L'écran **Radar** (`DriverHomeScreen`) affiche un bandeau explicite :
   « **Radar Zem à essence — tu ne vois que ces demandes.** », et l'état vide indique clairement
   qu'aucune demande **de ce véhicule** n'est disponible autour du chauffeur.
@@ -149,7 +155,8 @@ distance, et **jamais** l'inverse.
 | `services/api.ts` | Types `VehicleType` (5 véhicules), `VehicleFamily`, `Estimate.breakdown` (base remisée + paliers) |
 | `utils/rideDisplay.ts` | Libellés et icônes des 5 véhicules, jeux de démonstration cohérents |
 | `screens/LiveTrackingScreen.tsx`, `screens/HomeScreen.tsx`, `screens/RideRequestScreen.tsx` | Libellés des véhicules, tuile d'accueil « Zem — Essence ou électrique », écran historique aligné |
-| `config/tarification.json` | Copie embarquée du barème, synchronisée avec le backend |
+| `screens/NotificationsScreen.tsx` | **Branché sur le serveur** (`GET /notifications`) : liste groupée par jour, non lus, « tout marquer lu », rafraîchissement, état vide explicite (remplace les données de démonstration) |
+| `config/tarification.json` | Copie embarquée du barème et des réglages du radar, synchronisée avec le backend |
 
 ---
 

@@ -13,6 +13,7 @@ import {
   API_URL, Ride, VehicleType, errorMessage, getToken, placesApi, providersApi, ridesApi, walletApi,
 } from "../services/api";
 import { fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
+import { tarification } from "../services/tarification";
 import { distanceKm, fmtKm } from "../utils/geo";
 import RideChatModal from "../components/RideChatModal";
 import { maskBeninPhone, maskPersonName, rideSecurityPin } from "../utils/phone";
@@ -89,6 +90,10 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const socketRef = useRef<Socket | null>(null);
   const activeRideRef = useRef<Ride | null>(null);
   activeRideRef.current = activeRide;
+  // Dernière position connue, lue par le radar : une ref évite de redémarrer le
+  // rafraîchissement périodique chaque fois que le GPS bouge (toutes les ~10 s).
+  const positionRef = useRef<LatLng | null>(null);
+  positionRef.current = position;
 
   /* ---------- Compte : portefeuille + historique + course en cours ---------- */
   const loadAccount = useCallback(async () => {
@@ -129,9 +134,13 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     setRefreshing(false);
   }, [loadAccount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---------- Courses en attente (Zém Radar) ---------- */
+  /* ---------- Courses en attente (Zém Radar) ----------
+   * La position du chauffeur est transmise au serveur : il écarte les demandes hors du
+   * rayon de recherche (`radar.searchRadiusKm` de la configuration) et les classe de la
+   * plus proche à la plus lointaine. Sans GPS, le radar reste utilisable.
+   */
   const loadPending = useCallback(async () => {
-    const rides = await ridesApi.pending();
+    const rides = await ridesApi.pending(positionRef.current ?? undefined);
     setPending(rides);
     setOffline(false);
     return rides;
@@ -166,6 +175,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     });
     socketRef.current = socket;
     socket.on("connect_error", () => console.warn("Socket AZƆ̀ injoignable :", API_URL));
+    // Une nouvelle demande vient d'être publiée : on rafraîchit le radar tout de suite
+    // au lieu d'attendre le prochain cycle (8 s).
+    socket.on("ride:new", () => {
+      loadPending().catch(() => undefined);
+    });
     return () => { socket.disconnect(); socketRef.current = null; };
   }, [online]);
 
@@ -233,10 +247,21 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const requests = useMemo(() => {
     const withDistance = pending.map((r) => ({
       ride: r,
-      km: position ? distanceKm(position, { latitude: r.originLat, longitude: r.originLng }) : null,
+      // Distance calculée par le serveur quand il a reçu notre position ; sinon,
+      // calcul local (le radar doit rester utilisable sans GPS).
+      km:
+        typeof r.distanceKm === "number"
+          ? r.distanceKm
+          : position
+            ? distanceKm(position, { latitude: r.originLat, longitude: r.originLng })
+            : null,
     }));
     return withDistance.sort((a, b) => (a.km ?? 999) - (b.km ?? 999));
   }, [pending, position]);
+
+  // Rayon de recherche en vigueur (configuration partagée avec le serveur).
+  const searchRadiusKm: number = tarification().radar?.searchRadiusKm ?? 0;
+  const expiryMinutes: number = tarification().radar?.pendingExpiryMinutes ?? 0;
 
   const stats = useMemo(() => {
     const done = history.filter((r) => r.status === "COMPLETED");
@@ -614,7 +639,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
               <View style={styles.radarFilter}>
                 <MaterialIcons name={VEHICLE_ICON[myVehicle]} size={16} color={colors.primary} />
                 <Text style={styles.radarFilterText}>
-                  Radar {VEHICLE_LABEL[myVehicle]} — tu ne vois que ces demandes.
+                  Radar {VEHICLE_LABEL[myVehicle]} — tu ne vois que ces demandes
+                  {searchRadiusKm > 0 ? `, dans un rayon de ${searchRadiusKm} km` : ""}
+                  {expiryMinutes > 0 ? `, qui expirent après ${expiryMinutes} min` : ""}.
                 </Text>
               </View>
             )}
@@ -626,7 +653,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
             ) : requests.length === 0 ? (
               <Text style={styles.emptyText}>
                 {myVehicle
-                  ? `Aucune demande « ${VEHICLE_LABEL[myVehicle]} » autour de toi pour l'instant. Reste en ligne : la liste se met à jour toute seule.`
+                  ? `Aucune demande « ${VEHICLE_LABEL[myVehicle]} » ${
+                      searchRadiusKm > 0 ? `dans un rayon de ${searchRadiusKm} km` : "autour de toi"
+                    } pour l'instant. Reste en ligne : la liste se met à jour toute seule.`
                   : "Aucune demande pour l'instant. Reste en ligne : la liste se met à jour toute seule."}
               </Text>
             ) : (
@@ -642,6 +671,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
                       </Text>
                       <Text style={styles.requestMeta}>
                         {km !== null ? `${fmtKm(km)} de toi · ` : ""}
+                        {typeof ride.expiresInMinutes === "number" && ride.expiresInMinutes <= 5
+                          ? `expire dans ${ride.expiresInMinutes} min · `
+                          : ""}
                         demandée {relativeDay(ride.createdAt).toLowerCase()}
                       </Text>
                     </View>
