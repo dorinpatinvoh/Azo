@@ -11,7 +11,7 @@
     "render:start": "npx prisma migrate deploy && node prisma/seed.js && node dist/main",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "postinstall": "prisma generate",
+    "postinstall": "npx prisma generate",
     "seed": "node prisma/seed.js",
     "providers:list": "node prisma/seed.js list",
     "providers:approve": "node prisma/seed.js approve",
