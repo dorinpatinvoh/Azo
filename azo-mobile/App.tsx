@@ -10,7 +10,6 @@ import {
 import { useFonts as useInter, Inter_400Regular } from "@expo-google-fonts/inter";
 import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import * as Notifications from "expo-notifications";
 
 import SplashScreen from "./screens/SplashScreen";
 import OtpLoginScreen from "./screens/OtpLoginScreen";
@@ -41,29 +40,18 @@ import {
   setApiUrl,
   setToken,
 } from "./services/api";
-import { registerForPushNotifications } from "./services/pushNotifications";
+import {
+  registerForPushNotifications,
+  setupNotificationHandler,
+  subscribeNotificationResponse,
+} from "./services/pushNotifications";
 import { colors, radius, spacing } from "./theme/colors";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Initialisation sûre (ne s'exécute pas sur Expo Go Android)
+setupNotificationHandler();
 
 type Route = ScreenId | "menu";
 
-/**
- * Écran d'arrivée après connexion :
- * - ADMIN -> Console de validation des prestataires
- * - AGENCY -> Tableau de bord de la flotte d'agence
- * - DRIVER + providerType === COURIER -> Espace Coursier / Livreur
- * - DRIVER -> Zém Radar (Chauffeur Zem / Voiture)
- * - Dossier prestataire en cours -> Suivi du dossier
- * - Sinon -> Accueil client
- */
 function routeFor(
   role: string,
   providerStatus?: string | null,
@@ -165,12 +153,12 @@ export default function App() {
   }, []);
 
   const handleRideNotification = useCallback(
-    (notification: Notifications.Notification) => {
-      const notificationId = notification.request.identifier;
+    (notification: any) => {
+      const notificationId = notification?.request?.identifier;
       if (handledNotificationRef.current === notificationId) return;
       handledNotificationRef.current = notificationId;
 
-      const notifiedRideId = notification.request.content.data?.rideId;
+      const notifiedRideId = notification?.request?.content?.data?.rideId;
       if (typeof notifiedRideId !== "string") return;
       if (!sessionToken) {
         pendingRideNotificationRef.current = notifiedRideId;
@@ -199,13 +187,8 @@ export default function App() {
   }, [sessionToken]);
 
   useEffect(() => {
-    const lastResponse = Notifications.getLastNotificationResponse();
-    if (lastResponse?.notification) handleRideNotification(lastResponse.notification);
-
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      handleRideNotification(response.notification);
-    });
-    return () => subscription.remove();
+    const unsubscribe = subscribeNotificationResponse(handleRideNotification);
+    return () => unsubscribe();
   }, [handleRideNotification]);
 
   useEffect(() => {
@@ -326,154 +309,154 @@ export default function App() {
       <RootErrorBoundary onReset={() => goTo("splash")}>
         <StatusBar style="dark" />
 
-      {route === "splash" && <SplashScreen onStart={() => goTo("otp")} />}
+        {route === "splash" && <SplashScreen onStart={() => goTo("otp")} />}
 
-      {route === "otp" && (
-        <OtpLoginScreen
-          onVerified={(role?: string | null, provider?: ProviderRef | null) => {
-            setSessionToken(getToken());
-            goTo(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null));
-          }}
-          onBack={() => goTo("splash")}
-        />
-      )}
+        {route === "otp" && (
+          <OtpLoginScreen
+            onVerified={(role?: string | null, provider?: ProviderRef | null) => {
+              setSessionToken(getToken());
+              goTo(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null));
+            }}
+            onBack={() => goTo("splash")}
+          />
+        )}
 
-      {route === "home" && (
-        <HomeScreen
-          onSelectService={handleSelectService}
-          onNavigateTab={goTo}
-        />
-      )}
+        {route === "home" && (
+          <HomeScreen
+            onSelectService={handleSelectService}
+            onNavigateTab={goTo}
+          />
+        )}
 
-      {route === "ride-request" && (
-        <RideBookingScreen
-          service={rideVehicle === "car-confort" ? "transport" : "zem"}
-          onBack={() => goTo("home")}
-          onConfirmed={(id, label) => {
-            setRideId(id);
-            setRideLabel(label);
-            goTo("ride-tracking");
-          }}
-        />
-      )}
+        {route === "ride-request" && (
+          <RideBookingScreen
+            service={rideVehicle === "car-confort" ? "transport" : "zem"}
+            onBack={() => goTo("home")}
+            onConfirmed={(id, label) => {
+              setRideId(id);
+              setRideLabel(label);
+              goTo("ride-tracking");
+            }}
+          />
+        )}
 
-      {route === "ride-tracking" && rideId && (
-        <LiveTrackingScreen
-          rideId={rideId}
-          destinationLabel={rideLabel}
-          onClose={() => goTo("home")}
-          onFinish={() => goTo("ride-rating")}
-        />
-      )}
-      {route === "ride-tracking" && !rideId && (
-        <View style={styles.loadingContainer}>
-          <Text>Aucune course à suivre.</Text>
-          <Pressable onPress={() => goTo("home")} style={{ marginTop: spacing.md }}>
-            <Text style={{ color: colors.primary, fontWeight: "700" }}>Retour à l'accueil</Text>
-          </Pressable>
-        </View>
-      )}
+        {route === "ride-tracking" && rideId && (
+          <LiveTrackingScreen
+            rideId={rideId}
+            destinationLabel={rideLabel}
+            onClose={() => goTo("home")}
+            onFinish={() => goTo("ride-rating")}
+          />
+        )}
+        {route === "ride-tracking" && !rideId && (
+          <View style={styles.loadingContainer}>
+            <Text>Aucune course à suivre.</Text>
+            <Pressable onPress={() => goTo("home")} style={{ marginTop: spacing.md }}>
+              <Text style={{ color: colors.primary, fontWeight: "700" }}>Retour à l'accueil</Text>
+            </Pressable>
+          </View>
+        )}
 
-      {route === "ride-rating" && (
-        <RideRatingScreen rideId={rideId} onDone={() => goTo("home")} />
-      )}
+        {route === "ride-rating" && (
+          <RideRatingScreen rideId={rideId} onDone={() => goTo("home")} />
+        )}
 
-      {route === "delivery" && (
-        <DeliveryScreen onBack={() => goTo("home")} onConfirm={() => goTo("home")} />
-      )}
+        {route === "delivery" && (
+          <DeliveryScreen onBack={() => goTo("home")} onConfirm={() => goTo("home")} />
+        )}
 
-      {route === "rental" && (
-        <VehicleRentalScreen onBack={() => goTo("home")} onReserve={() => goTo("home")} />
-      )}
+        {route === "rental" && (
+          <VehicleRentalScreen onBack={() => goTo("home")} onReserve={() => goTo("home")} />
+        )}
 
-      {route === "wallet" && <WalletScreen onBack={() => goTo("home")} />}
+        {route === "wallet" && <WalletScreen onBack={() => goTo("home")} />}
 
-      {route === "courses" && (
-        <CoursesScreen
-          onNavigateTab={goTo}
-          onRequestRide={() => goTo("ride-request")}
-          onTrackRide={(id) => {
-            setRideId(id);
-            setRideLabel(undefined);
-            goTo("ride-tracking");
-          }}
-        />
-      )}
+        {route === "courses" && (
+          <CoursesScreen
+            onNavigateTab={goTo}
+            onRequestRide={() => goTo("ride-request")}
+            onTrackRide={(id) => {
+              setRideId(id);
+              setRideLabel(undefined);
+              goTo("ride-tracking");
+            }}
+          />
+        )}
 
-      {route === "profile" && (
-        <ProfileScreen
-          onNavigateTab={goTo}
-          onOpenNotifications={() => goTo("notifications")}
-          onOpenProvider={() => goTo("provider-status")}
-          onLogout={handleLogout}
-        />
-      )}
+        {route === "profile" && (
+          <ProfileScreen
+            onNavigateTab={goTo}
+            onOpenNotifications={() => goTo("notifications")}
+            onOpenProvider={() => goTo("provider-status")}
+            onLogout={handleLogout}
+          />
+        )}
 
-      {route === "provider-onboarding" && (
-        <ProviderOnboardingScreen
-          onSubmitted={() => goTo("provider-status")}
-          onBack={() => goTo("home")}
-        />
-      )}
+        {route === "provider-onboarding" && (
+          <ProviderOnboardingScreen
+            onSubmitted={() => goTo("provider-status")}
+            onBack={() => goTo("home")}
+          />
+        )}
 
-      {route === "provider-status" && (
-        <ProviderStatusScreen
-          onEdit={() => goTo("provider-onboarding")}
-          onEnterWorkspace={(type: ProviderType) =>
-            goTo(
-              type === "AGENCY"
-                ? "agency-dashboard"
-                : type === "COURIER"
-                ? "courier-home"
-                : "driver-home"
-            )
-          }
-          onBack={() => goTo("home")}
-        />
-      )}
+        {route === "provider-status" && (
+          <ProviderStatusScreen
+            onEdit={() => goTo("provider-onboarding")}
+            onEnterWorkspace={(type: ProviderType) =>
+              goTo(
+                type === "AGENCY"
+                  ? "agency-dashboard"
+                  : type === "COURIER"
+                  ? "courier-home"
+                  : "driver-home"
+              )
+            }
+            onBack={() => goTo("home")}
+          />
+        )}
 
-      {route === "admin-providers" && (
-        <AdminProvidersScreen
-          onBack={handleLogout}
-          onOpenDashboard={() => goTo("admin-dashboard")}
-        />
-      )}
+        {route === "admin-providers" && (
+          <AdminProvidersScreen
+            onBack={handleLogout}
+            onOpenDashboard={() => goTo("admin-dashboard")}
+          />
+        )}
 
-      {route === "driver-home" && (
-        <DriverHomeScreen
-          onLogout={handleLogout}
-          onOpenDossier={() => goTo("provider-status")}
-        />
-      )}
+        {route === "driver-home" && (
+          <DriverHomeScreen
+            onLogout={handleLogout}
+            onOpenDossier={() => goTo("provider-status")}
+          />
+        )}
 
-      {route === "courier-home" && (
-        <CourierHomeScreen
-          onLogout={handleLogout}
-          onOpenDossier={() => goTo("provider-status")}
-        />
-      )}
+        {route === "courier-home" && (
+          <CourierHomeScreen
+            onLogout={handleLogout}
+            onOpenDossier={() => goTo("provider-status")}
+          />
+        )}
 
-      {route === "agency-dashboard" && (
-        <AgencyDashboardScreen
-          onBack={handleLogout}
-          onOpenDossier={() => goTo("provider-status")}
-        />
-      )}
+        {route === "agency-dashboard" && (
+          <AgencyDashboardScreen
+            onBack={handleLogout}
+            onOpenDossier={() => goTo("provider-status")}
+          />
+        )}
 
-      {route === "admin-dashboard" && (
-        <AdminDashboardScreen
-          onBack={() => goTo("admin-providers")}
-          onOpenProviders={() => goTo("admin-providers")}
-        />
-      )}
+        {route === "admin-dashboard" && (
+          <AdminDashboardScreen
+            onBack={() => goTo("admin-providers")}
+            onOpenProviders={() => goTo("admin-providers")}
+          />
+        )}
 
-      {route === "marketplace" && (
-        <MarketplaceEscrowScreen onBack={() => goTo("home")} onConfirm={() => goTo("home")} />
-      )}
+        {route === "marketplace" && (
+          <MarketplaceEscrowScreen onBack={() => goTo("home")} onConfirm={() => goTo("home")} />
+        )}
 
-      {route === "notifications" && <NotificationsScreen onBack={() => goTo("home")} />}
+        {route === "notifications" && <NotificationsScreen onBack={() => goTo("home")} />}
 
-      {route === "menu" && <DevMenuScreen onSelect={(id) => goTo(id)} />}
+        {route === "menu" && <DevMenuScreen onSelect={(id) => goTo(id)} />}
       </RootErrorBoundary>
     </SafeAreaProvider>
   );
