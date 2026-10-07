@@ -13,12 +13,7 @@ const CONFIRMATION_MINUTES = 10;
 
 @Injectable()
 export class RideSettlementService {
-  constructor(
-    private prisma: PrismaService,
-    private rides: RidesService,
-    private notifications: NotificationsService,
-    private gateway: RidesGateway,
-  ) {}
+  constructor(private prisma: PrismaService, private rides: RidesService, private notifications: NotificationsService, private gateway: RidesGateway) {}
 
   async markDroppedOff(rideId: string, driverId: string) {
     const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
@@ -26,8 +21,7 @@ export class RideSettlementService {
     if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course doit être en cours");
     const deadline = new Date(Date.now() + CONFIRMATION_MINUTES * 60_000);
     const row = await this.prisma.$queryRawUnsafe<any[]>(
-      `INSERT INTO "RideSettlement" ("id","rideId","dropoffAt","confirmationDeadline") VALUES (gen_random_uuid()::text,$1,NOW(),$2) ON CONFLICT ("rideId") DO UPDATE SET "dropoffAt"=NOW(),"confirmationDeadline"=$2,"problemReportedAt"=NULL,"problemReason"=NULL,"clientConfirmedAt"=NULL RETURNING *`,
-      rideId, deadline,
+      `INSERT INTO "RideSettlement" ("id","rideId","dropoffAt","confirmationDeadline") VALUES (md5(random()::text || clock_timestamp()::text),$1,NOW(),$2) ON CONFLICT ("rideId") DO UPDATE SET "dropoffAt"=NOW(),"confirmationDeadline"=$2,"problemReportedAt"=NULL,"problemReason"=NULL,"clientConfirmedAt"=NULL RETURNING *`, rideId, deadline,
     );
     await this.notifications.push(ride.clientId, "Confirme ton arrivée", `Le Zem indique t'avoir déposé. Confirme dans ${CONFIRMATION_MINUTES} minutes ou signale un problème.`, "payment");
     this.gateway.emitStatus(rideId, "DROPPED_OFF_PENDING");
@@ -63,15 +57,12 @@ export class RideSettlementService {
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RideSettlementController {
   constructor(private settlement: RideSettlementService) {}
-
   @Post(":id/dropoff")
   @Roles(Role.DRIVER)
   dropoff(@Param("id") id: string, @CurrentUser() user: any) { return this.settlement.markDroppedOff(id, user.userId); }
-
   @Post(":id/confirm-dropoff")
   @Roles(Role.CLIENT)
   confirm(@Param("id") id: string, @CurrentUser() user: any) { return this.settlement.confirm(id, user.userId); }
-
   @Post(":id/report-problem")
   @Roles(Role.CLIENT)
   report(@Param("id") id: string, @CurrentUser() user: any, @Body() body: { reason?: string }) { return this.settlement.reportProblem(id, user.userId, body?.reason ?? ""); }
