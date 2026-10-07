@@ -3,21 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "nest build",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:prod": "node dist/main",
-    "render:build": "npm install --include=dev && npx prisma generate && npm run build",
-    "render:start": "npx prisma migrate deploy && node prisma/seed.js && node dist/main",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "postinstall": "npx prisma generate",
-    "seed": "node prisma/seed.js",
-    "providers:list": "node prisma/seed.js list",
-    "providers:approve": "node prisma/seed.js approve",
-    "test": "jest",
-    "test:watch": "jest --watch"
-  },
+  "build": "nest build",
+  "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+  "start": "nest start",
+  "start:dev": "nest start --watch",
+  "start:debug": "nest start --debug --watch",
+  "start:prod": "node dist/main",
+  "test": "jest",
+  "render:build": "npm install --include=dev --ignore-scripts && npx prisma generate && npm run build"
+},
   "prisma": {
     "seed": "node prisma/seed.js"
   },
