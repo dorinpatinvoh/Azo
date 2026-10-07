@@ -24,12 +24,13 @@ export const VEHICLE_ICON: Record<VehicleType, keyof typeof MaterialIcons.glyphM
 export const STATUS_INFO: Record<RideStatus, { label: string; color: string; bg: string }> = {
   PENDING: { label: "Recherche d'un conducteur…", color: colors.tertiary, bg: colors.tertiaryFixed },
   MATCHED: { label: "Conducteur en route", color: colors.primary, bg: colors.primaryFixed },
+  ARRIVED: { label: "Conducteur arrivé", color: colors.primary, bg: colors.primaryFixed },
   IN_PROGRESS: { label: "Course en cours", color: colors.secondary, bg: colors.secondaryFixed },
   COMPLETED: { label: "Terminée", color: colors.onSurfaceVariant, bg: colors.surfaceContainer },
   CANCELLED: { label: "Annulée", color: colors.error, bg: colors.errorContainer },
 };
 
-export const ACTIVE_STATUSES: RideStatus[] = ["PENDING", "MATCHED", "IN_PROGRESS"];
+export const ACTIVE_STATUSES: RideStatus[] = ["PENDING", "MATCHED", "ARRIVED", "IN_PROGRESS"];
 
 export function relativeDay(iso: string) {
   const d = new Date(iso);

@@ -8,7 +8,8 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { API_URL, Ride, RideStatus, VehicleType, errorMessage, getToken, rideApi } from "../services/api";
 import RideChatModal from "../components/RideChatModal";
-import { maskBeninPhone, maskPersonName, rideSecurityPin } from "../utils/phone";
+import { maskBeninPhone, maskPersonName } from "../utils/phone";
+import { getDrivingRoute } from "../services/routing";
 
 type Props = { rideId: string; destinationLabel?: string; onClose: () => void; onFinish?: () => void };
 type LatLng = { latitude: number; longitude: number };
@@ -18,6 +19,7 @@ const ERROR_COLOR = "#B3261B";
 const STATUS_TEXT: Record<RideStatus, string> = {
   PENDING: "Recherche d'un chauffeur…",
   MATCHED: "Ton chauffeur arrive",
+  ARRIVED: "Ton chauffeur est arrivé",
   IN_PROGRESS: "Course en cours",
   COMPLETED: "Course terminée",
   CANCELLED: "Course annulée",
@@ -56,6 +58,12 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const insets = useSafeAreaInsets();
   const [ride, setRide] = useState<Ride | null>(null);
   const [driverPos, setDriverPos] = useState<LatLng | null>(null);
+  const [driverRoute, setDriverRoute] = useState<{
+    coordinates: LatLng[];
+    durationMinutes: number;
+    start: LatLng;
+    target: LatLng;
+  } | null>(null);
   const [failures, setFailures] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -102,12 +110,62 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   const origin = ride ? { latitude: ride.originLat, longitude: ride.originLng } : null;
   const destination = ride ? { latitude: ride.destLat, longitude: ride.destLng } : null;
-  const target = ride?.status === "MATCHED" ? origin : destination;
+  const target = ride?.status === "MATCHED" || ride?.status === "ARRIVED" ? origin : destination;
 
-  const etaMinutes = useMemo(() => {
-    if (!driverPos || !target || ride?.status === "COMPLETED") return null;
+  // L'itinéraire routier et l'ETA sont recalculés à chaque nouvelle position GPS du Zem.
+  // Si OSRM ne répond pas, on garde une estimation à vol d'oiseau et une ligne directe.
+  useEffect(() => {
+    if (!driverPos || !target || (ride?.status !== "MATCHED" && ride?.status !== "IN_PROGRESS")) {
+      setDriverRoute(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    const timer = setTimeout(() => {
+      getDrivingRoute(driverPos, target, controller.signal)
+        .then((route) => {
+          if (active) setDriverRoute({ ...route, start: driverPos, target });
+        })
+        .catch(() => {
+          if (active) setDriverRoute(null);
+        });
+    }, 700);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [driverPos?.latitude, driverPos?.longitude, target?.latitude, target?.longitude, ride?.status]);
+
+  const fallbackEtaMinutes = useMemo(() => {
+    if (!driverPos || !target || (ride?.status !== "MATCHED" && ride?.status !== "IN_PROGRESS")) return null;
     return Math.max(1, Math.ceil(((distanceKm(driverPos, target) * 1.3) / 25) * 60));
-  }, [driverPos, target?.latitude, target?.longitude, ride?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [driverPos?.latitude, driverPos?.longitude, target?.latitude, target?.longitude, ride?.status]);
+
+  const routeStillRelevant = !!(
+    driverRoute &&
+    driverPos &&
+    target &&
+    distanceKm(driverRoute.start, driverPos) < 0.5 &&
+    distanceKm(driverRoute.target, target) < 0.05
+  );
+  const etaMinutes =
+    ride?.status === "ARRIVED" || ride?.status === "COMPLETED" || ride?.status === "CANCELLED"
+      ? null
+      : routeStillRelevant
+        ? driverRoute?.durationMinutes ?? fallbackEtaMinutes
+        : fallbackEtaMinutes;
+
+  const trackingPolyline = useMemo(() => {
+    if (driverPos && target) {
+      if (routeStillRelevant && driverRoute) return driverRoute.coordinates;
+      return [driverPos, target];
+    }
+    if (ride?.status === "MATCHED" || ride?.status === "ARRIVED") return [];
+    return origin && destination ? [origin, destination] : [];
+  }, [driverPos, target?.latitude, target?.longitude, driverRoute, routeStillRelevant, ride?.status, origin, destination]);
 
   const osmMarkers = useMemo<OSMMarker[]>(() => {
     if (!origin || !destination) return [];
@@ -149,7 +207,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const finished = done || ride.status === "CANCELLED";
   // On ne peut annuler que tant que la course n'a pas démarré : après le départ,
   // le client paie le trajet (le backend refuse toute annulation en IN_PROGRESS).
-  const cancellable = ride.status === "PENDING" || ride.status === "MATCHED";
+  const cancellable = ride.status === "PENDING" || ride.status === "MATCHED" || ride.status === "ARRIVED";
   const paymentLabel =
     ride.status === "CANCELLED" ? "aucun débit"
     : done ? "AZƆ̀ Pay (débité)"
@@ -188,7 +246,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
       <OSMMapView
         center={driverPos || origin}
         markers={osmMarkers}
-        polyline={driverPos && target ? [driverPos, target] : [origin, destination]}
+        polyline={trackingPolyline}
       />
 
       {failures >= 2 && (
@@ -245,27 +303,40 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
               <MaterialIcons name="chat-bubble-outline" size={18} color={colors.primary} />
               <Text style={styles.chatBtnText}>Message</Text>
             </Pressable>
-            {!done && etaMinutes != null && (
+            {ride.status === "ARRIVED" ? (
+              <View style={styles.arrivedBadge}>
+                <MaterialIcons name="check-circle" size={16} color={colors.primary} />
+                <Text style={styles.arrivedBadgeText}>Arrivé</Text>
+              </View>
+            ) : !done && etaMinutes != null ? (
               <View style={styles.eta}>
                 <Text style={styles.etaValue}>{etaMinutes}</Text>
-                <Text style={styles.etaUnit}>min</Text>
+                <Text style={styles.etaUnit}>{ride.status === "MATCHED" ? "min pour toi" : "min"}</Text>
               </View>
-            )}
+            ) : null}
           </View>
         )}
 
-        {ride.status === "MATCHED" && (
+        {ride.status === "ARRIVED" && (
           <View style={styles.pinBanner}>
             <MaterialIcons name="shield" size={20} color={colors.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.pinBannerTitle}>Code Bouclier AZƆ̀ (à donner au chauffeur)</Text>
+              <Text style={styles.pinBannerTitle}>
+                {ride.vehicleType.startsWith("ZEM_") ? "Ton Zem est arrivé" : "Ton chauffeur est arrivé"}
+              </Text>
               <Text style={styles.pinBannerSub}>
-                Vérifie qu'il tape ces 4 chiffres avant de monter
+                {ride.pickupCode
+                  ? "Vérifie qu'il est devant toi, puis donne-lui ce code pour démarrer."
+                  : "Le code de sécurité arrive…"}
               </Text>
             </View>
-            <View style={styles.pinCodePill}>
-              <Text style={styles.pinCodeText}>{rideSecurityPin(ride.id)}</Text>
-            </View>
+            {ride.pickupCode ? (
+              <View style={styles.pinCodePill}>
+                <Text style={styles.pinCodeText}>{ride.pickupCode}</Text>
+              </View>
+            ) : (
+              <ActivityIndicator size="small" color={colors.primary} />
+            )}
           </View>
         )}
 
@@ -334,6 +405,8 @@ const styles = StyleSheet.create({
   pinCodePill: { backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 6 },
   pinCodeText: { ...typography.headlineSm, color: "#fff", fontWeight: "800", letterSpacing: 2 },
   eta: { alignItems: "center", backgroundColor: colors.primaryFixed, borderRadius: radius.lg, paddingHorizontal: 12, paddingVertical: 6 },
+  arrivedBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 8 },
+  arrivedBadgeText: { ...typography.labelSm, color: colors.primary, fontWeight: "800" },
   etaValue: { ...typography.headlineSm, color: colors.primary, fontWeight: "800" },
   etaUnit: { ...typography.labelSm, color: colors.primary },
   price: { ...typography.bodyMd, color: colors.onSurface, fontWeight: "700" },

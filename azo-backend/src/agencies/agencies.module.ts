@@ -230,7 +230,7 @@ export class AgenciesService {
         select: { price: true, commission: true, rating: true, driverId: true },
       }),
       this.prisma.ride.findMany({
-        where: { driverId: { in: driverIds }, status: { in: ["PENDING", "MATCHED", "IN_PROGRESS"] } },
+        where: { driverId: { in: driverIds }, status: { in: ["PENDING", "MATCHED", "ARRIVED", "IN_PROGRESS"] } },
         select: { driverId: true, status: true },
       }),
       this.prisma.providerProfile.findMany({

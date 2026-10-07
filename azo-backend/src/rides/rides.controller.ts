@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from "class-validator";
 import { Type } from "class-transformer";
 import { Role } from "@prisma/client";
 import { RidesService } from "./rides.service";
@@ -31,10 +31,10 @@ class RateDto {
 }
 
 class StartRideDto {
-  @IsOptional()
   @IsString()
-  @MaxLength(8)
-  pin?: string;
+  @Length(4, 4)
+  @Matches(/^\d{4}$/)
+  pin: string;
 }
 
 class SendChatDto {
@@ -88,6 +88,12 @@ export class RidesController {
   @Roles(Role.DRIVER)
   accept(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.accept(id, user.userId);
+  }
+
+  @Post(":id/arrive")
+  @Roles(Role.DRIVER)
+  arrive(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.arrive(id, user.userId);
   }
 
   @Post(":id/start")

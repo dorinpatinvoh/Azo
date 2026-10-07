@@ -83,22 +83,29 @@ CLIENT                        SERVEUR                         CHAUFFEURS
   │◄── « Course terminée »   ◄───│───► « Paiement reçu »            │
 ```
 
+Pour une course Zem, après acceptation le client suit la position GPS du chauffeur sur la
+carte avec un itinéraire routier et un ETA recalculés. Le chauffeur confirme **« Je suis
+arrivé »** (`POST /rides/:id/arrive`) au point de prise en charge. Le statut passe alors à
+`ARRIVED`, une notification système est tentée, et le code aléatoire à 4 chiffres devient
+visible **uniquement au client**. Le démarrage (`POST /rides/:id/start`) exige ce statut et
+le code correct; le serveur refuse toute tentative avant l'arrivée.
+
 ## 5. Notifications
 
 | Événement | Destinataire | Message |
 |---|---|---|
 | Demande publiée | chauffeurs du bon véhicule (max `driverNotificationMax`) | « Nouvelle demande de course — ouvre ton radar pour la prendre. » |
-| Course acceptée | client | « Chauffeur trouvé » |
+| Course acceptée | client | « Chauffeur trouvé » (in-app) |
+| Chauffeur arrivé (`ARRIVED`) | client | « Ton Zem est arrivé » (in-app + Expo Push système) |
 | Course terminée | client + chauffeur | montant débité / gains du chauffeur |
 | Demande expirée | client | « Aucun chauffeur trouvé… aucun montant débité — relance une recherche. » |
 | Annulation | l'autre partie | « Le client a annulé » / « Ton chauffeur a annulé, recherche d'un nouveau chauffeur… » |
 
 Les notifications sont **enregistrées en base** (`Notification`) et affichées dans l'écran
-**Notifications** de l'application (`GET /notifications`, `POST /notifications/read-all`) —
-l'écran groupe les messages par jour, marque les non lus et se met à jour par glissement vers
-le bas. **Aucune notification « push » système** (bannière hors application) n'est envoyée à ce
-stade : l'application doit être ouverte sur le radar, où la demande apparaît en moins de
-8 secondes — et **immédiatement** si la connexne temps réel est active.
+**Notifications** de l'application (`GET /notifications`, `POST /notifications/read-all`). La
+notification d'arrivée est aussi envoyée via l'API Expo Push aux appareils dont le jeton a été
+enregistré (`POST /notifications/push-token`). L'envoi système est best-effort : il exige un
+build natif (pas Expo Go Android) et des credentials FCM v1/APNs configurés dans EAS.
 
 ## 6. Temps réel
 
@@ -106,7 +113,7 @@ stade : l'application doit être ouverte sur le radar, où la demande apparaît 
 |---|---|
 | `ride:new` (socket, diffusé à tous) | prévient les radars ouverts qu'une demande vient d'être publiée : ils se rafraîchissent sans attendre les 8 s du cycle. La charge utile ne contient **aucune donnée personnelle** (ni nom, ni numéro du client). |
 | `ride:status` (socket, par course) | changement de statut poussé au client et au chauffeur concernés. |
-| `driver:location` (socket, par course) | position du chauffeur envoyée au client pendant la course. |
+| `driver:location` (socket, par course) | position du chauffeur envoyée au client pendant la course; elle sert à actualiser l'ETA et l'itinéraire OSRM. La room et les positions sont vérifiées côté serveur. |
 
 En complément : le client recharge son suivi toutes les 3 s, le chauffeur son radar toutes les
 8 s. C'est ce cycle qui garantit le fonctionnement même si le socket est indisponible.
@@ -116,23 +123,28 @@ En complément : le client recharge son suivi toutes les 3 s, le chauffeur son r
 | Fichier | Rôle |
 |---|---|
 | `azo-backend/src/rides/radar.ts` | logique **pure** du radar : âge, expiration, distance (Haversine), rayon, classement |
-| `azo-backend/src/rides/rides.service.ts` | `pending()` (radar + balayage des expirées), `create()` (notifications + diffusion), `expireRide()`, `findOne()` (expiration paresseuse) |
-| `azo-backend/src/rides/rides.controller.ts` | `GET /rides/pending?lat=…&lng=…` (position optionnelle validée) |
-| `azo-backend/src/rides/rides.gateway.ts` | `emitNewRequest()` (`ride:new`), `emitStatus()` |
-| `azo-backend/test/radar.spec.ts` | 15 tests : expiration, bornes, rayon, classement, distances réelles de Cotonou, cas limites |
-| `azo-mobile/screens/DriverHomeScreen.tsx` | radar : envoi de la position, distance serveur, rayon affiché, rafraîchissement immédiat sur `ride:new` |
-| `azo-mobile/screens/LiveTrackingScreen.tsx` | temps restant pendant la recherche, message dédié quand la demande a expiré |
-| `azo-mobile/screens/NotificationsScreen.tsx` | écran Notifications branché sur le serveur (liste, non lus, « tout marquer lu », rafraîchissement) |
+| `azo-backend/src/rides/rides.service.ts` | radar, expiration, arrivée, code aléatoire et démarrage sécurisé |
+| `azo-backend/src/rides/rides.controller.ts` | endpoints ride dont `POST /rides/:id/arrive` et le démarrage protégé par code |
+| `azo-backend/src/rides/rides.gateway.ts` | positions GPS et statuts Socket.IO, rooms privées par course |
+| `azo-backend/src/notifications/notifications.module.ts` | inbox, jetons Expo par appareil et envoi push |
+| `azo-backend/prisma/schema.prisma` | statut `ARRIVED`, heure d'arrivée, code de prise en charge et jetons push |
+| `azo-mobile/screens/DriverHomeScreen.tsx` | bouton « Je suis arrivé », puis saisie du code client |
+| `azo-mobile/screens/LiveTrackingScreen.tsx` | ETA live, itinéraire routier, bannière d'arrivée et code client |
+| `azo-mobile/services/routing.ts` | route/ETA OSRM, avec repli quand l'API est indisponible |
+| `azo-mobile/services/pushNotifications.ts` | permission système et enregistrement du jeton Expo |
+| `azo-mobile/screens/NotificationsScreen.tsx` | écran Notifications (liste, non lus, « tout marquer lu », rafraîchissement) |
 
 ## 8. Points connus / chantiers ouverts
 
-1. **Pas de notification « push » système** : l'application doit être ouverte sur le radar. Pour
-   notifier un téléphone en veille, il faudra enregistrer un jeton Expo Push par appareil
-   (`expo-notifications`) et envoyer via le service Expo — chantier distinct.
-2. **Position du chauffeur non conservée** : elle est transmise à chaque interrogation du radar
-   et n'est pas stockée en base. Un dispatch serveur « au plus proche » (sans que le chauffeur
-   interroge) demanderait d'enregistrer la dernière position connue.
-3. **Expiration paresseuse** : les demandes expirées sont annulées quand un radar ou un client
+1. **Push système** : l'envoi à l'arrivée est implémenté via Expo Push. La livraison réelle
+   nécessite le project ID EAS, un build natif et les credentials FCM v1/APNs; Expo Go Android
+   ne prend pas en charge les push distants depuis le SDK 53.
+2. **Position du chauffeur non conservée** : elle est envoyée en temps réel par Socket.IO, mais
+   la dernière position n'est pas stockée en base. Un dispatch serveur « au plus proche »
+   demanderait de l'enregistrer.
+3. **Itinéraire OSRM best-effort** : le service public gratuit peut être indisponible ou limiter
+   le trafic; l'app revient alors à la distance directe et à une ETA approximative.
+4. **Expiration paresseuse** : les demandes expirées sont annulées quand un radar ou un client
    recharge — il n'y a pas de tâche planifiée.
-4. **Rayon et délai uniques** : les mêmes valeurs s'appliquent à tous les véhicules (une seule
+5. **Rayon et délai uniques** : les mêmes valeurs s'appliquent à tous les véhicules (une seule
    section `radar` dans la configuration).
