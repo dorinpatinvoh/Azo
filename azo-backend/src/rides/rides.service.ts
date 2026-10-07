@@ -214,29 +214,66 @@ export class RidesService {
   /** Le chauffeur signale son arrivée avant que le client ne révèle son code. */
   async arrive(rideId: string, driverId: string) {
     const ride = await this.getOwnedByDriver(rideId, driverId);
+
+    // Idempotent : un double appui, un renvoi après coupure réseau ou un écran pas
+    // encore rafraîchi ne doivent pas afficher d'erreur au chauffeur déjà sur place.
+    if (ride.status === "ARRIVED") {
+      this.gateway.emitStatus(rideId, "ARRIVED");
+      return this.withoutPickupCode(ride);
+    }
     if (ride.status !== "MATCHED") {
       throw new BadRequestException("Seul un chauffeur en route vers le client peut signaler son arrivée.");
     }
 
-    const { count } = await this.prisma.ride.updateMany({
-      where: { id: rideId, driverId, status: "MATCHED" },
-      data: { status: "ARRIVED", driverArrivedAt: new Date() },
-    });
+    let count = 0;
+    try {
+      ({ count } = await this.prisma.ride.updateMany({
+        where: { id: rideId, driverId, status: "MATCHED" },
+        data: { status: "ARRIVED", driverArrivedAt: new Date() },
+      }));
+    } catch (error) {
+      throw this.databaseOutOfDate(error, "signaler l'arrivée");
+    }
     if (count === 0) throw new BadRequestException("Le statut de la course a changé. Actualise l'écran.");
 
     const arrivedRide = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId } });
     const arrivalTitle = this.pricing.isZem(arrivedRide.vehicleType)
       ? "Ton Zem est arrivé"
       : "Ton chauffeur est arrivé";
-    await this.notifications.push(
-      arrivedRide.clientId,
-      arrivalTitle,
-      "Ton chauffeur est au point de prise en charge. Donne-lui le code Bouclier affiché dans l'application pour démarrer.",
-      "ride",
-      { sendPush: true, data: { event: "ride-arrived", rideId } }
-    );
-    this.gateway.emitStatus(rideId, "ARRIVED");
+
+    // L'arrivée est déjà enregistrée : une panne de notification (inbox, Expo Push)
+    // ne doit plus faire échouer la requête et bloquer le chauffeur sur « MATCHED ».
+    await this.notifications
+      .push(
+        arrivedRide.clientId,
+        arrivalTitle,
+        "Ton chauffeur est au point de prise en charge. Donne-lui le code Bouclier affiché dans l'application pour démarrer.",
+        "ride",
+        { sendPush: true, data: { event: "ride-arrived", rideId } }
+      )
+      .catch(() => null);
+    try {
+      this.gateway.emitStatus(rideId, "ARRIVED");
+    } catch {
+      // Socket.IO indisponible : le client récupère le statut au prochain rafraîchissement.
+    }
     return this.withoutPickupCode(arrivedRide);
+  }
+
+  /**
+   * Une base déployée sans la migration « ARRIVED » renvoie une erreur Prisma brute
+   * (valeur d'enum ou colonne inconnue) affichée telle quelle dans l'application.
+   * On la traduit en consigne exploitable au lieu d'un « Internal server error ».
+   */
+  private databaseOutOfDate(error: unknown, action: string) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/ARRIVED|driverArrivedAt|pickupCode|column .* does not exist|invalid input value for enum/i.test(message)) {
+      return new BadRequestException(
+        `Le serveur AZƆ̀ n'est pas à jour : impossible de ${action}. ` +
+          "Déploie la dernière version du backend puis exécute « npx prisma migrate deploy »."
+      );
+    }
+    return error instanceof Error ? error : new Error(message);
   }
 
   async start(rideId: string, driverId: string, pin?: string) {

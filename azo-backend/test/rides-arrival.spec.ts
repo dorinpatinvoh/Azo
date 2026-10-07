@@ -122,6 +122,33 @@ describe("sécurisation de l'arrivée et du démarrage d'une course", () => {
     expect(result).not.toHaveProperty("pickupCode");
   });
 
+  it("accepte un second appui sur « Je suis arrivé » sans erreur", async () => {
+    const { service, prisma, gateway } = makeService("ARRIVED");
+
+    const result = await service.arrive(rideId, driverId);
+
+    expect(prisma.ride.updateMany).not.toHaveBeenCalled();
+    expect(gateway.emitStatus).toHaveBeenCalledWith(rideId, "ARRIVED");
+    expect(result).not.toHaveProperty("pickupCode");
+  });
+
+  it("n'échoue pas si la notification du client tombe en panne", async () => {
+    const { service, prisma, notifications } = makeService("MATCHED");
+    prisma.ride.findUniqueOrThrow.mockResolvedValue({ ...makeService("ARRIVED").ride, status: "ARRIVED" });
+    notifications.push.mockRejectedValue(new Error("Expo indisponible"));
+
+    await expect(service.arrive(rideId, driverId)).resolves.toMatchObject({ status: "ARRIVED" });
+  });
+
+  it("explique qu'il faut migrer la base si l'enum ARRIVED manque", async () => {
+    const { service, prisma } = makeService("MATCHED");
+    prisma.ride.updateMany.mockRejectedValue(
+      new Error('invalid input value for enum "RideStatus": "ARRIVED"')
+    );
+
+    await expect(service.arrive(rideId, driverId)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it("ne renvoie le code que dans le détail client au statut ARRIVED", async () => {
     const { service } = makeService("ARRIVED");
 
