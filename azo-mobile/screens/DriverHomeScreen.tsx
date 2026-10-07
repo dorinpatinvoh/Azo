@@ -280,6 +280,19 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
         "Le client a été averti. Demande-lui le code Bouclier affiché dans son application avant de démarrer."
       );
     } catch (e) {
+      // La requête a pu aboutir côté serveur (réseau coupé à la réponse, double appui) :
+      // on relit la course avant d'alarmer le chauffeur pour rien.
+      try {
+        const fresh = await ridesApi.get(activeRide.id);
+        if (fresh.status === "ARRIVED" || fresh.status === "IN_PROGRESS") {
+          setActiveRide(fresh);
+          setPinInput("");
+          setBusy(false);
+          return;
+        }
+      } catch {
+        // Pas de réseau non plus pour la relecture : on affiche l'erreur d'origine.
+      }
       Alert.alert("Impossible de confirmer l'arrivée", errorMessage(e));
     } finally {
       setBusy(false);
