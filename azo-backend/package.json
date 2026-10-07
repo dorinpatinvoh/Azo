@@ -13,7 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "test": "jest",
-    "render:build": "npm install && node node_modules/prisma/build/index.js generate && npm run build"
+    "render:build": "npm ci && npx --no-install prisma generate && npm run build"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
