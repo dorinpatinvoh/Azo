@@ -70,18 +70,3 @@ export function maskPersonName(fullName?: string | null, fallback = "Utilisateur
   const lastInitial = parts[parts.length - 1].charAt(0).toUpperCase();
   return `${firstName} ${lastInitial}.`;
 }
-
-/**
- * Génère le Code Bouclier AZƆ̀ à 4 chiffres (déterministe par ID de course)
- * identique côté Client et côté Chauffeur.
- */
-export function rideSecurityPin(rideId?: string | null): string {
-  if (!rideId) return "4821";
-  let hash = 2166136261;
-  for (let i = 0; i < rideId.length; i++) {
-    hash ^= rideId.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  const num = (Math.abs(hash) % 9000) + 1000;
-  return String(num);
-}

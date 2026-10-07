@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
@@ -8,8 +8,9 @@ import {
   PlusJakartaSans_800ExtraBold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import { useFonts as useInter, Inter_400Regular } from "@expo-google-fonts/inter";
-import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert } from "react-native";
+import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import * as Notifications from "expo-notifications";
 
 import SplashScreen from "./screens/SplashScreen";
 import OtpLoginScreen from "./screens/OtpLoginScreen";
@@ -32,8 +33,25 @@ import DevMenuScreen, { ScreenId } from "./screens/DevMenuScreen";
 import ProviderOnboardingScreen from "./screens/ProviderOnboardingScreen";
 import ProviderStatusScreen from "./screens/ProviderStatusScreen";
 import AdminProvidersScreen from "./screens/AdminProvidersScreen";
-import { ProviderRef, ProviderType, setApiUrl, setToken } from "./services/api";
+import {
+  getToken,
+  notificationsApi,
+  ProviderRef,
+  ProviderType,
+  setApiUrl,
+  setToken,
+} from "./services/api";
+import { registerForPushNotifications } from "./services/pushNotifications";
 import { colors, radius, spacing } from "./theme/colors";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 type Route = ScreenId | "menu";
 
@@ -125,6 +143,10 @@ export default function App() {
   const [rideVehicle, setRideVehicle] = useState<string>("zem-express");
   const [isAuthRestoring, setIsAuthRestoring] = useState<boolean>(true);
   const [forceReady, setForceReady] = useState<boolean>(false);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const pushTokenRef = useRef<string | null>(null);
+  const pendingRideNotificationRef = useRef<string | null>(null);
+  const handledNotificationRef = useRef<string | null>(null);
 
   const [pjsLoaded, pjsError] = usePJS({
     PlusJakartaSans_600SemiBold,
@@ -141,6 +163,59 @@ export default function App() {
   const goTo = useCallback((r: Route) => {
     setRoute(r);
   }, []);
+
+  const handleRideNotification = useCallback(
+    (notification: Notifications.Notification) => {
+      const notificationId = notification.request.identifier;
+      if (handledNotificationRef.current === notificationId) return;
+      handledNotificationRef.current = notificationId;
+
+      const notifiedRideId = notification.request.content.data?.rideId;
+      if (typeof notifiedRideId !== "string") return;
+      if (!sessionToken) {
+        pendingRideNotificationRef.current = notifiedRideId;
+        return;
+      }
+      setRideId(notifiedRideId);
+      setRideLabel(undefined);
+      goTo("ride-tracking");
+    },
+    [goTo, sessionToken]
+  );
+
+  useEffect(() => {
+    if (!sessionToken) return;
+    let active = true;
+    (async () => {
+      const token = await registerForPushNotifications();
+      if (!active || !token || (Platform.OS !== "android" && Platform.OS !== "ios")) return;
+      const platform = Platform.OS;
+      pushTokenRef.current = token;
+      await notificationsApi.registerPushToken(token, platform);
+    })().catch((error) => {
+      console.warn("Le jeton push n'a pas pu être enregistré sur AZƆ̀ :", error);
+    });
+    return () => { active = false; };
+  }, [sessionToken]);
+
+  useEffect(() => {
+    const lastResponse = Notifications.getLastNotificationResponse();
+    if (lastResponse?.notification) handleRideNotification(lastResponse.notification);
+
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      handleRideNotification(response.notification);
+    });
+    return () => subscription.remove();
+  }, [handleRideNotification]);
+
+  useEffect(() => {
+    const pendingRideId = pendingRideNotificationRef.current;
+    if (!sessionToken || !pendingRideId) return;
+    pendingRideNotificationRef.current = null;
+    setRideId(pendingRideId);
+    setRideLabel(undefined);
+    goTo("ride-tracking");
+  }, [sessionToken, goTo]);
 
   const handleSelectService = useCallback(
     (service: string) => {
@@ -175,6 +250,14 @@ export default function App() {
   );
 
   const handleLogout = useCallback(async () => {
+    const pushToken = pushTokenRef.current;
+    pushTokenRef.current = null;
+    pendingRideNotificationRef.current = null;
+    setSessionToken(null);
+    if (pushToken && (Platform.OS === "android" || Platform.OS === "ios")) {
+      const platform = Platform.OS;
+      await notificationsApi.unregisterPushToken(pushToken, platform).catch(() => undefined);
+    }
     setToken(null);
     try {
       await SecureStore.deleteItemAsync("userRole");
@@ -201,6 +284,7 @@ export default function App() {
         if (!isMounted) return;
 
         if (savedRole) {
+          if (savedToken) setSessionToken(savedToken);
           const role = savedRole.toUpperCase().trim();
           const savedProviderStatus = await SecureStore.getItemAsync("providerStatus");
           const savedProviderType = await SecureStore.getItemAsync("providerType");
@@ -247,6 +331,7 @@ export default function App() {
       {route === "otp" && (
         <OtpLoginScreen
           onVerified={(role?: string | null, provider?: ProviderRef | null) => {
+            setSessionToken(getToken());
             goTo(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null));
           }}
           onBack={() => goTo("splash")}

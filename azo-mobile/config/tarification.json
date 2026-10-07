@@ -1,0 +1,212 @@
+{
+  "_notes": {
+    "source": "Spécification métier AZƆ̀ — Tarifs et profils. Implémenté tel quel.",
+    "currency": "FCFA — montants entiers (aucun sous-franc)",
+    "singleSourceOfTruth": "Ce fichier est la SEULE source des tarifs. Aucune règle de prix ne doit être codée en dur dans la logique métier.",
+    "vehicles": "Deux filières : ZEM_ESSENCE / ZEM_ELECTRIC sont les motos-taxis (filière Zem) ; GAZELLE / KOALA / LEOPARD sont les voitures (entrée de gamme, intermédiaire climatisé, berline premium climatisée).",
+    "pricingModel": "Prix = base (remisée le cas échéant) + somme des paliers de kilomètres. Chaque véhicule porte ses propres paliers `brackets` (upToKm, perKm) ; le dernier palier a upToKm = null (illimité). `baseDiscount` (facultatif) retire un pourcentage de la base au-delà d'une distance.",
+    "zemPricing": "Règle Zem (mise à jour du 6 octobre 2026). MÊME tarif au kilomètre pour les deux types : 70 F/km de 0 à 15 km, 60 F/km de 16 à 25 km, 50 F/km à partir du 26e km — le dernier palier reste le tarif appliqué au-delà (la progression s'arrête à 25 km). Seule la BASE diffère : 150 F pour le Zem à ESSENCE, 100 F pour le Zem ÉLECTRIQUE. Aucune remise de base n'est appliquée. La base est due dès que la course est acceptée (le client n'est débité qu'à la fin de la course).",
+    "carPricing": "Voitures (grilles inchangées) : GAZELLE 800 F + 200 F/km jusqu'à 15 km puis 150 F/km · KOALA climatisé 1 200 F + 375 F/km puis 350 F/km · LEOPARD, berline premium climatisée, 2 500 F + 900 F/km puis 800 F/km. Aucune remise de base n'est appliquée aux voitures.",
+    "legacyVehicleMapping": "Types de véhicules historiques encore présents en base (courses et dossiers passés) : ils sont rattachés à un véhicule facturable. Aucun nouveau dossier ne les utilise.",
+    "profilesValidated": "ZEM_INDEPENDANT : règle complète et validée (15 % des revenus du mois + 1,5 % par retrait, aucune commission par course). Elle s'applique aux deux types de Zem (essence et électrique). LIVREUR et COURSIER : frais de retrait identiques au Zem (1,5 %) ; leurs autres règles restent à définir.",
+    "provisionalValues": "Toute valeur marquée « règle à définir » (voir la section `aDefinir`) est provisoire : elle n'est PAS une règle validée par le métier. Ne pas la présenter comme telle et ne pas la modifier sans décision.",
+    "unspecifiedProfile": "Profils sans règle définie dans la spécification (ex. conducteur indépendant d'une gamme KOALA/LEOPARD) : aucun prélèvement n'est appliqué tant que le métier ne l'a pas tranché.",
+    "agencyActivation": "Le paiement des frais d'activation est unique et non récurrent ; requiredForOperations = true interdit à une agence non activée d'opérer.",
+    "monthlySettlement": "Le prélèvement des Zem indépendants est mensuel (sur les revenus du mois), jamais par course.",
+    "radar": "Reglages du radar des demandes. strictVehicleMatch = true : un prestataire ne reçoit que les demandes du véhicule EXACT qu'il a déclaré ; passer a false (demarrage / demonstration) pour que les deux types de Zem partagent leurs demandes, les voitures restant filtrees par gamme exacte. searchRadiusKm : rayon de recherche autour du chauffeur en km (0 = aucune limite) quand l'application transmet sa position ; pendingExpiryMinutes : delai au bout duquel une demande sans chauffeur est annulee automatiquement (aucun debit client) ; driverNotificationMax : nombre maximal de chauffeurs prevenus a la publication d'une demande.",
+    "copie": "Copie synchronisée depuis azo-backend/src/pricing/tarification.json — ne pas modifier ici : lancer `npm run sync:tarification`."
+  },
+  "currency": "FCFA",
+  "vehicles": {
+    "ZEM_ESSENCE": {
+      "family": "ZEM",
+      "base": 150,
+      "brackets": [
+        {
+          "upToKm": 15,
+          "perKm": 70
+        },
+        {
+          "upToKm": 25,
+          "perKm": 60
+        },
+        {
+          "upToKm": null,
+          "perKm": 50
+        }
+      ]
+    },
+    "ZEM_ELECTRIC": {
+      "family": "ZEM",
+      "base": 100,
+      "brackets": [
+        {
+          "upToKm": 15,
+          "perKm": 70
+        },
+        {
+          "upToKm": 25,
+          "perKm": 60
+        },
+        {
+          "upToKm": null,
+          "perKm": 50
+        }
+      ]
+    },
+    "GAZELLE": {
+      "family": "CAR",
+      "base": 800,
+      "brackets": [
+        {
+          "upToKm": 15,
+          "perKm": 200
+        },
+        {
+          "upToKm": null,
+          "perKm": 150
+        }
+      ]
+    },
+    "KOALA": {
+      "family": "CAR",
+      "airConditioned": true,
+      "base": 1200,
+      "brackets": [
+        {
+          "upToKm": 15,
+          "perKm": 375
+        },
+        {
+          "upToKm": null,
+          "perKm": 350
+        }
+      ]
+    },
+    "LEOPARD": {
+      "family": "CAR",
+      "airConditioned": true,
+      "base": 2500,
+      "brackets": [
+        {
+          "upToKm": 15,
+          "perKm": 900
+        },
+        {
+          "upToKm": null,
+          "perKm": 800
+        }
+      ]
+    }
+  },
+  "radar": {
+    "strictVehicleMatch": true,
+    "searchRadiusKm": 8,
+    "pendingExpiryMinutes": 20,
+    "driverNotificationMax": 30
+  },
+  "agencyLevels": {
+    "PRO": {
+      "activationFee": 100000,
+      "commissionPct": 3,
+      "withdrawalFeePct": 1,
+      "maxAccounts": 25
+    },
+    "SILVER": {
+      "activationFee": 215500,
+      "commissionPct": 2.5,
+      "withdrawalFeePct": 0.75,
+      "maxAccounts": 50
+    },
+    "OR": {
+      "activationFee": 450500,
+      "commissionPct": 2,
+      "withdrawalFeePct": 0.5,
+      "maxAccounts": 100
+    },
+    "DIAMANT": {
+      "activationFee": 600500,
+      "commissionPct": 1,
+      "withdrawalFeePct": 0.25,
+      "maxAccounts": 1000
+    }
+  },
+  "profiles": {
+    "ZEM_INDEPENDANT": {
+      "monthlyRevenueSharePct": 15,
+      "withdrawalFeePct": 1.5,
+      "rideCommissionPct": 0,
+      "_notes": "Règle validée : 15 % des revenus du mois + 1,5 % sur chaque retrait. Aucune commission par course. Concerne les deux types de Zem (essence et électrique)."
+    },
+    "LIVREUR": {
+      "category": "INDEPENDANT_PERSONNEL",
+      "withdrawalFeePct": 1.5,
+      "monthlyRevenueSharePct": 0,
+      "rideCommissionPct": 0,
+      "_notes": "Frais de retrait identiques au Zem indépendant (1,5 %).",
+      "_aDefinir": [
+        "monthlyRevenueSharePct — règle à définir (0 provisoire, ne pas interpréter comme « aucun frais »)",
+        "rideCommissionPct — règle à définir (0 provisoire, ne pas interpréter comme « aucun frais »)"
+      ]
+    },
+    "COURSIER": {
+      "category": "INDEPENDANT_PERSONNEL",
+      "withdrawalFeePct": 1.5,
+      "monthlyRevenueSharePct": 0,
+      "rideCommissionPct": 0,
+      "_notes": "Frais de retrait identiques au Zem indépendant (1,5 %).",
+      "_aDefinir": [
+        "monthlyRevenueSharePct — règle à définir (0 provisoire, ne pas interpréter comme « aucun frais »)",
+        "rideCommissionPct — règle à définir (0 provisoire, ne pas interpréter comme « aucun frais »)"
+      ]
+    }
+  },
+  "legacyVehicleMapping": {
+    "ZEM": "ZEM_ESSENCE",
+    "CAR": "KOALA"
+  },
+  "unspecifiedProfile": {
+    "monthlyRevenueSharePct": 0,
+    "withdrawalFeePct": 0,
+    "rideCommissionPct": 0,
+    "_aDefinir": [
+      "Profils sans règle dans la spécification : aucun prélèvement appliqué, règle à définir si le métier veut les facturer."
+    ]
+  },
+  "agencyActivation": {
+    "requiredForOperations": true
+  },
+  "delivery": {
+    "commissionPct": 15,
+    "_aDefinir": [
+      "commissionPct — règle à définir : aucun tarif de livraison n'est validé pour le moment. Cette valeur est provisoire (reprise de l'existant) et ne doit pas être présentée comme une règle métier."
+    ]
+  },
+  "aDefinir": [
+    {
+      "chemin": "delivery.commissionPct",
+      "valeurProvisoire": 15,
+      "note": "Règle à définir — aucun tarif de livraison validé. Valeur provisoire conservée telle quelle en attendant la règle métier."
+    },
+    {
+      "chemin": "profiles.LIVREUR.monthlyRevenueSharePct",
+      "valeurProvisoire": 0,
+      "note": "Règle à définir — 0 provisoire, ne pas interpréter comme « aucun frais »."
+    },
+    {
+      "chemin": "profiles.LIVREUR.rideCommissionPct",
+      "valeurProvisoire": 0,
+      "note": "Règle à définir — 0 provisoire, ne pas interpréter comme « aucun frais »."
+    },
+    {
+      "chemin": "profiles.COURSIER.monthlyRevenueSharePct",
+      "valeurProvisoire": 0,
+      "note": "Règle à définir — 0 provisoire, ne pas interpréter comme « aucun frais »."
+    },
+    {
+      "chemin": "profiles.COURSIER.rideCommissionPct",
+      "valeurProvisoire": 0,
+      "note": "Règle à définir — 0 provisoire, ne pas interpréter comme « aucun frais »."
+    }
+  ]
+}

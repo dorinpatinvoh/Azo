@@ -13,9 +13,10 @@ import {
   API_URL, Ride, VehicleType, errorMessage, getToken, placesApi, providersApi, ridesApi, walletApi,
 } from "../services/api";
 import { fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
+import { tarification } from "../services/tarification";
 import { distanceKm, fmtKm } from "../utils/geo";
 import RideChatModal from "../components/RideChatModal";
-import { maskBeninPhone, maskPersonName, rideSecurityPin } from "../utils/phone";
+import { maskBeninPhone, maskPersonName } from "../utils/phone";
 
 type Props = { onLogout: () => void; onOpenDossier?: () => void };
 type LatLng = { latitude: number; longitude: number };
@@ -48,47 +49,14 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const [ridePlaces, setRidePlaces] = useState<{ origin?: string; destination?: string }>({});
   const [chatOpen, setChatOpen] = useState(false);
   const [pinInput, setPinInput] = useState("");
-  const [simPinCode, setSimPinCode] = useState<string | null>(null);
-  const [simPinSec, setSimPinSec] = useState(0);
-
-  const expectedPin = useMemo(
-    () => (activeRide?.status === "MATCHED" ? rideSecurityPin(activeRide.id) : null),
-    [activeRide?.id, activeRide?.status]
-  );
-
-  function showSimPinFor5Seconds(code: string | null) {
-    if (!code) return;
-    setSimPinCode(code);
-    setSimPinSec(5);
-  }
-
-  useEffect(() => {
-    if (expectedPin) {
-      showSimPinFor5Seconds(expectedPin);
-    } else {
-      setSimPinCode(null);
-      setPinInput("");
-    }
-  }, [expectedPin]);
-
-  useEffect(() => {
-    if (!simPinCode) return;
-    const t = setInterval(() => {
-      setSimPinSec((prev) => {
-        if (prev <= 1) {
-          clearInterval(t);
-          setSimPinCode(null);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [simPinCode]);
 
   const socketRef = useRef<Socket | null>(null);
   const activeRideRef = useRef<Ride | null>(null);
   activeRideRef.current = activeRide;
+  // Dernière position connue, lue par le radar : une ref évite de redémarrer le
+  // rafraîchissement périodique chaque fois que le GPS bouge (toutes les ~10 s).
+  const positionRef = useRef<LatLng | null>(null);
+  positionRef.current = position;
 
   /* ---------- Compte : portefeuille + historique + course en cours ---------- */
   const loadAccount = useCallback(async () => {
@@ -96,7 +64,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     if (historyRes.status === "fulfilled") {
       setHistory(historyRes.value);
       setActiveRide((current) =>
-        current ?? historyRes.value.find((r) => r.status === "MATCHED" || r.status === "IN_PROGRESS") ?? null
+        current ?? historyRes.value.find((r) => r.status === "MATCHED" || r.status === "ARRIVED" || r.status === "IN_PROGRESS") ?? null
       );
       setOffline(false);
     } else {
@@ -129,9 +97,13 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     setRefreshing(false);
   }, [loadAccount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---------- Courses en attente (Zém Radar) ---------- */
+  /* ---------- Courses en attente (Zém Radar) ----------
+   * La position du chauffeur est transmise au serveur : il écarte les demandes hors du
+   * rayon de recherche (`radar.searchRadiusKm` de la configuration) et les classe de la
+   * plus proche à la plus lointaine. Sans GPS, le radar reste utilisable.
+   */
   const loadPending = useCallback(async () => {
-    const rides = await ridesApi.pending();
+    const rides = await ridesApi.pending(positionRef.current ?? undefined);
     setPending(rides);
     setOffline(false);
     return rides;
@@ -166,6 +138,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     });
     socketRef.current = socket;
     socket.on("connect_error", () => console.warn("Socket AZƆ̀ injoignable :", API_URL));
+    // Une nouvelle demande vient d'être publiée : on rafraîchit le radar tout de suite
+    // au lieu d'attendre le prochain cycle (8 s).
+    socket.on("ride:new", () => {
+      loadPending().catch(() => undefined);
+    });
     return () => { socket.disconnect(); socketRef.current = null; };
   }, [online]);
 
@@ -233,10 +210,21 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const requests = useMemo(() => {
     const withDistance = pending.map((r) => ({
       ride: r,
-      km: position ? distanceKm(position, { latitude: r.originLat, longitude: r.originLng }) : null,
+      // Distance calculée par le serveur quand il a reçu notre position ; sinon,
+      // calcul local (le radar doit rester utilisable sans GPS).
+      km:
+        typeof r.distanceKm === "number"
+          ? r.distanceKm
+          : position
+            ? distanceKm(position, { latitude: r.originLat, longitude: r.originLng })
+            : null,
     }));
     return withDistance.sort((a, b) => (a.km ?? 999) - (b.km ?? 999));
   }, [pending, position]);
+
+  // Rayon de recherche en vigueur (configuration partagée avec le serveur).
+  const searchRadiusKm: number = tarification().radar?.searchRadiusKm ?? 0;
+  const expiryMinutes: number = tarification().radar?.pendingExpiryMinutes ?? 0;
 
   const stats = useMemo(() => {
     const done = history.filter((r) => r.status === "COMPLETED");
@@ -281,14 +269,43 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     }
   }
 
+  async function handleArrive() {
+    if (!activeRide) return;
+    setBusy(true);
+    try {
+      setActiveRide(await ridesApi.arrive(activeRide.id));
+      setPinInput("");
+      Alert.alert(
+        "Arrivée confirmée",
+        "Le client a été averti. Demande-lui le code Bouclier affiché dans son application avant de démarrer."
+      );
+    } catch (e) {
+      // La requête a pu aboutir côté serveur (réseau coupé à la réponse, double appui) :
+      // on relit la course avant d'alarmer le chauffeur pour rien.
+      try {
+        const fresh = await ridesApi.get(activeRide.id);
+        if (fresh.status === "ARRIVED" || fresh.status === "IN_PROGRESS") {
+          setActiveRide(fresh);
+          setPinInput("");
+          setBusy(false);
+          return;
+        }
+      } catch {
+        // Pas de réseau non plus pour la relecture : on affiche l'erreur d'origine.
+      }
+      Alert.alert("Impossible de confirmer l'arrivée", errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleStart() {
     if (!activeRide) return;
     const clean = pinInput.replace(/\D/g, "");
-    const targetPin = rideSecurityPin(activeRide.id);
-    if (clean !== targetPin) {
+    if (clean.length !== 4) {
       Alert.alert(
         "Code Bouclier AZƆ̀ requis",
-        "Saisis le code à 4 chiffres affiché sur l'écran du client pour sécuriser le départ."
+        "Après avoir signalé ton arrivée, demande au client son code à 4 chiffres."
       );
       return;
     }
@@ -458,7 +475,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
           <View style={styles.activeCard}>
             <View style={styles.activeHeader}>
               <Text style={styles.activeTitle}>
-                {activeRide.status === "MATCHED" ? "Course acceptée" : "Course en cours"}
+                {activeRide.status === "MATCHED"
+                  ? "En route vers le client"
+                  : activeRide.status === "ARRIVED"
+                    ? "Arrivé au point de prise en charge"
+                    : "Course en cours"}
               </Text>
               <View style={styles.pricePill}>
                 <Text style={styles.pricePillText}>{fcfa(activeRide.price)}</Text>
@@ -507,29 +528,18 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
             )}
 
             {activeRide.status === "MATCHED" && (
+              <View style={styles.arrivalNotice}>
+                <MaterialIcons name="near-me" size={18} color={colors.primary} />
+                <Text style={styles.arrivalNoticeText}>
+                  Rejoins le point de prise en charge, puis appuie sur « Je suis arrivé ». Le client recevra une notification et te communiquera son code.
+                </Text>
+              </View>
+            )}
+
+            {activeRide.status === "ARRIVED" && (
               <View style={styles.pinBox}>
-                {simPinCode ? (
-                  <Pressable
-                    style={styles.simPinBanner}
-                    onPress={() => setPinInput(simPinCode)}
-                  >
-                    <Text style={styles.simPinText}>
-                      🛡️ Code Bouclier client (simulation) :{" "}
-                      <Text style={{ color: "#52FF9B", fontWeight: "800", letterSpacing: 2 }}>
-                        {simPinCode}
-                      </Text>
-                    </Text>
-                    <Text style={styles.simPinSec}>{simPinSec}s</Text>
-                  </Pressable>
-                ) : expectedPin ? (
-                  <Pressable onPress={() => showSimPinFor5Seconds(expectedPin)}>
-                    <Text style={{ ...typography.labelSm, color: colors.primary, fontWeight: "700" }}>
-                      Afficher le code Bouclier client de simulation pendant 5s
-                    </Text>
-                  </Pressable>
-                ) : null}
                 <Text style={styles.pinLabel}>
-                  Code Bouclier AZƆ̀ à 4 chiffres (fourni par le client au départ)
+                  Demande le code à 4 chiffres au client avant de démarrer
                 </Text>
                 <TextInput
                   style={styles.pinInput}
@@ -547,9 +557,19 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.sm }} />
             ) : activeRide.status === "MATCHED" ? (
               <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
+                <Pressable style={styles.primaryBtn} onPress={handleArrive}>
+                  <MaterialIcons name="near-me" size={20} color="#fff" />
+                  <Text style={styles.primaryBtnText}>Je suis arrivé</Text>
+                </Pressable>
+                <Pressable style={styles.ghostBtn} onPress={handleCancel}>
+                  <Text style={styles.ghostBtnText}>Annuler la course</Text>
+                </Pressable>
+              </View>
+            ) : activeRide.status === "ARRIVED" ? (
+              <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
                 <Pressable style={styles.primaryBtn} onPress={handleStart}>
                   <MaterialIcons name="verified-user" size={20} color="#fff" />
-                  <Text style={styles.primaryBtnText}>Valider le code & Démarrer</Text>
+                  <Text style={styles.primaryBtnText}>Valider le code & démarrer</Text>
                 </Pressable>
                 <Pressable style={styles.ghostBtn} onPress={handleCancel}>
                   <Text style={styles.ghostBtnText}>Annuler la course</Text>
@@ -614,7 +634,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
               <View style={styles.radarFilter}>
                 <MaterialIcons name={VEHICLE_ICON[myVehicle]} size={16} color={colors.primary} />
                 <Text style={styles.radarFilterText}>
-                  Radar {VEHICLE_LABEL[myVehicle]} — tu ne vois que ces demandes.
+                  Radar {VEHICLE_LABEL[myVehicle]} — tu ne vois que ces demandes
+                  {searchRadiusKm > 0 ? `, dans un rayon de ${searchRadiusKm} km` : ""}
+                  {expiryMinutes > 0 ? `, qui expirent après ${expiryMinutes} min` : ""}.
                 </Text>
               </View>
             )}
@@ -626,7 +648,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
             ) : requests.length === 0 ? (
               <Text style={styles.emptyText}>
                 {myVehicle
-                  ? `Aucune demande « ${VEHICLE_LABEL[myVehicle]} » autour de toi pour l'instant. Reste en ligne : la liste se met à jour toute seule.`
+                  ? `Aucune demande « ${VEHICLE_LABEL[myVehicle]} » ${
+                      searchRadiusKm > 0 ? `dans un rayon de ${searchRadiusKm} km` : "autour de toi"
+                    } pour l'instant. Reste en ligne : la liste se met à jour toute seule.`
                   : "Aucune demande pour l'instant. Reste en ligne : la liste se met à jour toute seule."}
               </Text>
             ) : (
@@ -642,6 +666,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
                       </Text>
                       <Text style={styles.requestMeta}>
                         {km !== null ? `${fmtKm(km)} de toi · ` : ""}
+                        {typeof ride.expiresInMinutes === "number" && ride.expiresInMinutes <= 5
+                          ? `expire dans ${ride.expiresInMinutes} min · `
+                          : ""}
                         demandée {relativeDay(ride.createdAt).toLowerCase()}
                       </Text>
                     </View>
@@ -739,10 +766,9 @@ const styles = StyleSheet.create({
   callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
   chatPillBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 8 },
   chatPillText: { ...typography.labelMd, color: colors.primary, fontWeight: "800" },
+  arrivalNotice: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, backgroundColor: colors.primaryFixed, borderRadius: radius.lg, padding: spacing.sm, marginTop: spacing.xs },
+  arrivalNoticeText: { ...typography.bodySm, color: colors.onSurfaceVariant, flex: 1 },
   pinBox: { backgroundColor: colors.surfaceContainerLow, borderRadius: radius.lg, padding: spacing.sm, marginTop: spacing.xs, gap: 6 },
-  simPinBanner: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#14291D", borderRadius: radius.md, padding: spacing.sm },
-  simPinText: { ...typography.labelMd, color: "#fff", fontWeight: "700" },
-  simPinSec: { ...typography.labelSm, color: "#8CF0B4", fontWeight: "800" },
   pinLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "700" },
   pinInput: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.primary, paddingHorizontal: 14, paddingVertical: 10, ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", letterSpacing: 6, textAlign: "center" },
   primaryBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: colors.primary, borderRadius: radius.full, paddingVertical: 14, marginTop: spacing.sm },

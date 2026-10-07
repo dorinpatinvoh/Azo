@@ -18,6 +18,7 @@
     },
     "android": {
       "package": "bj.azo.app",
+      "googleServicesFile": "./google-services.json",
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -30,9 +31,18 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "extra": {
+      "eas": {
+        "projectId": "1704551d-9734-4d36-9f4b-b3d5fc1cfe89"
+      }
+    },
     "plugins": [
       "expo-font",
       "expo-secure-store",
+      [
+        "expo-notifications",
+        { "defaultChannel": "default", "color": "#0B7A53" }
+      ],
       [
         "expo-location",
         {
