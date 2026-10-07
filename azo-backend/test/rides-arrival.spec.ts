@@ -152,7 +152,7 @@ describe("sécurisation de l'arrivée et du démarrage d'une course", () => {
   it("ne renvoie le code que dans le détail client au statut ARRIVED", async () => {
     const { service } = makeService("ARRIVED");
 
-    const clientView = await service.findOne(rideId, clientId);
+    const clientView = (await service.findOne(rideId, clientId)) as { pickupCode?: string };
     const driverView = await service.findOne(rideId, driverId);
 
     expect(clientView.pickupCode).toBe(pickupCode);
