@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Linking, Alert } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Alert } from "react-native";
 import OSMMapView, { OSMMarker } from "../components/OSMMapView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -58,18 +58,12 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const insets = useSafeAreaInsets();
   const [ride, setRide] = useState<Ride | null>(null);
   const [driverPos, setDriverPos] = useState<LatLng | null>(null);
-  const [driverRoute, setDriverRoute] = useState<{
-    coordinates: LatLng[];
-    durationMinutes: number;
-    start: LatLng;
-    target: LatLng;
-  } | null>(null);
+  const [driverRoute, setDriverRoute] = useState<{ coordinates: LatLng[]; durationMinutes: number; start: LatLng; target: LatLng } | null>(null);
   const [failures, setFailures] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
-  /* Statut + infos chauffeur : polling séquentiel (pas de chevauchement) */
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -92,19 +86,11 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
     return () => { cancelled = true; clearTimeout(timer); };
   }, [rideId]);
 
-  /* Position du chauffeur en direct (socket.io de ton backend) */
   useEffect(() => {
-    const socket = io(API_URL, {
-      transports: ["websocket"],
-      auth: { token: getToken() },
-    });
+    const socket = io(API_URL, { transports: ["websocket"], auth: { token: getToken() } });
     socket.on("connect", () => socket.emit("ride:join", { rideId }));
-    socket.on("driver:location", (p: { lat: number; lng: number }) =>
-      setDriverPos({ latitude: p.lat, longitude: p.lng })
-    );
-    socket.on("ride:status", (p: { status: RideStatus }) =>
-      setRide((r) => (r ? { ...r, status: p.status } : r))
-    );
+    socket.on("driver:location", (p: { lat: number; lng: number }) => setDriverPos({ latitude: p.lat, longitude: p.lng }));
+    socket.on("ride:status", (p: { status: RideStatus }) => setRide((r) => (r ? { ...r, status: p.status } : r)));
     return () => { socket.disconnect(); };
   }, [rideId]);
 
@@ -112,31 +98,19 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const destination = ride ? { latitude: ride.destLat, longitude: ride.destLng } : null;
   const target = ride?.status === "MATCHED" || ride?.status === "ARRIVED" ? origin : destination;
 
-  // L'itinéraire routier et l'ETA sont recalculés à chaque nouvelle position GPS du Zem.
-  // Si OSRM ne répond pas, on garde une estimation à vol d'oiseau et une ligne directe.
   useEffect(() => {
     if (!driverPos || !target || (ride?.status !== "MATCHED" && ride?.status !== "IN_PROGRESS")) {
       setDriverRoute(null);
       return;
     }
-
     const controller = new AbortController();
     let active = true;
     const timer = setTimeout(() => {
       getDrivingRoute(driverPos, target, controller.signal)
-        .then((route) => {
-          if (active) setDriverRoute({ ...route, start: driverPos, target });
-        })
-        .catch(() => {
-          if (active) setDriverRoute(null);
-        });
+        .then((route) => { if (active) setDriverRoute({ ...route, start: driverPos, target }); })
+        .catch(() => { if (active) setDriverRoute(null); });
     }, 700);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-      controller.abort();
-    };
+    return () => { active = false; clearTimeout(timer); controller.abort(); };
   }, [driverPos?.latitude, driverPos?.longitude, target?.latitude, target?.longitude, ride?.status]);
 
   const fallbackEtaMinutes = useMemo(() => {
@@ -144,19 +118,8 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
     return Math.max(1, Math.ceil(((distanceKm(driverPos, target) * 1.3) / 25) * 60));
   }, [driverPos?.latitude, driverPos?.longitude, target?.latitude, target?.longitude, ride?.status]);
 
-  const routeStillRelevant = !!(
-    driverRoute &&
-    driverPos &&
-    target &&
-    distanceKm(driverRoute.start, driverPos) < 0.5 &&
-    distanceKm(driverRoute.target, target) < 0.05
-  );
-  const etaMinutes =
-    ride?.status === "ARRIVED" || ride?.status === "COMPLETED" || ride?.status === "CANCELLED"
-      ? null
-      : routeStillRelevant
-        ? driverRoute?.durationMinutes ?? fallbackEtaMinutes
-        : fallbackEtaMinutes;
+  const routeStillRelevant = !!(driverRoute && driverPos && target && distanceKm(driverRoute.start, driverPos) < 0.5 && distanceKm(driverRoute.target, target) < 0.05);
+  const etaMinutes = ride?.status === "ARRIVED" || ride?.status === "COMPLETED" || ride?.status === "CANCELLED" ? null : routeStillRelevant ? driverRoute?.durationMinutes ?? fallbackEtaMinutes : fallbackEtaMinutes;
 
   const trackingPolyline = useMemo(() => {
     if (driverPos && target) {
@@ -173,13 +136,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
       { coordinate: origin, title: "Départ", color: "green" },
       { coordinate: destination, title: "Destination", color: "red" },
     ];
-    if (driverPos) {
-      list.push({
-        coordinate: driverPos,
-        title: ride?.driver?.fullName ?? "Chauffeur",
-        color: "blue",
-      });
-    }
+    if (driverPos) list.push({ coordinate: driverPos, title: ride?.driver?.fullName ?? "Chauffeur", color: "blue" });
     return list;
   }, [origin, destination, driverPos, ride?.driver?.fullName]);
 
@@ -205,178 +162,58 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const done = ride.status === "COMPLETED";
   const searching = ride.status === "PENDING";
   const finished = done || ride.status === "CANCELLED";
-  // On ne peut annuler que tant que la course n'a pas démarré : après le départ,
-  // le client paie le trajet (le backend refuse toute annulation en IN_PROGRESS).
   const cancellable = ride.status === "PENDING" || ride.status === "MATCHED" || ride.status === "ARRIVED";
-  const paymentLabel =
-    ride.status === "CANCELLED" ? "aucun débit"
-    : done ? "AZƆ̀ Pay (débité)"
-    : "AZƆ̀ Pay (débité à l'arrivée)";
+  const paymentLabel = ride.status === "CANCELLED" ? "aucun débit" : done ? "AZƆ̀ Pay (débité)" : "AZƆ̀ Pay (débité à l'arrivée)";
 
   function handleCancelRide() {
     if (!ride) return;
-    Alert.alert(
-      "Annuler la course ?",
-      ride.driver
-        ? "Ton chauffeur est prévenu. Aucun montant n'est débité avant le départ."
-        : "Aucun montant n'est débité avant le départ.",
-      [
-        { text: "Garder la course", style: "cancel" },
-        {
-          text: "Annuler la course",
-          style: "destructive",
-          onPress: async () => {
-            setCancelling(true);
-            try {
-              const updated = await rideApi.cancel(ride.id);
-              setRide(updated);
-            } catch (e) {
-              Alert.alert("Annulation impossible", errorMessage(e));
-            } finally {
-              setCancelling(false);
-            }
-          },
-        },
-      ]
-    );
+    Alert.alert("Annuler la course ?", ride.driver ? "Ton chauffeur est prévenu. Aucun montant n'est débité avant le départ." : "Aucun montant n'est débité avant le départ.", [
+      { text: "Garder la course", style: "cancel" },
+      { text: "Annuler la course", style: "destructive", onPress: async () => {
+        setCancelling(true);
+        try { setRide(await rideApi.cancel(ride.id)); }
+        catch (e) { Alert.alert("Annulation impossible", errorMessage(e)); }
+        finally { setCancelling(false); }
+      } },
+    ]);
   }
 
   return (
     <View style={styles.root}>
-      <OSMMapView
-        center={driverPos || origin}
-        markers={osmMarkers}
-        polyline={trackingPolyline}
-      />
-
-      {failures >= 2 && (
-        <View style={[styles.offline, { top: insets.top + 8 }]}>
-          <MaterialIcons name="wifi-off" size={16} color="#fff" />
-          <Text style={styles.offlineText}>Connexion instable — nouvelle tentative…</Text>
-        </View>
-      )}
-
+      <OSMMapView center={driverPos || origin} markers={osmMarkers} polyline={trackingPolyline} />
+      {failures >= 2 && <View style={[styles.offline, { top: insets.top + 8 }]}><MaterialIcons name="wifi-off" size={16} color="#fff" /><Text style={styles.offlineText}>Connexion instable — nouvelle tentative…</Text></View>}
       <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
         <Text style={styles.status}>{STATUS_TEXT[ride.status]}</Text>
-
-        {searching && (
-          <View style={styles.searchRow}>
-            <Pulse />
-            <Text style={[styles.muted, { flex: 1 }]}>
-              Nous contactons les chauffeurs proches de toi.
-              {typeof ride.expiresInMinutes === "number" && ride.expiresInMinutes > 0
-                ? ` Recherche encore ${ride.expiresInMinutes} min : sans chauffeur, la demande est annulée sans aucun débit.`
-                : ""}
-            </Text>
-          </View>
-        )}
-
-        {/* Demande expirée faute de chauffeur : le serveur vient de l'annuler. */}
-        {ride.expired && (
-          <View style={styles.expiredBanner}>
-            <MaterialIcons name="search-off" size={18} color={ERROR_COLOR} />
-            <Text style={styles.expiredText}>
-              Aucun chauffeur n'a accepté ta demande : elle a expiré et a été annulée.
-              {" "}Aucun montant n'a été débité — tu peux relancer une recherche.
-            </Text>
-          </View>
-        )}
+        {searching && <View style={styles.searchRow}><Pulse /><Text style={[styles.muted, { flex: 1 }]}>Nous contactons les chauffeurs proches de toi.{typeof ride.expiresInMinutes === "number" && ride.expiresInMinutes > 0 ? ` Recherche encore ${ride.expiresInMinutes} min : sans chauffeur, la demande est annulée sans aucun débit.` : ""}</Text></View>}
+        {ride.expired && <View style={styles.expiredBanner}><MaterialIcons name="search-off" size={18} color={ERROR_COLOR} /><Text style={styles.expiredText}>Aucun chauffeur n'a accepté ta demande : elle a expiré et a été annulée. Aucun montant n'a été débité — tu peux relancer une recherche.</Text></View>}
 
         {ride.driver && (
           <View style={styles.driverCard}>
-            <View style={styles.avatar}>
-              <MaterialIcons name="verified-user" size={26} color={colors.primary} />
+            <View style={styles.driverRow}>
+              <View style={styles.avatar}><MaterialIcons name="verified-user" size={26} color={colors.primary} /></View>
+              <View style={styles.driverInfo}>
+                <Text style={styles.driverName} numberOfLines={1}>{maskPersonName(ride.driver.fullName, "Chauffeur AZƆ̀")}</Text>
+                <Text style={styles.muted} numberOfLines={1}>{VEHICLE_LABEL[ride.vehicleType]}</Text>
+                <Text style={styles.muted} numberOfLines={1}>{maskBeninPhone(ride.driver.phone)}</Text>
+              </View>
+              {ride.status === "ARRIVED" ? (
+                <View style={styles.arrivedBadge}><MaterialIcons name="check-circle" size={16} color={colors.primary} /><Text style={styles.arrivedBadgeText}>Arrivé</Text></View>
+              ) : !done && etaMinutes != null ? (
+                <View style={styles.eta}><Text style={styles.etaValue}>{etaMinutes}</Text><Text style={styles.etaUnit}>{ride.status === "MATCHED" ? "min pour toi" : "min"}</Text></View>
+              ) : null}
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.driverName}>
-                {maskPersonName(ride.driver.fullName, "Chauffeur AZƆ̀")}
-              </Text>
-              <Text style={styles.muted}>
-                {VEHICLE_LABEL[ride.vehicleType]} · {maskBeninPhone(ride.driver.phone)}
-              </Text>
-            </View>
-            <Pressable
-              style={styles.chatBtn}
-              onPress={() => setChatOpen(true)}
-              accessibilityLabel="Ouvrir le chat sécurisé"
-            >
+            <Pressable style={styles.chatBtn} onPress={() => setChatOpen(true)} accessibilityLabel="Ouvrir le chat sécurisé">
               <MaterialIcons name="chat-bubble-outline" size={18} color={colors.primary} />
-              <Text style={styles.chatBtnText}>Message</Text>
+              <Text style={styles.chatBtnText}>Envoyer un message</Text>
             </Pressable>
-            {ride.status === "ARRIVED" ? (
-              <View style={styles.arrivedBadge}>
-                <MaterialIcons name="check-circle" size={16} color={colors.primary} />
-                <Text style={styles.arrivedBadgeText}>Arrivé</Text>
-              </View>
-            ) : !done && etaMinutes != null ? (
-              <View style={styles.eta}>
-                <Text style={styles.etaValue}>{etaMinutes}</Text>
-                <Text style={styles.etaUnit}>{ride.status === "MATCHED" ? "min pour toi" : "min"}</Text>
-              </View>
-            ) : null}
           </View>
         )}
 
-        {ride.status === "ARRIVED" && (
-          <View style={styles.pinBanner}>
-            <MaterialIcons name="shield" size={20} color={colors.primary} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.pinBannerTitle}>
-                {ride.vehicleType.startsWith("ZEM_") ? "Ton Zem est arrivé" : "Ton chauffeur est arrivé"}
-              </Text>
-              <Text style={styles.pinBannerSub}>
-                {ride.pickupCode
-                  ? "Vérifie qu'il est devant toi, puis donne-lui ce code pour démarrer."
-                  : "Le code de sécurité arrive…"}
-              </Text>
-            </View>
-            {ride.pickupCode ? (
-              <View style={styles.pinCodePill}>
-                <Text style={styles.pinCodeText}>{ride.pickupCode}</Text>
-              </View>
-            ) : (
-              <ActivityIndicator size="small" color={colors.primary} />
-            )}
-          </View>
-        )}
-
-        <View style={{ gap: 2 }}>
-          {!!destinationLabel && <Text style={styles.muted} numberOfLines={1}>→ {destinationLabel}</Text>}
-          <Text style={styles.price}>
-            {ride.price.toLocaleString("fr-FR")} FCFA · {paymentLabel}
-          </Text>
-        </View>
-
-        {finished ? (
-          // Course terminée -> notation ; course annulée -> simple fermeture (rien à noter).
-          <Pressable style={styles.primaryBtn} onPress={done ? (onFinish ?? onClose) : onClose}>
-            <Text style={styles.primaryText}>
-              {done ? "Terminer" : ride.expired ? "Relancer une recherche" : "Fermer"}
-            </Text>
-          </Pressable>
-        ) : (
-          <>
-            {cancellable && (
-              <Pressable style={styles.cancelBtn} onPress={handleCancelRide} disabled={cancelling}>
-                {cancelling
-                  ? <ActivityIndicator size="small" color={ERROR_COLOR} />
-                  : <Text style={styles.cancelText}>Annuler la course</Text>}
-              </Pressable>
-            )}
-            <Pressable style={styles.secondaryBtn} onPress={onClose}><Text style={styles.secondaryText}>Réduire</Text></Pressable>
-          </>
-        )}
+        {ride.status === "ARRIVED" && <View style={styles.pinBanner}><MaterialIcons name="shield" size={20} color={colors.primary} /><View style={{ flex: 1 }}><Text style={styles.pinBannerTitle}>{ride.vehicleType.startsWith("ZEM_") ? "Ton Zem est arrivé" : "Ton chauffeur est arrivé"}</Text><Text style={styles.pinBannerSub}>{ride.pickupCode ? "Vérifie qu'il est devant toi, puis donne-lui ce code pour démarrer." : "Le code de sécurité arrive…"}</Text></View>{ride.pickupCode ? <View style={styles.pinCodePill}><Text style={styles.pinCodeText}>{ride.pickupCode}</Text></View> : <ActivityIndicator size="small" color={colors.primary} />}</View>}
+        <View style={{ gap: 2 }}>{!!destinationLabel && <Text style={styles.muted} numberOfLines={1}>→ {destinationLabel}</Text>}<Text style={styles.price}>{ride.price.toLocaleString("fr-FR")} FCFA · {paymentLabel}</Text></View>
+        {finished ? <Pressable style={styles.primaryBtn} onPress={done ? (onFinish ?? onClose) : onClose}><Text style={styles.primaryText}>{done ? "Terminer" : ride.expired ? "Relancer une recherche" : "Fermer"}</Text></Pressable> : <><>{cancellable && <Pressable style={styles.cancelBtn} onPress={handleCancelRide} disabled={cancelling}>{cancelling ? <ActivityIndicator size="small" color={ERROR_COLOR} /> : <Text style={styles.cancelText}>Annuler la course</Text>}</Pressable>}</><Pressable style={styles.secondaryBtn} onPress={onClose}><Text style={styles.secondaryText}>Réduire</Text></Pressable></>}
       </View>
-
-      <RideChatModal
-        visible={chatOpen}
-        rideId={ride.id}
-        myRole="CLIENT"
-        peerName={ride.driver?.fullName}
-        peerPhone={ride.driver?.phone}
-        locked={finished}
-        onClose={() => setChatOpen(false)}
-      />
+      <RideChatModal visible={chatOpen} rideId={ride.id} myRole="CLIENT" peerName={ride.driver?.fullName} peerPhone={ride.driver?.phone} locked={finished} onClose={() => setChatOpen(false)} />
     </View>
   );
 }
@@ -393,11 +230,12 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: "row", alignItems: "center", gap: 16 },
   pulseWrap: { width: 56, height: 56, alignItems: "center", justifyContent: "center" },
   pulse: { position: "absolute", width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary },
-  driverCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, padding: spacing.sm + 2 },
+  driverCard: { gap: 10, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, padding: spacing.sm + 2 },
+  driverRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  driverInfo: { flex: 1, minWidth: 0 },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
   driverName: { ...typography.bodyMd, color: colors.onSurface, fontWeight: "700" },
-  callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
-  chatBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 8 },
+  chatBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingVertical: 10 },
   chatBtnText: { ...typography.labelMd, color: colors.primary, fontWeight: "800" },
   pinBanner: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.primaryFixed, borderRadius: radius.lg, padding: spacing.sm + 2, borderWidth: 1, borderColor: colors.primary },
   pinBannerTitle: { ...typography.labelMd, color: colors.onSurface, fontWeight: "800" },
@@ -416,7 +254,6 @@ const styles = StyleSheet.create({
   secondaryText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
   cancelBtn: { borderRadius: radius.full, paddingVertical: 12, alignItems: "center", borderWidth: 1.5, borderColor: ERROR_COLOR },
   cancelText: { ...typography.labelMd, color: ERROR_COLOR, fontWeight: "700" },
-  driverMarker: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#fff" },
   offline: { position: "absolute", left: spacing.md, right: spacing.md, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: ERROR_COLOR, borderRadius: radius.lg, padding: spacing.sm },
   offlineText: { ...typography.labelMd, color: "#fff" },
 });
