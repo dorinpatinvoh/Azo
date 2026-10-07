@@ -13,7 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "test": "jest",
-    "render:build": "npm install && node ./node_modules/prisma/build/index.js generate && npm run build"
+    "render:build": "npm install && node node_modules/prisma/build/index.js generate && npm run build"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -26,12 +26,13 @@
     "@nestjs/platform-express": "^10.4.0",
     "@nestjs/platform-socket.io": "^10.4.0",
     "@nestjs/websockets": "^10.4.0",
-    "@prisma/client": "^5.19.0",
+    "@prisma/client": "^5.22.0",
+    "@prisma/engines": "^5.22.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
-    "prisma": "^5.19.0",
+    "prisma": "^5.22.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.7.5"
@@ -64,4 +65,4 @@
     },
     "testEnvironment": "node"
   }
-}
+} 
