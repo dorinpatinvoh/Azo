@@ -138,6 +138,13 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     });
     socketRef.current = socket;
     socket.on("connect_error", () => console.warn("Socket AZƆ̀ injoignable :", API_URL));
+    // (Re)connexion (coupure réseau, 4G qui bascule…) : on repousse tout de suite la
+    // dernière position connue, sinon le curseur du client reste figé jusqu'au prochain GPS.
+    socket.on("connect", () => {
+      const p = positionRef.current;
+      const r = activeRideRef.current;
+      if (p && r) socket.emit("driver:location", { rideId: r.id, lat: p.latitude, lng: p.longitude });
+    });
     // Une nouvelle demande vient d'être publiée : on rafraîchit le radar tout de suite
     // au lieu d'attendre le prochain cycle (8 s).
     socket.on("ride:new", () => {
@@ -146,15 +153,26 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     return () => { socket.disconnect(); socketRef.current = null; };
   }, [online]);
 
-  const emitPosition = useCallback((coords: LatLng) => {
+  const emitPosition = useCallback((coords: LatLng, heading?: number | null) => {
     const ride = activeRideRef.current;
     const socket = socketRef.current;
     if (ride && socket?.connected) {
-      socket.emit("driver:location", { rideId: ride.id, lat: coords.latitude, lng: coords.longitude });
+      socket.emit("driver:location", {
+        rideId: ride.id,
+        lat: coords.latitude,
+        lng: coords.longitude,
+        // Cap (degrés) : fait pivoter la flèche du curseur côté client, comme Google Maps.
+        ...(typeof heading === "number" && Number.isFinite(heading) && heading >= 0 && heading < 360
+          ? { heading }
+          : {}),
+      });
     }
   }, []);
 
   /* ---------- GPS réel (expo-location) ---------- */
+  // Deux profils : course en cours = suivi live du curseur côté client (comme
+  // Google Maps) ; sans course = position grossière pour économiser la batterie.
+  const hasActiveRide = activeRide != null;
   useEffect(() => {
     if (!online) return;
     let sub: Location.LocationSubscription | null = null;
@@ -166,11 +184,13 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
         if (perm.status !== "granted") { setGpsStatus("denied"); return; }
         setGpsStatus("ok");
         sub = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 10000 },
+          hasActiveRide
+            ? { accuracy: Location.Accuracy.High, distanceInterval: 5, timeInterval: 2500 }
+            : { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 10000 },
           (pos) => {
             const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
             setPosition(coords);
-            emitPosition(coords);
+            emitPosition(coords, pos.coords.heading);
           }
         );
         if (cancelled) sub.remove();
@@ -181,7 +201,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     })();
 
     return () => { cancelled = true; sub?.remove(); };
-  }, [online, emitPosition]);
+  }, [online, hasActiveRide, emitPosition]);
 
   // La position bouge aussi quand le socket vient de se connecter : on renvoie la dernière.
   useEffect(() => {

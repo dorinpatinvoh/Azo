@@ -57,7 +57,7 @@ function Pulse() {
 export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, onFinish }: Props) {
   const insets = useSafeAreaInsets();
   const [ride, setRide] = useState<Ride | null>(null);
-  const [driverPos, setDriverPos] = useState<LatLng | null>(null);
+  const [driverPos, setDriverPos] = useState<(LatLng & { heading?: number }) | null>(null);
   const [driverRoute, setDriverRoute] = useState<{ coordinates: LatLng[]; durationMinutes: number; start: LatLng; target: LatLng } | null>(null);
   const [failures, setFailures] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -89,7 +89,13 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   useEffect(() => {
     const socket = io(API_URL, { transports: ["websocket"], auth: { token: getToken() } });
     socket.on("connect", () => socket.emit("ride:join", { rideId }));
-    socket.on("driver:location", (p: { lat: number; lng: number }) => setDriverPos({ latitude: p.lat, longitude: p.lng }));
+    socket.on("driver:location", (p: { lat: number; lng: number; heading?: number }) =>
+      setDriverPos({
+        latitude: p.lat,
+        longitude: p.lng,
+        ...(typeof p.heading === "number" && Number.isFinite(p.heading) ? { heading: p.heading } : {}),
+      })
+    );
     socket.on("ride:status", (p: { status: RideStatus }) => setRide((r) => (r ? { ...r, status: p.status } : r)));
     return () => { socket.disconnect(); };
   }, [rideId]);
@@ -133,10 +139,18 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const osmMarkers = useMemo<OSMMarker[]>(() => {
     if (!origin || !destination) return [];
     const list: OSMMarker[] = [
-      { coordinate: origin, title: "Départ", color: "green" },
-      { coordinate: destination, title: "Destination", color: "red" },
+      { id: "origin", coordinate: origin, title: "Départ", color: "green" },
+      { id: "destination", coordinate: destination, title: "Destination", color: "red" },
     ];
-    if (driverPos) list.push({ coordinate: driverPos, title: ride?.driver?.fullName ?? "Chauffeur", color: "blue" });
+    if (driverPos) {
+      list.push({
+        id: "driver",
+        coordinate: driverPos,
+        title: ride?.driver?.fullName ?? "Chauffeur",
+        color: "blue",
+        heading: driverPos.heading,
+      });
+    }
     return list;
   }, [origin, destination, driverPos, ride?.driver?.fullName]);
 
@@ -180,7 +194,12 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   return (
     <View style={styles.root}>
-      <OSMMapView center={driverPos || origin} markers={osmMarkers} polyline={trackingPolyline} />
+      <OSMMapView
+        center={driverPos || origin}
+        markers={osmMarkers}
+        polyline={trackingPolyline}
+        followMarkerId={driverPos && (ride.status === "MATCHED" || ride.status === "ARRIVED" || ride.status === "IN_PROGRESS") ? "driver" : undefined}
+      />
       {failures >= 2 && <View style={[styles.offline, { top: insets.top + 8 }]}><MaterialIcons name="wifi-off" size={16} color="#fff" /><Text style={styles.offlineText}>Connexion instable — nouvelle tentative…</Text></View>}
       <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
         <Text style={styles.status}>{STATUS_TEXT[ride.status]}</Text>

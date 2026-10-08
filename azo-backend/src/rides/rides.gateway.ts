@@ -62,11 +62,11 @@ export class RidesGateway implements OnGatewayConnection {
     return { joined: data.rideId, messages: this.getMessages(data.rideId) };
   }
 
-  // Le chauffeur émet sa position toutes les ~10 secondes pendant une course active.
+  // Le chauffeur émet sa position toutes les ~2-3 secondes pendant une course active.
   @SubscribeMessage("driver:location")
   async location(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { rideId?: string; lat?: number; lng?: number }
+    @MessageBody() data: { rideId?: string; lat?: number; lng?: number; heading?: number }
   ) {
     const user = client.data?.user;
     if (
@@ -91,9 +91,16 @@ export class RidesGateway implements OnGatewayConnection {
       return;
     }
 
+    // Cap optionnel (degrés, 0 = nord) : fait pivoter le curseur du client comme Google Maps.
+    const heading =
+      typeof data.heading === "number" && Number.isFinite(data.heading) && data.heading >= 0 && data.heading < 360
+        ? Math.round(data.heading)
+        : undefined;
+
     this.server?.to(`ride:${data.rideId}`).emit("driver:location", {
       lat: data.lat,
       lng: data.lng,
+      ...(heading !== undefined ? { heading } : {}),
       at: Date.now(),
     });
   }
