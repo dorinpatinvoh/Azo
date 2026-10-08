@@ -1,0 +1,7 @@
+# Local environment variables
+/azo-backend/.env
+/azo-backend/.env.*
+!/azo-backend/.env.example
+/azo-mobile/.env
+/azo-mobile/.env.*
+!/azo-mobile/.env.example
