@@ -188,6 +188,89 @@ Gardez `main` déployable. Ne force-pushez pas sur `main` et ne réécrivez pas 
 - Des fichiers `.env` et des dépendances backend générées ont été suivis par Git dans le passé. Leur retrait de la version actuelle ne purge pas l'historique. Renouvelez tout secret réel qui aurait été commité et planifiez séparément le nettoyage de l'historique et des dépendances avec les responsables.
 - Avant chaque commit, relisez la liste complète des fichiers et le diff ; n'utilisez pas `git add .` sans vérification.
 
+## 7. Dépannage
+
+Avant d'essayer plusieurs changements, vérifiez que vous êtes dans le bon dossier (`azo-backend` pour l'API, `azo-mobile` pour Expo), que le terminal n'affiche pas déjà une erreur plus haut et que vous utilisez Node.js 20 pour le backend. Après une modification, relancez seulement la commande qui a échoué.
+
+### Installation npm échouée
+
+Si `npm ci` indique que le lockfile ne correspond pas au manifeste, vérifiez que la branche est à jour et que `package.json` et `package-lock.json` ont été récupérés ensemble. Évitez de supprimer le lockfile pour contourner l'erreur.
+
+Si une dépendance ou un exécutable manque, dans le dossier concerné :
+
+```powershell
+npm ci
+```
+
+Utilisez `npm ci` plutôt que `npm install` pour une installation reproductible. Ne mettez pas à jour Node ou les dépendances au hasard pour contourner une erreur : vérifiez d'abord la version exigée et le message complet.
+
+### Prisma ou PostgreSQL en erreur
+
+**`P1000` — authentification refusée** : le serveur PostgreSQL répond, mais le nom d'utilisateur, le mot de passe ou les paramètres de `DATABASE_URL` sont incorrects. Vérifiez la valeur localement dans `azo-backend/.env` sans la copier dans un chat ou un ticket. Depuis un PC, une base Render exige l'adresse **External Database URL** ; l'adresse interne n'est utilisable que depuis Render.
+
+**`P1001` — serveur introuvable ou inaccessible** : vérifiez que PostgreSQL est démarré, que le port et l'hôte sont corrects, que le réseau autorise la connexion et que l'URL n'a pas expiré.
+
+Après avoir corrigé `DATABASE_URL`, depuis `azo-backend` :
+
+```powershell
+npx prisma generate
+npx prisma migrate deploy
+```
+
+N'exécutez pas `migrate dev` contre une base partagée ou de production. N'effacez pas les migrations et ne réinitialisez pas la base pour corriger une erreur d'authentification. Si Prisma signale que la base a dérivé du schéma, arrêtez-vous et demandez une revue avant toute commande de reset ou migration corrective.
+
+**« Environment variable not found: DATABASE_URL »** : vérifiez que le fichier se nomme exactement `.env`, qu'il est dans `azo-backend/`, et que la ligne `DATABASE_URL` est présente et correctement formatée. N'ajoutez pas d'espaces non protégés ni de guillemets imbriqués.
+
+### `npm run seed` est introuvable
+
+Vérifiez d'abord que le terminal est dans `azo-backend`, puis exécutez `npm run` et confirmez que `seed` apparaît dans la liste. Si le script n'apparaît pas, mettez à jour la branche (`git pull --ff-only origin main` sur `main`, ou récupérez le changement correspondant sur votre branche de travail), puis réessayez. Ne lancez pas le seed sur une base partagée avant d'avoir vérifié ses effets.
+
+### Le backend ne démarre pas ou `/health` ne répond pas
+
+1. Laissez le terminal du backend ouvert et lisez la première erreur, pas seulement les dernières lignes.
+2. Vérifiez que `npm run start:dev` a été lancé depuis `azo-backend`.
+3. Confirmez que `DATABASE_URL` fonctionne et que les migrations nécessaires sont appliquées.
+4. Vérifiez `PORT` dans `.env` (par défaut `3000`) et qu'aucune autre application n'utilise déjà ce port.
+5. Depuis le PC, testez `Invoke-RestMethod http://localhost:3000/health`.
+
+Si le port est occupé, arrêtez proprement l'ancien serveur ou choisissez un autre port et mettez à jour l'URL API mobile en conséquence. Ne terminez pas des processus au hasard.
+
+### Expo Go n'arrive pas à joindre le backend
+
+Vérifiez `EXPO_PUBLIC_API_URL` dans `azo-mobile/.env.development.local`, puis redémarrez Expo après toute modification :
+
+```powershell
+npx expo start --clear --lan
+```
+
+Choisissez l'adresse selon l'appareil :
+
+- navigateur sur le PC : `http://localhost:3000`
+- émulateur Android : `http://10.0.2.2:3000`
+- téléphone physique : `http://<IP-Wi-Fi-du-PC>:3000`
+
+Sur un téléphone, `localhost` désigne le téléphone lui-même. Assurez-vous que le PC et le téléphone sont sur le même Wi-Fi et testez d'abord `/health` depuis le navigateur du téléphone. Si cette page ne s'ouvre pas, vérifiez le pare-feu Windows pour le réseau privé et confirmez que NestJS écoute sur une interface accessible du réseau local. N'exposez pas le port de développement sur Internet.
+
+Si Metro signale un port déjà utilisé, arrêtez l'ancien terminal Expo avec `Ctrl+C` ou acceptez le port alternatif proposé, puis assurez-vous que le QR code correspond bien au serveur en cours.
+
+### Build EAS ou mise à jour OTA ne s'applique pas
+
+- Vérifiez que le build et l'update ciblent la même application, plateforme, canal (`preview` pour l'APK preview) et runtime version.
+- Une mise à jour OTA modifie le JavaScript, les ressources et le bundle ; elle ne peut pas ajouter de code natif, de module natif ou de nouvelle permission.
+- Si une mise à jour native est nécessaire, reconstruisez l'application avec le profil voulu, installez le nouvel APK, puis publiez les futures OTA sur son canal.
+- Pour un changement JavaScript compatible destiné à preview, depuis `azo-mobile` :
+
+  ```powershell
+  npx eas-cli update --channel preview --platform android --environment preview --message "Description du changement"
+  ```
+
+- Si l'application ne récupère pas l'update, vérifiez dans le tableau de bord EAS que la publication a réussi sur la bonne branche/canal et le bon runtime. Connectez le téléphone à Internet, fermez puis relancez l'application pour déclencher une vérification.
+- Pour un build EAS échoué, ouvrez le lien des logs fourni par EAS et corrigez la première erreur Gradle pertinente. Ne relancez pas un build en boucle sans traiter l'erreur.
+
+### Quand demander de l'aide
+
+Si le problème persiste, partagez le nom de la commande, le dossier depuis lequel elle a été exécutée et le message d'erreur complet avec les secrets masqués. Ne partagez jamais `.env`, `DATABASE_URL`, mots de passe, JWT, codes OTP, jetons EAS ou clés privées.
+
 ## Documentation complémentaire
 
 - Détails API/backend : [`azo-backend/README.md`](./azo-backend/README.md)
