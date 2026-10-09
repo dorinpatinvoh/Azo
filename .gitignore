@@ -5,3 +5,4 @@
 /azo-mobile/.env
 /azo-mobile/.env.*
 !/azo-mobile/.env.example
+/azo-mobile/google-services.json
