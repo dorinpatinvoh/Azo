@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Alert } from "react-native";
-import OSMMapView, { OSMMarker } from "../components/OSMMapView";
+import TrackingMap, { OSMMarker, type LatLng } from "../components/TrackingMap";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { io } from "socket.io-client";
@@ -12,8 +12,6 @@ import { maskBeninPhone, maskPersonName } from "../utils/phone";
 import { getDrivingRoute } from "../services/routing";
 
 type Props = { rideId: string; destinationLabel?: string; onClose: () => void; onFinish?: () => void };
-type LatLng = { latitude: number; longitude: number };
-
 const POLL_MS = 3000;
 const ERROR_COLOR = "#B3261B";
 const STATUS_TEXT: Record<RideStatus, string> = {
@@ -194,7 +192,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   return (
     <View style={styles.root}>
-      <OSMMapView
+      <TrackingMap
         center={driverPos || origin}
         markers={osmMarkers}
         polyline={trackingPolyline}

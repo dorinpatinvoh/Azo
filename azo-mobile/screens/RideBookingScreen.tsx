@@ -5,7 +5,7 @@ import {
   Platform,
 } from "react-native";
 // Supprime l'ancien import de MapView, UrlTile, Marker
-import OSMMapView, { OSMMarker } from "../components/OSMMapView";
+import TrackingMap, { type LatLng } from "../components/TrackingMap";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
@@ -341,17 +341,8 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
     Keyboard.dismiss();
   }, []);
 
-  const onMapPress = async (data: any) => {
+  const onMapPress = async ({ latitude, longitude }: LatLng) => {
     if (!pickTarget) return;
-
-    // Récupère la latitude et longitude quel que soit le format reçu
-    const rawLat = data?.latitude ?? data?.nativeEvent?.coordinate?.latitude;
-    const rawLng = data?.longitude ?? data?.nativeEvent?.coordinate?.longitude;
-
-    if (rawLat == null || rawLng == null) return;
-
-    const latitude = Number(rawLat);
-    const longitude = Number(rawLng);
 
     const target = pickTarget;
     setPickTarget(null);
@@ -580,9 +571,9 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
 
   return (
     <View style={styles.root}>
-      <OSMMapView
+      <TrackingMap
         center={origin ? { latitude: origin.latitude, longitude: origin.longitude } : undefined}
-        onPress={(coord) => onMapPress({ nativeEvent: { coordinate: coord } } as any)}
+        onPress={onMapPress}
         markers={[
           ...(origin ? [{ coordinate: origin, title: "Départ", color: "green" as const }] : []),
           ...(destination ? [{ coordinate: destination, title: "Destination", color: "red" as const }] : []),

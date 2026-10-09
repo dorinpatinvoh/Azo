@@ -22,9 +22,9 @@
     "expo-updates": "~57.0.24",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-maps": "1.27.2",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",
-    "react-native-webview": "13.16.1",
     "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
