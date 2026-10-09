@@ -15,10 +15,10 @@ import {
   CAR_VEHICLES,
   ZEM_VEHICLES,
   refreshTarification,
-  ridePrice,
   tarification,
 } from "../services/tarification";
 import { useCurrentLocation } from "../hooks/useCurrentLocation";
+import { getDrivingRoute, type DrivingRoute } from "../services/routing";
 
 type Props = {
   service: "transport" | "zem";
@@ -183,6 +183,9 @@ export default function RideBookingScreen({ service, onBack, onConfirmed }: Prop
   const [estimates, setEstimates] = useState<Partial<Record<VehicleType, Estimate>>>({});
   const [estimating, setEstimating] = useState(false);
   const [estimateError, setEstimateError] = useState<string | null>(null);
+  const [roadRoute, setRoadRoute] = useState<DrivingRoute | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -203,29 +206,6 @@ export default function RideBookingScreen({ service, onBack, onConfirmed }: Prop
     setOrigin({ title, latitude: gps.coords.latitude, longitude: gps.coords.longitude });
     setOriginText(title);
   }, [gps.coords, gps.address]);
-
-  // Calcul de la distance réelle sur route
-function getDirectDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const roadDist = R * c * 1.35; // Facteur 1.35 pour les virages et carrefours réels
-  return Math.max(0.5, Math.round(roadDist * 10) / 10);
-}
-
-// Prix estimé hors ligne : barème officiel AZƆ̀ partagé avec le backend
-// (tarif de base + coût kilométrique par tranche, voir services/tarification.ts).
-// Aucun tarif codé en dur ici, et le serveur reste la référence dès qu'il répond.
-function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
-  return ridePrice(distanceKm, vehicle);
-}
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
@@ -279,59 +259,85 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
   useEffect(() => {
     if (!origin || !destination) {
       setEstimates({});
+      setEstimating(false);
+      setEstimateError(null);
       return;
     }
 
     setEstimating(true);
     setEstimateError(null);
-
-    // Calcul direct de la distance et du temps
-    const dist = getDirectDistanceKm(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
-    const eta = Math.max(3, Math.ceil((dist / 25) * 60));
-
-    // Barème local (configuration partagée avec le serveur)
-    const localEstimates: Partial<Record<VehicleType, Estimate>> = {};
-    options.forEach((v) => {
-      localEstimates[v] = {
-        distanceKm: dist,
-        etaMinutes: eta,
-        price: getDirectPrice(dist, v),
-      };
-    });
-    setEstimates(localEstimates);
-
-    // Puis prix officiels calculés par le backend (même barème, source de vérité).
-    // En cas d'échec (hors ligne), le calcul local configuré reste affiché.
+    setEstimates({});
     let cancelled = false;
     (async () => {
-      const serverEstimates: Partial<Record<VehicleType, Estimate>> = { ...localEstimates };
-      let gotServerPrice = false;
-      for (const v of options) {
-        try {
-          const res = await ridesApi.estimate({
+      try {
+        const results = await Promise.all(options.map(async (vehicle) => {
+          const estimate = await ridesApi.estimate({
             originLat: origin.latitude,
             originLng: origin.longitude,
             destLat: destination.latitude,
             destLng: destination.longitude,
-            vehicleType: v,
+            vehicleType: vehicle,
           });
-          if (typeof res?.price === "number") {
-            serverEstimates[v] = { ...localEstimates[v], ...res };
-            gotServerPrice = true;
+          if (
+            !Number.isFinite(estimate.distanceKm) || estimate.distanceKm <= 0 ||
+            !Number.isFinite(estimate.etaMinutes) || estimate.etaMinutes <= 0 ||
+            !Number.isFinite(estimate.price) || estimate.price <= 0
+          ) {
+            throw new Error("Le serveur a renvoyé une estimation invalide.");
           }
-        } catch {
-          // serveur injoignable : on garde le barème local
+          return [vehicle, estimate] as const;
+        }));
+        if (!cancelled) {
+          setEstimates(results.reduce<Partial<Record<VehicleType, Estimate>>>((byVehicle, [vehicle, estimate]) => {
+            byVehicle[vehicle] = estimate;
+            return byVehicle;
+          }, {}));
         }
+      } catch (error) {
+        if (!cancelled) setEstimateError(errorMessage(error));
+      } finally {
+        if (!cancelled) setEstimating(false);
       }
-      if (cancelled) return;
-      if (gotServerPrice) setEstimates(serverEstimates);
-      setEstimating(false);
     })();
 
     return () => {
       cancelled = true;
     };
   }, [origin, destination, options, reloadKey]);
+
+  useEffect(() => {
+    if (!origin || !destination) {
+      setRoadRoute(null);
+      setRouteLoading(false);
+      setRouteError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    setRoadRoute(null);
+    setRouteLoading(true);
+    setRouteError(null);
+
+    getDrivingRoute(origin, destination, controller.signal)
+      .then((route) => {
+        if (active) setRoadRoute(route);
+      })
+      .catch(() => {
+        if (active) setRouteError("Impossible de calculer l’itinéraire routier. Vérifie ta connexion puis réessaie.");
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (active) setRouteLoading(false);
+      });
+
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [origin, destination, reloadKey]);
 
   const applyPlace = useCallback((target: Target, place: Place) => {
     if (target === "origin") { originTouched.current = true; setOrigin(place); setOriginText(place.title); }
@@ -361,7 +367,7 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
   const chosenVehicle = service === "zem" ? zemType : carType;
   const est = estimates[selected];
   const walletInsufficient = balance !== null && !!est && balance < est.price;
-  const canConfirm = !!origin && !!destination && !!est && !estimating && !submitting && !walletInsufficient;
+  const canConfirm = !!origin && !!destination && !!roadRoute && !!est && !routeLoading && !estimating && !submitting && !walletInsufficient;
 
   const onConfirm = async () => {
     if (!origin || !destination || !est) return;
@@ -574,6 +580,7 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
       <OSMMapView
         center={origin ? { latitude: origin.latitude, longitude: origin.longitude } : undefined}
         onPress={onMapPress}
+        polyline={roadRoute?.coordinates ?? []}
         markers={[
           ...(origin ? [{ coordinate: origin, title: "Départ", color: "green" as const }] : []),
           ...(destination ? [{ coordinate: destination, title: "Destination", color: "red" as const }] : []),
@@ -696,6 +703,18 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
           {estimateError && (
             <View style={styles.banner}>
               <Text style={[styles.bannerText, { color: ERROR_COLOR }]}>{estimateError}</Text>
+              <Pressable onPress={() => setReloadKey((k) => k + 1)}><Text style={styles.link}>Réessayer</Text></Pressable>
+            </View>
+          )}
+          {routeLoading && (
+            <View style={styles.center}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.muted}>Calcul de l’itinéraire routier…</Text>
+            </View>
+          )}
+          {routeError && (
+            <View style={styles.banner}>
+              <Text style={[styles.bannerText, { color: ERROR_COLOR }]}>{routeError}</Text>
               <Pressable onPress={() => setReloadKey((k) => k + 1)}><Text style={styles.link}>Réessayer</Text></Pressable>
             </View>
           )}
