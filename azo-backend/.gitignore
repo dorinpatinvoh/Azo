@@ -8,3 +8,11 @@ dist/
 
 # Fichiers temporaires
 *.log
+
+# Dépendances (réinstallées avec `npm ci`)
+node_modules/
+
+# Secrets : ne jamais versionner (garder seulement .env.example)
+.env
+.env.*
+!.env.example
