@@ -1,4 +1,4 @@
-import type { LatLng } from "../components/TrackingMap";
+import type { LatLng } from "../components/OSMMapView";
 
 export type DrivingRoute = {
   coordinates: LatLng[];

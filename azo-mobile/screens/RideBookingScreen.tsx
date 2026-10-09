@@ -5,7 +5,7 @@ import {
   Platform,
 } from "react-native";
 // Supprime l'ancien import de MapView, UrlTile, Marker
-import TrackingMap, { type LatLng } from "../components/TrackingMap";
+import OSMMapView, { type LatLng } from "../components/OSMMapView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
@@ -571,7 +571,7 @@ function getDirectPrice(distanceKm: number, vehicle: VehicleType): number {
 
   return (
     <View style={styles.root}>
-      <TrackingMap
+      <OSMMapView
         center={origin ? { latitude: origin.latitude, longitude: origin.longitude } : undefined}
         onPress={onMapPress}
         markers={[

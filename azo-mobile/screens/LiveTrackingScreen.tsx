@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Alert } from "react-native";
-import TrackingMap, { OSMMarker, type LatLng } from "../components/TrackingMap";
+import OSMMapView, { OSMMarker, type LatLng } from "../components/OSMMapView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { io } from "socket.io-client";
@@ -192,7 +192,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   return (
     <View style={styles.root}>
-      <TrackingMap
+      <OSMMapView
         center={driverPos || origin}
         markers={osmMarkers}
         polyline={trackingPolyline}
