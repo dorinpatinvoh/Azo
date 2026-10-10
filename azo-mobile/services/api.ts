@@ -273,6 +273,8 @@ export type Ride = {
   rating?: number | null;
   /** Visible uniquement au client lorsque le chauffeur a signalé son arrivée. */
   pickupCode?: string | null;
+  /** Visible uniquement au client pendant IN_PROGRESS, à saisir pour terminer la course. */
+  dropCode?: string | null;
   driverArrivedAt?: string | null;
   createdAt: string;
   driver?: RidePerson | null;
@@ -319,7 +321,8 @@ export const ridesApi = {
   accept: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/accept`),
   arrive: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/arrive`),
   start: (rideId: string, pin: string) => api.post<Ride>(`${P}/rides/${rideId}/start`, { pin }),
-  complete: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/complete`),
+  complete: (rideId: string, pin: string) =>
+    api.post<Ride>(`${P}/rides/${rideId}/complete`, { pin }),
 
   /* --- Messagerie sécurisée in-app --- */
   messages: (rideId: string) => api.get<RideChatMessage[]>(`${P}/rides/${rideId}/messages`),

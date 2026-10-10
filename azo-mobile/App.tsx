@@ -332,6 +332,7 @@ export default function App() {
           <RideBookingScreen
             service={rideVehicle === "car-confort" ? "transport" : "zem"}
             onBack={() => goTo("home")}
+            onRecharge={() => goTo("wallet")}
             onConfirmed={(id, label) => {
               setRideId(id);
               setRideLabel(label);

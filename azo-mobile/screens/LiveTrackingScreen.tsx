@@ -6,7 +6,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { io } from "socket.io-client";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { API_URL, Ride, RideStatus, VehicleType, errorMessage, getToken, rideApi } from "../services/api";
+import { API_URL, Ride, RideStatus, VehicleType, errorMessage, getToken, rideApi, walletApi } from "../services/api";
 import RideChatModal from "../components/RideChatModal";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 import { getDrivingRoute, type DrivingRoute } from "../services/routing";
@@ -64,6 +64,22 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const [lastError, setLastError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletRefreshError, setWalletRefreshError] = useState<string | null>(null);
+  const [walletRefreshing, setWalletRefreshing] = useState(false);
+
+  async function refreshWallet() {
+    setWalletRefreshing(true);
+    setWalletRefreshError(null);
+    try {
+      const wallet = await walletApi.get();
+      setWalletBalance(wallet.balance);
+    } catch (error) {
+      setWalletRefreshError(errorMessage(error));
+    } finally {
+      setWalletRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +102,24 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
     tick();
     return () => { cancelled = true; clearTimeout(timer); };
   }, [rideId]);
+
+  useEffect(() => {
+    if (ride?.status !== "COMPLETED") return;
+    let active = true;
+    setWalletRefreshing(true);
+    setWalletRefreshError(null);
+    walletApi.get()
+      .then((wallet) => {
+        if (active) setWalletBalance(wallet.balance);
+      })
+      .catch((error) => {
+        if (active) setWalletRefreshError(errorMessage(error));
+      })
+      .finally(() => {
+        if (active) setWalletRefreshing(false);
+      });
+    return () => { active = false; };
+  }, [ride?.id, ride?.status]);
 
   useEffect(() => {
     const socket = io(API_URL, { transports: ["websocket"], auth: { token: getToken() } });
@@ -264,7 +298,24 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
         )}
 
         {ride.status === "ARRIVED" && <View style={styles.pinBanner}><MaterialIcons name="shield" size={20} color={colors.primary} /><View style={{ flex: 1 }}><Text style={styles.pinBannerTitle}>{ride.vehicleType.startsWith("ZEM_") ? "Ton Zem est arrivé" : "Ton chauffeur est arrivé"}</Text><Text style={styles.pinBannerSub}>{ride.pickupCode ? "Vérifie qu'il est devant toi, puis donne-lui ce code pour démarrer." : "Le code de sécurité arrive…"}</Text></View>{ride.pickupCode ? <View style={styles.pinCodePill}><Text style={styles.pinCodeText}>{ride.pickupCode}</Text></View> : <ActivityIndicator size="small" color={colors.primary} />}</View>}
+        {ride.status === "IN_PROGRESS" && <View style={styles.pinBanner}><MaterialIcons name="verified-user" size={20} color={colors.primary} /><View style={{ flex: 1 }}><Text style={styles.pinBannerTitle}>Code d'arrivée</Text><Text style={styles.pinBannerSub}>{ride.dropCode ? "Garde ce code et donne-le au Zem à destination." : "Le code d'arrivée sera affiché dès que le serveur le fournira."}</Text></View>{ride.dropCode ? <View style={styles.pinCodePill}><Text style={styles.pinCodeText}>{ride.dropCode}</Text></View> : <ActivityIndicator size="small" color={colors.primary} />}</View>}
         <View style={{ gap: 2 }}>{!!destinationLabel && <Text style={styles.muted} numberOfLines={1}>→ {destinationLabel}</Text>}<Text style={styles.price}>{ride.price.toLocaleString("fr-FR")} FCFA · {paymentLabel}</Text></View>
+        {done && <View style={styles.paymentSummary}>
+          <Text style={styles.paymentTitle}>Paiement AZƆ̀ Pay confirmé</Text>
+          <Text style={styles.muted}>Montant payé : {ride.price.toLocaleString("fr-FR")} FCFA</Text>
+          {walletBalance !== null ? (
+            <Text style={styles.walletBalance}>Nouveau solde : {walletBalance.toLocaleString("fr-FR")} FCFA</Text>
+          ) : walletRefreshing ? (
+            <View style={styles.walletRefreshRow}><ActivityIndicator size="small" color={colors.primary} /><Text style={styles.muted}>Actualisation du solde…</Text></View>
+          ) : (
+            <View style={styles.walletRefreshRow}>
+              <Text style={styles.errorText}>{walletRefreshError ?? "Le solde n'a pas pu être actualisé."}</Text>
+              <Pressable onPress={refreshWallet} disabled={walletRefreshing} style={styles.walletRetry}>
+                <Text style={styles.walletRetryText}>Réessayer</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>}
         {finished ? <Pressable style={styles.primaryBtn} onPress={done ? (onFinish ?? onClose) : onClose}><Text style={styles.primaryText}>{done ? "Terminer" : ride.expired ? "Relancer une recherche" : "Fermer"}</Text></Pressable> : <><>{cancellable && <Pressable style={styles.cancelBtn} onPress={handleCancelRide} disabled={cancelling}>{cancelling ? <ActivityIndicator size="small" color={ERROR_COLOR} /> : <Text style={styles.cancelText}>Annuler la course</Text>}</Pressable>}</><Pressable style={styles.secondaryBtn} onPress={onClose}><Text style={styles.secondaryText}>Réduire</Text></Pressable></>}
       </View>
       <RideChatModal visible={chatOpen} rideId={ride.id} myRole="CLIENT" peerName={ride.driver?.fullName} peerPhone={ride.driver?.phone} locked={finished} onClose={() => setChatOpen(false)} />
@@ -296,6 +347,12 @@ const styles = StyleSheet.create({
   pinBannerSub: { ...typography.bodySm, color: colors.onSurfaceVariant, fontSize: 11 },
   pinCodePill: { backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 6 },
   pinCodeText: { ...typography.headlineSm, color: "#fff", fontWeight: "800", letterSpacing: 2 },
+  paymentSummary: { backgroundColor: colors.primaryFixed, borderRadius: radius.lg, padding: spacing.md, gap: 4 },
+  paymentTitle: { ...typography.labelLg, color: colors.onPrimaryFixed, fontWeight: "800" },
+  walletBalance: { ...typography.bodyMd, color: colors.onPrimaryFixed, fontWeight: "800" },
+  walletRefreshRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  walletRetry: { backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 7 },
+  walletRetryText: { ...typography.labelSm, color: "#fff", fontWeight: "800" },
   eta: { alignItems: "center", backgroundColor: colors.primaryFixed, borderRadius: radius.lg, paddingHorizontal: 12, paddingVertical: 6 },
   arrivedBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 8 },
   arrivedBadgeText: { ...typography.labelSm, color: colors.primary, fontWeight: "800" },
