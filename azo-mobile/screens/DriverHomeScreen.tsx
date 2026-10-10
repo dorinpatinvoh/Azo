@@ -47,10 +47,14 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const [busy, setBusy] = useState(false);
   const [offline, setOffline] = useState(false);
   const [ridePlaces, setRidePlaces] = useState<{ origin?: string; destination?: string }>({});
+  const [pendingDestinations, setPendingDestinations] = useState<Record<string, string>>({});
   const [chatOpen, setChatOpen] = useState(false);
   const [pinInput, setPinInput] = useState("");
+  const [dropCodeInput, setDropCodeInput] = useState("");
+  const [dropCodeEntryOpen, setDropCodeEntryOpen] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
+  const pendingDestinationRequestsRef = useRef(new Set<string>());
   const activeRideRef = useRef<Ride | null>(null);
   activeRideRef.current = activeRide;
   // Dernière position connue, lue par le radar : une ref évite de redémarrer le
@@ -226,6 +230,24 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     return () => { cancelled = true; };
   }, [activeRide?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    pending.forEach((ride) => {
+      if (pendingDestinations[ride.id] || pendingDestinationRequestsRef.current.has(ride.id)) return;
+      pendingDestinationRequestsRef.current.add(ride.id);
+      placesApi
+        .reverseGeocode(ride.destLat, ride.destLng)
+        .then(({ address }) => {
+          if (address.trim()) {
+            setPendingDestinations((current) => ({ ...current, [ride.id]: address }));
+          }
+        })
+        .catch((error) => {
+          console.warn(`La destination de la demande ${ride.id} n'a pas pu être chargée :`, error);
+        })
+        .finally(() => pendingDestinationRequestsRef.current.delete(ride.id));
+    });
+  }, [pending, pendingDestinations]);
+
   /* ---------- Actions ---------- */
   const requests = useMemo(() => {
     const withDistance = pending.map((r) => ({
@@ -333,6 +355,8 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     try {
       setActiveRide(await ridesApi.start(activeRide.id, clean));
       setPinInput("");
+      setDropCodeInput("");
+      setDropCodeEntryOpen(false);
     } catch (e) {
       Alert.alert("Démarrage impossible", errorMessage(e));
     } finally {
@@ -342,19 +366,25 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
 
   function handleComplete() {
     if (!activeRide) return;
+    const cleanPin = dropCodeInput.replace(/\D/g, "");
+    if (cleanPin.length !== 4) {
+      Alert.alert("Code d'arrivée requis", "Demande au client son code d'arrivée à 4 chiffres pour terminer la course.");
+      return;
+    }
     const gain = activeRide.price;
     Alert.alert(
-      "Terminer la course ?",
-      `${fcfa(gain)} seront débités du client et crédités sur ton portefeuille (moins la commission AZƆ̀).`,
+      "Confirmer l'arrivée à destination ?",
+      `Le paiement de ${fcfa(gain)} sera effectué après validation du code.`,
       [
         { text: "Pas encore", style: "cancel" },
         {
-          text: "Terminer",
+          text: "Valider et terminer",
           onPress: async () => {
             setBusy(true);
             try {
-              const done = await ridesApi.complete(activeRide.id);
+              const done = await ridesApi.complete(activeRide.id, cleanPin);
               setActiveRide(null);
+              setDropCodeInput("");
               await loadAccount();
               const net = done.price - (done.commission ?? 0);
               Alert.alert("Course terminée 🎉", `+${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`);
@@ -573,6 +603,24 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
               </View>
             )}
 
+            {activeRide.status === "IN_PROGRESS" && dropCodeEntryOpen && (
+              <View style={styles.pinBox}>
+                <Text style={styles.pinLabel}>
+                  À destination, demande le code d’arrivée à 4 chiffres au client
+                </Text>
+                <TextInput
+                  style={styles.pinInput}
+                  value={dropCodeInput}
+                  onChangeText={(value) => setDropCodeInput(value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="••••"
+                  placeholderTextColor={colors.outline}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  accessibilityLabel="Code d'arrivée du client"
+                />
+              </View>
+            )}
+
             {busy ? (
               <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.sm }} />
             ) : activeRide.status === "MATCHED" ? (
@@ -595,12 +643,17 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
                   <Text style={styles.ghostBtnText}>Annuler la course</Text>
                 </Pressable>
               </View>
-            ) : (
-              <Pressable style={styles.primaryBtn} onPress={handleComplete}>
-                <MaterialIcons name="check-circle" size={20} color="#fff" />
-                <Text style={styles.primaryBtnText}>Terminer et encaisser</Text>
+            ) : activeRide.status === "IN_PROGRESS" ? (
+              <Pressable
+                style={styles.primaryBtn}
+                onPress={() => dropCodeEntryOpen ? handleComplete() : setDropCodeEntryOpen(true)}
+              >
+                <MaterialIcons name={dropCodeEntryOpen ? "check-circle" : "place"} size={20} color="#fff" />
+                <Text style={styles.primaryBtnText}>
+                  {dropCodeEntryOpen ? "Valider le code et terminer" : "Arrivé à destination"}
+                </Text>
               </Pressable>
-            )}
+            ) : null}
           </View>
         )}
 
@@ -683,6 +736,12 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.requestTitle}>
                         {VEHICLE_LABEL[ride.vehicleType]} · {fcfa(ride.price)}
+                      </Text>
+                      <Text style={styles.requestClient} numberOfLines={1}>
+                        Client : {maskPersonName(ride.client?.fullName, "Client AZƆ̀")}
+                      </Text>
+                      <Text style={styles.requestDestination} numberOfLines={2}>
+                        Destination : {pendingDestinations[ride.id] ?? `${ride.destLat.toFixed(4)}, ${ride.destLng.toFixed(4)}`}
                       </Text>
                       <Text style={styles.requestMeta}>
                         {km !== null ? `${fmtKm(km)} de toi · ` : ""}
@@ -818,6 +877,8 @@ const styles = StyleSheet.create({
   requestCard: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   requestIcon: { width: 44, height: 44, borderRadius: radius.full, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
   requestTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
+  requestClient: { ...typography.bodySm, color: colors.onSurface, fontWeight: "600" },
+  requestDestination: { ...typography.bodySm, color: colors.onSurfaceVariant },
   requestMeta: { ...typography.bodySm, color: colors.onSurfaceVariant },
   acceptBtn: { backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: 16, paddingVertical: 10 },
   acceptBtnDisabled: { opacity: 0.5 },

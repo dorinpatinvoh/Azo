@@ -23,6 +23,7 @@ import { getDrivingRoute, type DrivingRoute } from "../services/routing";
 type Props = {
   service: "transport" | "zem";
   onBack: () => void;
+  onRecharge: () => void;
   onConfirmed: (rideId: string, destinationLabel: string) => void;
 };
 type Target = "origin" | "destination";
@@ -152,7 +153,7 @@ const fmtKm = (n: number) => `${n.toLocaleString("fr-FR", { maximumFractionDigit
 const fmtDuration = (min: number) =>
   min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}`;
 
-export default function RideBookingScreen({ service, onBack, onConfirmed }: Props) {
+export default function RideBookingScreen({ service, onBack, onRecharge, onConfirmed }: Props) {
   const insets = useSafeAreaInsets();
   const gps = useCurrentLocation();
   const originTouched = useRef(false);
@@ -780,16 +781,34 @@ export default function RideBookingScreen({ service, onBack, onConfirmed }: Prop
                 </View>
               </View>
               {walletInsufficient && (
-                <Text style={styles.errorText}>Solde insuffisant. Recharge ton portefeuille pour réserver.</Text>
+                <View style={styles.insufficientBalance}>
+                  <Text style={styles.errorText}>Solde insuffisant. Recharge ton portefeuille pour réserver.</Text>
+                  <Pressable style={styles.rechargeBtn} onPress={onRecharge}>
+                    <Text style={styles.rechargeText}>Recharger AZƆ̀ Pay</Text>
+                  </Pressable>
+                </View>
               )}
             </>
           )}
 
-          {submitError && <Text style={styles.errorText}>{submitError}</Text>}
+          {submitError && (
+            <View style={styles.insufficientBalance}>
+              <Text style={styles.errorText}>{submitError}</Text>
+              {/solde insuffisant|pas assez de solde/i.test(submitError) && (
+                <Pressable style={styles.rechargeBtn} onPress={onRecharge}>
+                  <Text style={styles.rechargeText}>Recharger AZƆ̀ Pay</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
 
           {/* BOUTON D'ACTION PRINCIPAL */}
           <Pressable
-            style={[styles.confirmBtn, !destination && { backgroundColor: colors.surfaceContainerHigh }]}
+            style={[
+              styles.confirmBtn,
+              (!destination || !canConfirm) && { backgroundColor: colors.surfaceContainerHigh },
+            ]}
+            disabled={!!destination && !canConfirm}
             onPress={() => {
               if (!destination) {
                 // Si aucune destination n'est choisie, on focalise le champ texte !
@@ -876,6 +895,9 @@ const styles = StyleSheet.create({
   summaryDetail: { ...typography.bodySm, color: colors.onSurfaceVariant, textAlign: "center", marginTop: 8 },
   payBox: { flexDirection: "row", alignItems: "center", gap: 12, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surfaceContainer, marginTop: 4 },
   errorText: { ...typography.bodySm, color: ERROR_COLOR, marginTop: 8 },
+  insufficientBalance: { alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
+  rechargeBtn: { backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 10 },
+  rechargeText: { ...typography.labelMd, color: "#fff", fontWeight: "800" },
   confirmBtn: { backgroundColor: colors.primary, borderRadius: radius.full, paddingVertical: 16, alignItems: "center", marginTop: spacing.md },
   confirmText: { ...typography.labelMd, color: "#fff", fontWeight: "800", fontSize: 16 },
 });

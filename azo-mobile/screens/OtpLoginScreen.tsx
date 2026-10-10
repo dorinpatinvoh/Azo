@@ -26,6 +26,7 @@ import {
   errorMessage,
   getApiUrl,
   setApiUrl,
+  userApi,
 } from "../services/api";
 import {
   BENIN_PHONE_LENGTH,
@@ -35,7 +36,7 @@ import {
   toBeninE164,
 } from "../utils/phone";
 
-type Step = "phone" | "code";
+type Step = "phone" | "code" | "name";
 
 type Props = {
   onVerified: (role: string, provider?: ProviderRef | null) => void;
@@ -48,6 +49,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState(["", "", "", ""]);
+  const [fullName, setFullName] = useState("");
   const [sending, setSending] = useState(false);
   const inputsRef = useRef<Array<TextInput | null>>([]);
 
@@ -145,9 +147,37 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
         await SecureStore.deleteItemAsync("providerType");
       }
 
+      if (role === "CLIENT" && !response.user.fullName?.trim()) {
+        setFullName("");
+        setStep("name");
+        return;
+      }
+
       onVerified(role, provider);
     } catch (e) {
       Alert.alert("Connexion impossible", errorMessage(e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleSaveName() {
+    const name = fullName.trim();
+    if (!name) {
+      Alert.alert("Nom requis", "Entre le pseudo ou le nom que le chauffeur pourra voir.");
+      return;
+    }
+
+    setSending(true);
+    try {
+      const updatedUser = await userApi.update(name);
+      if (!updatedUser.fullName?.trim()) {
+        Alert.alert("Enregistrement incomplet", "Le serveur n'a pas confirmé l'enregistrement de ton nom. Réessaie.");
+        return;
+      }
+      onVerified("CLIENT", null);
+    } catch (e) {
+      Alert.alert("Enregistrement impossible", errorMessage(e));
     } finally {
       setSending(false);
     }
@@ -230,11 +260,16 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
           {/* En-tête épuré : flèche retour à gauche, rien qui encombre à droite */}
           <View style={styles.topRow}>
             <Pressable
-              onPress={step === "phone" ? onBack : () => setStep("phone")}
+              onPress={step === "phone" ? onBack : step === "code" ? () => setStep("phone") : undefined}
               style={styles.iconButton}
-              accessibilityLabel="Retour"
+              accessibilityLabel={step === "name" ? "Étape obligatoire" : "Retour"}
+              disabled={step === "name"}
             >
-              <MaterialIcons name="arrow-back" size={20} color={colors.onSurface} />
+              <MaterialIcons
+                name={step === "name" ? "lock" : "arrow-back"}
+                size={20}
+                color={step === "name" ? colors.outline : colors.onSurface}
+              />
             </Pressable>
             <Pressable
               onPress={() => {
@@ -259,11 +294,19 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
               <Text style={styles.brand}>AZƆ̀</Text>
             </Pressable>
             <Text style={styles.headline}>
-              {step === "phone" ? "Bienvenue sur AZƆ̀" : "Vérifie ton téléphone"}
+              {step === "phone"
+                ? "Bienvenue sur AZƆ̀"
+                : step === "code"
+                  ? "Vérifie ton téléphone"
+                  : "Bienvenue ! Comment on t'appelle ?"}
             </Text>
             {step === "code" ? (
               <Text style={styles.subtitle}>
                 Code à 4 chiffres envoyé au +229 {phone || "01 •• •• •• ••"}
+              </Text>
+            ) : step === "name" ? (
+              <Text style={styles.subtitle}>
+                Choisis un pseudo ou un nom que ton chauffeur pourra voir.
               </Text>
             ) : null}
           </View>
@@ -309,7 +352,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
                 </View>
               </View>
             </View>
-          ) : (
+          ) : step === "code" ? (
             <View style={styles.codeRow}>
               {code.map((digit, i) => (
                 <TextInput
@@ -325,16 +368,34 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
                 />
               ))}
             </View>
+          ) : (
+            <View style={styles.card}>
+              <Text style={styles.label}>Pseudo / Nom complet</Text>
+              <TextInput
+                style={styles.nameInput}
+                value={fullName}
+                onChangeText={setFullName}
+                placeholder="Ex. Kossi ou Kossi Adjovi"
+                placeholderTextColor={colors.outline}
+                autoCapitalize="words"
+                autoCorrect={false}
+                autoFocus
+                maxLength={60}
+                returnKeyType="done"
+                onSubmitEditing={handleSaveName}
+              />
+              <Text style={styles.nameHint}>Tu pourras le modifier plus tard dans ton profil.</Text>
+            </View>
           )}
 
           <View style={{ flex: 1, minHeight: spacing.xl }} />
 
           <PrimaryButton
-            label={step === "phone" ? "Recevoir mon code" : "Vérifier et continuer"}
-            onPress={step === "phone" ? handleSendCode : handleVerify}
+            label={step === "phone" ? "Recevoir mon code" : step === "code" ? "Vérifier et continuer" : "Continuer"}
+            onPress={step === "phone" ? handleSendCode : step === "code" ? handleVerify : handleSaveName}
             loading={sending}
-            disabled={step === "phone" ? !isPhoneValid : code.join("").length < 4}
-            icon={step === "phone" ? "sms" : "check"}
+            disabled={step === "phone" ? !isPhoneValid : step === "code" ? code.join("").length < 4 : !fullName.trim()}
+            icon={step === "phone" ? "sms" : step === "code" ? "check" : "arrow-forward"}
           />
 
           {step === "code" && (
@@ -600,6 +661,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.surfaceContainerHigh,
   },
+  nameInput: {
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingHorizontal: 12,
+    ...typography.bodyMd,
+    color: colors.onSurface,
+    marginTop: spacing.xs,
+  },
+  nameHint: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: spacing.sm },
   adminQuickBtn: {
     flexDirection: "row",
     alignItems: "center",
