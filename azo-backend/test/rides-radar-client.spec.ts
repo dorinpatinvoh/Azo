@@ -62,3 +62,60 @@ describe("radar du Zem : destination et pseudo du client", () => {
     expect(ride.client).not.toHaveProperty("phone");
   });
 });
+
+describe("le pseudo du client reste dans les réponses utilisées par l'écran Zem", () => {
+  const clientInclude = { client: { select: { fullName: true, phone: true } } };
+
+  function makeActiveService(status: string) {
+    const ride = {
+      id: "ride-1",
+      clientId: "client-1",
+      driverId: "driver-1",
+      status,
+      vehicleType: "ZEM_ESSENCE",
+      pickupCode: "0472",
+      price: 1000,
+      createdAt: new Date(),
+      client: { fullName: "Amine", phone: "+2290197000042" },
+    };
+    const prisma = {
+      ride: {
+        findUnique: jest.fn().mockResolvedValue(ride),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ ...ride, status: status === "MATCHED" ? "ARRIVED" : "IN_PROGRESS" }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      wallet: { findUnique: jest.fn().mockResolvedValue({ balance: 5000 }) },
+    };
+    const pricing = { isZem: jest.fn().mockReturnValue(true), radarSettings: jest.fn().mockReturnValue({}) };
+    const service = new RidesService(
+      prisma as any,
+      {} as any,
+      { push: jest.fn().mockResolvedValue({}) } as any,
+      pricing as any,
+      { emitStatus: jest.fn() } as any
+    );
+    return { service, prisma };
+  }
+
+  it("arrive() renvoie le client avec son pseudo", async () => {
+    const { service, prisma } = makeActiveService("MATCHED");
+    const result: any = await service.arrive("ride-1", "driver-1");
+    expect(prisma.ride.findUniqueOrThrow.mock.calls[0][0].include).toEqual(clientInclude);
+    expect(result.client.fullName).toBe("Amine");
+    expect(result).not.toHaveProperty("pickupCode");
+  });
+
+  it("arrive() (second appui) renvoie aussi le client", async () => {
+    const { service } = makeActiveService("ARRIVED");
+    const result: any = await service.arrive("ride-1", "driver-1");
+    expect(result.client.fullName).toBe("Amine");
+  });
+
+  it("start() renvoie le client avec son pseudo", async () => {
+    const { service, prisma } = makeActiveService("ARRIVED");
+    const result: any = await service.start("ride-1", "driver-1", "0472");
+    expect(prisma.ride.findUniqueOrThrow.mock.calls[0][0].include).toEqual(clientInclude);
+    expect(result.client.fullName).toBe("Amine");
+    expect(result).not.toHaveProperty("pickupCode");
+  });
+});

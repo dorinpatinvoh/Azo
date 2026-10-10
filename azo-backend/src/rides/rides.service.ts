@@ -14,6 +14,11 @@ import { RidesGateway } from "./rides.gateway";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { LatLng, buildRadar, isRideExpired, rideAgeMinutes } from "./radar";
 
+// Le client attaché à la course, tel que le chauffeur le reçoit (même forme que `accept`).
+// L'app Zem remplace sa course active par chaque réponse (accept, arrive, start) : toutes
+// doivent donc porter `client`, sinon le pseudo disparaît de l'écran dès l'arrivée.
+const WITH_CLIENT = { client: { select: { fullName: true, phone: true } } } as const;
+
 function createPickupCode(): string {
   return String(randomInt(0, 10_000)).padStart(4, "0");
 }
@@ -248,7 +253,7 @@ export class RidesService {
 
     const ride = await this.prisma.ride.findUniqueOrThrow({
       where: { id: rideId },
-      include: { client: { select: { fullName: true, phone: true } } },
+      include: WITH_CLIENT,
     });
     await this.notifications.push(ride.clientId, "Chauffeur trouvé", "Un chauffeur a accepté ta course et arrive vers toi.", "ride");
     this.gateway.emitStatus(rideId, "MATCHED");
@@ -280,7 +285,7 @@ export class RidesService {
     }
     if (count === 0) throw new BadRequestException("Le statut de la course a changé. Actualise l'écran.");
 
-    const arrivedRide = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId } });
+    const arrivedRide = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
     const arrivalTitle = this.pricing.isZem(arrivedRide.vehicleType)
       ? "Ton Zem est arrivé"
       : "Ton chauffeur est arrivé";
@@ -346,7 +351,7 @@ export class RidesService {
 
     await this.notifications.push(ride.clientId, "Course démarrée", "Ton chauffeur est en route vers la destination.", "ride");
     this.gateway.emitStatus(rideId, "IN_PROGRESS");
-    const updated = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId } });
+    const updated = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
     return this.withoutPickupCode(updated);
   }
 
@@ -525,7 +530,7 @@ export class RidesService {
   }
 
   private async getOwnedByDriver(rideId: string, driverId: string) {
-    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId }, include: WITH_CLIENT });
     if (!ride) throw new NotFoundException("Course introuvable");
     if (ride.driverId !== driverId) throw new ForbiddenException("Cette course ne vous est pas attribuée");
     return ride;
