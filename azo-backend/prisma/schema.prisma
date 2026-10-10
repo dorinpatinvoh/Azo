@@ -160,6 +160,7 @@ model OtpCode {
   code      String
   expiresAt DateTime
   consumed  Boolean  @default(false)
+  attempts  Int      @default(0) // saisies erronées : 3 maximum, puis le code est annulé
   createdAt DateTime @default(now())
 }
 
