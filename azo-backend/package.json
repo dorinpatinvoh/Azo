@@ -6,16 +6,17 @@
   },
   "private": true,
   "scripts": {
-  "build": "nest build",
-  "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-  "start": "nest start",
-  "start:dev": "nest start --watch",
-  "start:debug": "nest start --debug --watch",
-  "start:prod": "node dist/src/main || node dist/main",
-  "render:start": "node dist/src/main.js || node dist/main.js",
-  "test": "jest",
-  "render:build": "npm ci && npx --no-install prisma generate && npm run build"
-},
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/src/main || node dist/main",
+    "render:start": "node dist/src/main.js || node dist/main.js",
+    "test": "jest",
+    "seed": "prisma db seed",
+    "render:build": "npm ci && npx --no-install prisma generate && npm run build"
+  },
   "prisma": {
     "seed": "node prisma/seed.js"
   },

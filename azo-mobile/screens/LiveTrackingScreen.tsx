@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Alert } from "react-native";
-import OSMMapView, { OSMMarker } from "../components/OSMMapView";
+import OSMMapView, { OSMMarker, type LatLng } from "../components/OSMMapView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { io } from "socket.io-client";
@@ -9,11 +9,9 @@ import { typography } from "../theme/typography";
 import { API_URL, Ride, RideStatus, VehicleType, errorMessage, getToken, rideApi } from "../services/api";
 import RideChatModal from "../components/RideChatModal";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
-import { getDrivingRoute } from "../services/routing";
+import { getDrivingRoute, type DrivingRoute } from "../services/routing";
 
 type Props = { rideId: string; destinationLabel?: string; onClose: () => void; onFinish?: () => void };
-type LatLng = { latitude: number; longitude: number };
-
 const POLL_MS = 3000;
 const ERROR_COLOR = "#B3261B";
 const STATUS_TEXT: Record<RideStatus, string> = {
@@ -57,8 +55,11 @@ function Pulse() {
 export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, onFinish }: Props) {
   const insets = useSafeAreaInsets();
   const [ride, setRide] = useState<Ride | null>(null);
-  const [driverPos, setDriverPos] = useState<LatLng | null>(null);
+  const [driverPos, setDriverPos] = useState<(LatLng & { heading?: number }) | null>(null);
   const [driverRoute, setDriverRoute] = useState<{ coordinates: LatLng[]; durationMinutes: number; start: LatLng; target: LatLng } | null>(null);
+  const [pendingRoute, setPendingRoute] = useState<DrivingRoute | null>(null);
+  const [pendingRouteLoading, setPendingRouteLoading] = useState(false);
+  const [pendingRouteError, setPendingRouteError] = useState(false);
   const [failures, setFailures] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -89,7 +90,13 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   useEffect(() => {
     const socket = io(API_URL, { transports: ["websocket"], auth: { token: getToken() } });
     socket.on("connect", () => socket.emit("ride:join", { rideId }));
-    socket.on("driver:location", (p: { lat: number; lng: number }) => setDriverPos({ latitude: p.lat, longitude: p.lng }));
+    socket.on("driver:location", (p: { lat: number; lng: number; heading?: number }) =>
+      setDriverPos({
+        latitude: p.lat,
+        longitude: p.lng,
+        ...(typeof p.heading === "number" && Number.isFinite(p.heading) ? { heading: p.heading } : {}),
+      })
+    );
     socket.on("ride:status", (p: { status: RideStatus }) => setRide((r) => (r ? { ...r, status: p.status } : r)));
     return () => { socket.disconnect(); };
   }, [rideId]);
@@ -99,44 +106,84 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const target = ride?.status === "MATCHED" || ride?.status === "ARRIVED" ? origin : destination;
 
   useEffect(() => {
+    if (!origin || !destination || ride?.status !== "PENDING") {
+      setPendingRoute(null);
+      setPendingRouteLoading(false);
+      setPendingRouteError(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    setPendingRoute(null);
+    setPendingRouteLoading(true);
+    setPendingRouteError(false);
+
+    getDrivingRoute(origin, destination, controller.signal)
+      .then((route) => {
+        if (active) setPendingRoute(route);
+      })
+      .catch(() => {
+        if (active) setPendingRouteError(true);
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (active) setPendingRouteLoading(false);
+      });
+
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [origin?.latitude, origin?.longitude, destination?.latitude, destination?.longitude, ride?.status]);
+
+  useEffect(() => {
     if (!driverPos || !target || (ride?.status !== "MATCHED" && ride?.status !== "IN_PROGRESS")) {
       setDriverRoute(null);
       return;
     }
     const controller = new AbortController();
     let active = true;
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const timer = setTimeout(() => {
       getDrivingRoute(driverPos, target, controller.signal)
         .then((route) => { if (active) setDriverRoute({ ...route, start: driverPos, target }); })
-        .catch(() => { if (active) setDriverRoute(null); });
+        .catch(() => { if (active) setDriverRoute(null); })
+        .finally(() => clearTimeout(timeout));
     }, 700);
-    return () => { active = false; clearTimeout(timer); controller.abort(); };
-  }, [driverPos?.latitude, driverPos?.longitude, target?.latitude, target?.longitude, ride?.status]);
-
-  const fallbackEtaMinutes = useMemo(() => {
-    if (!driverPos || !target || (ride?.status !== "MATCHED" && ride?.status !== "IN_PROGRESS")) return null;
-    return Math.max(1, Math.ceil(((distanceKm(driverPos, target) * 1.3) / 25) * 60));
+    return () => { active = false; clearTimeout(timer); clearTimeout(timeout); controller.abort(); };
   }, [driverPos?.latitude, driverPos?.longitude, target?.latitude, target?.longitude, ride?.status]);
 
   const routeStillRelevant = !!(driverRoute && driverPos && target && distanceKm(driverRoute.start, driverPos) < 0.5 && distanceKm(driverRoute.target, target) < 0.05);
-  const etaMinutes = ride?.status === "ARRIVED" || ride?.status === "COMPLETED" || ride?.status === "CANCELLED" ? null : routeStillRelevant ? driverRoute?.durationMinutes ?? fallbackEtaMinutes : fallbackEtaMinutes;
+  const etaMinutes = ride?.status === "ARRIVED" || ride?.status === "COMPLETED" || ride?.status === "CANCELLED"
+    ? null
+    : routeStillRelevant ? driverRoute?.durationMinutes ?? null : null;
 
   const trackingPolyline = useMemo(() => {
-    if (driverPos && target) {
-      if (routeStillRelevant && driverRoute) return driverRoute.coordinates;
-      return [driverPos, target];
+    if (ride?.status === "PENDING") return pendingRoute?.coordinates ?? [];
+    if (ride?.status === "MATCHED" || ride?.status === "IN_PROGRESS") {
+      return routeStillRelevant && driverRoute ? driverRoute.coordinates : [];
     }
-    if (ride?.status === "MATCHED" || ride?.status === "ARRIVED") return [];
-    return origin && destination ? [origin, destination] : [];
-  }, [driverPos, target?.latitude, target?.longitude, driverRoute, routeStillRelevant, ride?.status, origin, destination]);
+    return [];
+  }, [driverRoute, pendingRoute, ride?.status, routeStillRelevant]);
 
   const osmMarkers = useMemo<OSMMarker[]>(() => {
     if (!origin || !destination) return [];
     const list: OSMMarker[] = [
-      { coordinate: origin, title: "Départ", color: "green" },
-      { coordinate: destination, title: "Destination", color: "red" },
+      { id: "origin", coordinate: origin, title: "Départ", color: "green" },
+      { id: "destination", coordinate: destination, title: "Destination", color: "red" },
     ];
-    if (driverPos) list.push({ coordinate: driverPos, title: ride?.driver?.fullName ?? "Chauffeur", color: "blue" });
+    if (driverPos) {
+      list.push({
+        id: "driver",
+        coordinate: driverPos,
+        title: ride?.driver?.fullName ?? "Chauffeur",
+        color: "blue",
+        heading: driverPos.heading,
+      });
+    }
     return list;
   }, [origin, destination, driverPos, ride?.driver?.fullName]);
 
@@ -180,11 +227,18 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   return (
     <View style={styles.root}>
-      <OSMMapView center={driverPos || origin} markers={osmMarkers} polyline={trackingPolyline} />
+      <OSMMapView
+        center={driverPos || origin}
+        markers={osmMarkers}
+        polyline={trackingPolyline}
+        followMarkerId={driverPos && (ride.status === "MATCHED" || ride.status === "ARRIVED" || ride.status === "IN_PROGRESS") ? "driver" : undefined}
+      />
       {failures >= 2 && <View style={[styles.offline, { top: insets.top + 8 }]}><MaterialIcons name="wifi-off" size={16} color="#fff" /><Text style={styles.offlineText}>Connexion instable — nouvelle tentative…</Text></View>}
       <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
         <Text style={styles.status}>{STATUS_TEXT[ride.status]}</Text>
         {searching && <View style={styles.searchRow}><Pulse /><Text style={[styles.muted, { flex: 1 }]}>Nous contactons les chauffeurs proches de toi.{typeof ride.expiresInMinutes === "number" && ride.expiresInMinutes > 0 ? ` Recherche encore ${ride.expiresInMinutes} min : sans chauffeur, la demande est annulée sans aucun débit.` : ""}</Text></View>}
+        {searching && pendingRouteLoading && <Text style={styles.muted}>Calcul du trajet routier…</Text>}
+        {searching && pendingRouteError && <Text style={styles.errorText}>L’itinéraire routier est momentanément indisponible ; la carte n’affiche pas de ligne approximative.</Text>}
         {ride.expired && <View style={styles.expiredBanner}><MaterialIcons name="search-off" size={18} color={ERROR_COLOR} /><Text style={styles.expiredText}>Aucun chauffeur n'a accepté ta demande : elle a expiré et a été annulée. Aucun montant n'a été débité — tu peux relancer une recherche.</Text></View>}
 
         {ride.driver && (
