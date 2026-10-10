@@ -26,7 +26,10 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -56,6 +59,9 @@
           "cameraPermission": "AZO utilise l'appareil photo pour ton selfie de verification et tes pieces justificatives."
         }
       ]
-    ]
+    ],
+    "updates": {
+      "url": "https://u.expo.dev/1704551d-9734-4d36-9f4b-b3d5fc1cfe89"
+    }
   }
 }
