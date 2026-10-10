@@ -364,6 +364,20 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     }
   }
 
+  async function handleRequestDropCode() {
+    if (!activeRide || activeRide.status !== "IN_PROGRESS") return;
+    setBusy(true);
+    try {
+      await ridesApi.requestDropCode(activeRide.id);
+      setDropCodeInput("");
+      setDropCodeEntryOpen(true);
+    } catch (e) {
+      Alert.alert("Impossible de demander le code", errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function handleComplete() {
     if (!activeRide) return;
     const cleanPin = dropCodeInput.replace(/\D/g, "");
@@ -646,7 +660,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
             ) : activeRide.status === "IN_PROGRESS" ? (
               <Pressable
                 style={styles.primaryBtn}
-                onPress={() => dropCodeEntryOpen ? handleComplete() : setDropCodeEntryOpen(true)}
+                onPress={() => dropCodeEntryOpen ? handleComplete() : handleRequestDropCode()}
               >
                 <MaterialIcons name={dropCodeEntryOpen ? "check-circle" : "place"} size={20} color="#fff" />
                 <Text style={styles.primaryBtnText}>

@@ -321,8 +321,10 @@ export const ridesApi = {
   accept: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/accept`),
   arrive: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/arrive`),
   start: (rideId: string, pin: string) => api.post<Ride>(`${P}/rides/${rideId}/start`, { pin }),
-  complete: (rideId: string, pin: string) =>
-    api.post<Ride>(`${P}/rides/${rideId}/complete`, { pin }),
+  requestDropCode: (rideId: string) =>
+    api.post<{ dropCodeRequested: boolean }>(`${P}/rides/${rideId}/drop-code`),
+  complete: (rideId: string, code: string) =>
+    api.post<Ride>(`${P}/rides/${rideId}/complete`, { code }),
 
   /* --- Messagerie sécurisée in-app --- */
   messages: (rideId: string) => api.get<RideChatMessage[]>(`${P}/rides/${rideId}/messages`),
