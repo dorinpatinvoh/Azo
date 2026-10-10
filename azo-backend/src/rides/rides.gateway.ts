@@ -68,10 +68,9 @@ export class RidesGateway implements OnGatewayConnection {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { rideId?: string; lat?: number; lng?: number; heading?: number }
   ) {
-    const user = client.data?.user;
+    const userId = client.data?.user?.userId;
     if (
-      !user?.userId ||
-      user.role !== "DRIVER" ||
+      !userId ||
       !data?.rideId ||
       typeof data.lat !== "number" ||
       typeof data.lng !== "number" ||
@@ -87,7 +86,7 @@ export class RidesGateway implements OnGatewayConnection {
       where: { id: data.rideId },
       select: { driverId: true, status: true },
     });
-    if (!ride || ride.driverId !== user.userId || !["MATCHED", "ARRIVED", "IN_PROGRESS"].includes(ride.status)) {
+    if (!ride || ride.driverId !== userId || !["MATCHED", "ARRIVED", "IN_PROGRESS"].includes(ride.status)) {
       return;
     }
 
@@ -107,7 +106,7 @@ export class RidesGateway implements OnGatewayConnection {
 
   // Messagerie instantanée sécurisée Client <-> Prestataire (sans exposer les numéros)
   @SubscribeMessage("ride:chat")
-  onChat(
+  async onChat(
     @ConnectedSocket() client: Socket,
     @MessageBody()
     data: {
@@ -117,13 +116,17 @@ export class RidesGateway implements OnGatewayConnection {
       text?: string;
     }
   ) {
-    if (!data?.rideId || !data?.text || typeof data.text !== "string") return;
-    const senderId = client.data?.user?.userId || "anon";
-    const role: "CLIENT" | "PROVIDER" =
-      data.senderRole === "PROVIDER" || client.data?.user?.role === "DRIVER"
-        ? "PROVIDER"
-        : "CLIENT";
-    const name = (data.senderName || (role === "PROVIDER" ? "Prestataire AZƆ̀" : "Client AZƆ̀")).slice(0, 40);
+    const senderId = client.data?.user?.userId;
+    if (!senderId || !data?.rideId || !data?.text || typeof data.text !== "string") return;
+
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: data.rideId },
+      select: { clientId: true, driverId: true },
+    });
+    if (!ride || (ride.clientId !== senderId && ride.driverId !== senderId)) return;
+
+    const role: "CLIENT" | "PROVIDER" = ride.driverId === senderId ? "PROVIDER" : "CLIENT";
+    const name = role === "PROVIDER" ? "Prestataire AZƆ̀" : "Client AZƆ̀";
     return this.addChatMessage(data.rideId, senderId, role, name, data.text);
   }
 
