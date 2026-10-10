@@ -58,7 +58,7 @@ export class RideSettlementService {
     const claimed = await this.prisma.$executeRawUnsafe(`UPDATE "RideSettlement" SET "clientConfirmedAt"=NOW() WHERE "rideId"=$1 AND "clientConfirmedAt" IS NULL AND "problemReportedAt" IS NULL AND "confirmationDeadline">NOW()`, rideId);
     if (claimed !== 1) throw new BadRequestException("Cette confirmation est déjà traitée ou en litige");
     try {
-      await this.rides.complete(rideId, ride.driverId!);
+      await this.rides.completeConfirmedByClient(rideId, ride.driverId!);
     } catch (error) {
       await this.prisma.$executeRawUnsafe(`UPDATE "RideSettlement" SET "clientConfirmedAt"=NULL WHERE "rideId"=$1`, rideId);
       throw error;

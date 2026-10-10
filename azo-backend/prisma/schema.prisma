@@ -216,7 +216,8 @@ model Ride {
   price           Int
   commission      Int
   rating          Int?
-  pickupCode      String?
+  pickupCode      String? // code de départ : visible du client à ARRIVED, saisi par le Zem
+  dropCode        String? // code d'arrivée : demandé par le Zem, visible du client à IN_PROGRESS, saisi par le Zem
   driverArrivedAt DateTime?
   createdAt       DateTime @default(now())
 }
