@@ -37,6 +37,13 @@ class StartRideDto {
   pin: string;
 }
 
+class CompleteRideDto {
+  @IsString()
+  @Length(4, 4)
+  @Matches(/^\d{4}$/)
+  code: string;
+}
+
 class SendChatDto {
   @IsString()
   @MaxLength(300)
@@ -102,10 +109,18 @@ export class RidesController {
     return this.rides.start(id, user.userId, dto?.pin);
   }
 
+  // POST /rides/:id/drop-code -> le Zem déclenche le code d'arrivée, visible du client
+  @Post(":id/drop-code")
+  @Roles(Role.DRIVER)
+  requestDropCode(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.requestDropCode(id, user.userId);
+  }
+
+  // POST /rides/:id/complete  { "code": "1234" } -> le Zem saisit le code donné par le client
   @Post(":id/complete")
   @Roles(Role.DRIVER)
-  complete(@Param("id") id: string, @CurrentUser() user) {
-    return this.rides.complete(id, user.userId);
+  complete(@Param("id") id: string, @CurrentUser() user, @Body() dto: CompleteRideDto) {
+    return this.rides.complete(id, user.userId, dto.code);
   }
 
   // POST /rides/:id/rate  { "stars": 5 }

@@ -6,13 +6,43 @@ import { beninPhoneVariants, extractLocalBeninDigits, normalizeBeninPhone } from
 
 const MAX_OTP_REQUESTS_WINDOW = 15;
 const OTP_WINDOW_MS = 10 * 60 * 1000; // 10 min
-const MAX_VERIFY_ATTEMPTS = 8;
+export const OTP_TTL_MS = 60 * 1000; // un code de connexion est valable 1 minute
+export const MAX_VERIFY_ATTEMPTS = 3; // codes erronés tolérés par numéro...
+export const OTP_ATTEMPT_WINDOW_MS = 60 * 60 * 1000; // ...sur une heure glissante
+
+type AttemptRow = { attempts: number; createdAt: Date };
+
+/**
+ * Blocage d'un numéro : `MAX_VERIFY_ATTEMPTS` saisies erronées dans la dernière heure.
+ * Le blocage dure jusqu'à ce que la fenêtre libère assez d'essais : on retire les codes
+ * les plus anciens jusqu'à repasser sous la limite, et c'est l'âge du dernier retiré
+ * (+ 1 h) qui donne l'heure de déblocage. Fonction pure, testée sans base.
+ */
+export function otpLockStatus(
+  rows: AttemptRow[],
+  now: number = Date.now()
+): { locked: false } | { locked: true; retryAt: Date } {
+  const recent = rows
+    .filter((r) => r.attempts > 0 && now - new Date(r.createdAt).getTime() < OTP_ATTEMPT_WINDOW_MS)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  let total = recent.reduce((sum, r) => sum + r.attempts, 0);
+  if (total < MAX_VERIFY_ATTEMPTS) return { locked: false };
+  for (const row of recent) {
+    total -= row.attempts;
+    if (total < MAX_VERIFY_ATTEMPTS) {
+      return { locked: true, retryAt: new Date(new Date(row.createdAt).getTime() + OTP_ATTEMPT_WINDOW_MS) };
+    }
+  }
+  return { locked: true, retryAt: new Date(now + OTP_ATTEMPT_WINDOW_MS) };
+}
+
+const lockedMessage = (retryAt: Date) => {
+  const minutes = Math.max(1, Math.ceil((retryAt.getTime() - Date.now()) / 60000));
+  return `Trop de tentatives erronées. Réessaie dans ${minutes} minute${minutes > 1 ? "s" : ""}.`;
+};
 
 @Injectable()
 export class AuthService {
-  // Protection anti-bruteforce en mémoire par numéro normalisé
-  private failedAttempts = new Map<string, { count: number; firstAt: number }>();
-
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
@@ -40,6 +70,11 @@ export class AuthService {
   async requestOtp(rawPhone: string) {
     const { phone, variants } = this.assertValidBeninPhone(rawPhone);
 
+    // Numéro bloqué (3 codes faux en 1 h) : inutile d'envoyer un code qu'il ne pourrait
+    // pas utiliser. En simulation le blocage de la demande est levé (le code 0000 reste
+    // utilisable), pour ne pas bloquer les tests sur téléphone.
+    if (process.env.SMS_PROVIDER === "live") await this.assertNotLocked(variants);
+
     // Limitation du nombre de demandes OTP sur une fenêtre glissante de 10 minutes
     const windowStart = new Date(Date.now() - OTP_WINDOW_MS);
     const recentCount = await this.prisma.otpCode.count({
@@ -58,10 +93,9 @@ export class AuthService {
     });
 
     const code = Math.floor(1000 + Math.random() * 9000).toString(); // 4 chiffres
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // valable 5 min
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
     await this.prisma.otpCode.create({ data: { phone, code, expiresAt } });
-    this.failedAttempts.delete(phone);
 
     console.log(`[OTP DEV] ${phone} -> ${code}`);
 
@@ -75,42 +109,70 @@ export class AuthService {
     };
   }
 
+  private recentAttempts(variants: string[]): Promise<AttemptRow[]> {
+    return this.prisma.otpCode.findMany({
+      where: {
+        phone: { in: variants },
+        attempts: { gt: 0 },
+        createdAt: { gt: new Date(Date.now() - OTP_ATTEMPT_WINDOW_MS) },
+      },
+      select: { attempts: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  private async assertNotLocked(variants: string[]) {
+    const status = otpLockStatus(await this.recentAttempts(variants));
+    if (status.locked) throw new BadRequestException(lockedMessage(status.retryAt));
+  }
+
+  /**
+   * Vérifie le code de connexion : 3 saisies erronées par heure et par numéro, comptées en
+   * base (elles survivent à un redémarrage et valent pour toutes les instances). Demander
+   * un nouveau code ne remet pas le compteur à zéro. Une connexion réussie le remet à zéro.
+   */
+  private async checkOtp(variants: string[], code: string) {
+    await this.assertNotLocked(variants);
+
+    const otp = await this.prisma.otpCode.findFirst({
+      where: { phone: { in: variants }, consumed: false, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!otp) throw new BadRequestException("Code invalide ou expiré");
+
+    if (otp.code !== code) {
+      // Incrément atomique, puis total relu : des essais simultanés ne dépassent pas la limite.
+      await this.prisma.otpCode.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+      const rows = await this.recentAttempts(variants);
+      const status = otpLockStatus(rows);
+      if (status.locked) {
+        await this.prisma.otpCode.updateMany({ where: { id: otp.id }, data: { consumed: true } });
+        throw new BadRequestException(lockedMessage(status.retryAt));
+      }
+      const used = rows.reduce((sum, r) => sum + r.attempts, 0);
+      const left = MAX_VERIFY_ATTEMPTS - used;
+      throw new BadRequestException(`Code incorrect. Il te reste ${left} essai${left > 1 ? "s" : ""}.`);
+    }
+
+    // Consommation conditionnelle : un même code ne peut ouvrir qu'une seule session.
+    const { count } = await this.prisma.otpCode.updateMany({
+      where: { id: otp.id, consumed: false },
+      data: { consumed: true },
+    });
+    if (count !== 1) throw new BadRequestException("Code invalide ou expiré");
+
+    // Connexion réussie : les essais ratés d'avant ne comptent plus.
+    await this.prisma.otpCode.updateMany({
+      where: { phone: { in: variants }, attempts: { gt: 0 } },
+      data: { attempts: 0 },
+    });
+  }
+
   async verifyOtp(rawPhone: string, code: string, profile?: string) {
     const { phone, variants } = this.assertValidBeninPhone(rawPhone);
 
-    const attempt = this.failedAttempts.get(phone);
-    if (attempt && Date.now() - attempt.firstAt < OTP_WINDOW_MS && attempt.count >= MAX_VERIFY_ATTEMPTS) {
-      await this.prisma.otpCode.updateMany({
-        where: { phone: { in: variants }, consumed: false },
-        data: { consumed: true },
-      });
-      throw new BadRequestException(
-        "Trop de tentatives erronées. Demande un nouveau code de vérification."
-      );
-    }
-
     const isSimBypass = process.env.SMS_PROVIDER !== "live" && code.trim() === "0000";
-    if (!isSimBypass) {
-      const otp = await this.prisma.otpCode.findFirst({
-        where: { phone: { in: variants }, code: code.trim(), consumed: false, expiresAt: { gt: new Date() } },
-        orderBy: { createdAt: "desc" },
-      });
-      if (!otp) {
-        const prev = this.failedAttempts.get(phone);
-        const now = Date.now();
-        if (!prev || now - prev.firstAt > OTP_WINDOW_MS) {
-          this.failedAttempts.set(phone, { count: 1, firstAt: now });
-        } else {
-          this.failedAttempts.set(phone, { count: prev.count + 1, firstAt: prev.firstAt });
-        }
-        throw new BadRequestException("Code invalide ou expiré");
-      }
-
-      this.failedAttempts.delete(phone);
-      await this.prisma.otpCode.update({ where: { id: otp.id }, data: { consumed: true } });
-    } else {
-      this.failedAttempts.delete(phone);
-    }
+    if (!isSimBypass) await this.checkOtp(variants, code.trim());
 
     // Recherche du compte sur le format 10 chiffres (+22901...) ET l'ancien format 8 chiffres (+229...)
     // pour ne perdre aucun compte existant (admin ou prestataire déjà créé).

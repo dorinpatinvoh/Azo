@@ -373,9 +373,61 @@ export class RidesService {
   // Fin de course : paiement + commission + revenus du chauffeur, en une transaction.
   // Commission : taux du niveau d'agence si le conducteur est rattaché à une flotte,
   // sinon règles du profil prestataire (config tarifaire).
-  async complete(rideId: string, driverId: string) {
+  /**
+   * Le Zem demande le code d'arrivée : le serveur le génère (une seule fois, la demande est
+   * idempotente) et le client le lit dans son application. Le client le communique au Zem,
+   * qui le saisit dans `complete` pour confirmer l'arrivée à destination.
+   */
+  async requestDropCode(rideId: string, driverId: string) {
+    const ride = await this.getOwnedByDriver(rideId, driverId);
+    if (ride.status !== "IN_PROGRESS") {
+      throw new BadRequestException("Le code d'arrivée ne peut être demandé que pendant la course.");
+    }
+    if (ride.dropCode) return { ...this.withoutPickupCode(ride), dropCodeRequested: true };
+
+    // Conditionné à `dropCode: null` : deux appuis simultanés ne génèrent qu'un seul code.
+    const { count } = await this.prisma.ride.updateMany({
+      where: { id: rideId, driverId, status: "IN_PROGRESS", dropCode: null },
+      data: { dropCode: createPickupCode() },
+    });
+    if (count === 1) {
+      await this.notifications
+        .push(
+          ride.clientId,
+          "Confirme ton arrivée",
+          "Ton Zem demande le code d'arrivée. Donne-lui le code affiché dans l'application pour confirmer que tu es arrivé.",
+          "ride",
+          { sendPush: true, data: { event: "ride-drop-code", rideId } }
+        )
+        .catch(() => null);
+    }
+    const updated = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
+    return { ...this.withoutPickupCode(updated), dropCodeRequested: true };
+  }
+
+  /** Fin de course par le Zem : le code d'arrivée donné par le client est obligatoire. */
+  async complete(rideId: string, driverId: string, code?: string) {
     const ride = await this.getOwnedByDriver(rideId, driverId);
     if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course n'est pas en cours");
+    if (!ride.dropCode) {
+      throw new BadRequestException("Demande d'abord le code d'arrivée au client avant de terminer la course.");
+    }
+    const clean = typeof code === "string" ? code.trim() : "";
+    if (!/^\d{4}$/.test(clean) || clean !== ride.dropCode) {
+      throw new BadRequestException("Code d'arrivée incorrect. Demande au client le code affiché dans son application.");
+    }
+    return this.settle(ride, driverId);
+  }
+
+  /** Fin de course validée par le client lui-même (confirmation du dépôt) : pas de code. */
+  async completeConfirmedByClient(rideId: string, driverId: string) {
+    const ride = await this.getOwnedByDriver(rideId, driverId);
+    if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course n'est pas en cours");
+    return this.settle(ride, driverId);
+  }
+
+  private async settle(ride: { id: string; clientId: string; price: number }, driverId: string) {
+    const rideId = ride.id;
 
     const driver = await this.prisma.user.findUnique({
       where: { id: driverId },
@@ -516,17 +568,26 @@ export class RidesService {
     return null;
   }
 
-  private withoutPickupCode<T extends { pickupCode?: string | null }>(ride: T): Omit<T, "pickupCode"> {
-    const { pickupCode: _pickupCode, ...safeRide } = ride;
+  /** Retire les deux codes secrets (départ et arrivée) d'une course avant de la renvoyer. */
+  private withoutPickupCode<T extends { pickupCode?: string | null; dropCode?: string | null }>(
+    ride: T
+  ): Omit<T, "pickupCode" | "dropCode"> {
+    const { pickupCode: _pickupCode, dropCode: _dropCode, ...safeRide } = ride;
     return safeRide;
   }
 
-  /** Le code n'est lisible que par le client, et seulement après le statut ARRIVED. */
-  private visibleRideToUser<T extends { clientId: string; status: string; pickupCode?: string | null }>(
-    ride: T,
-    userId: string
-  ) {
-    return userId === ride.clientId && ride.status === "ARRIVED" ? ride : this.withoutPickupCode(ride);
+  /**
+   * Chaque code n'est lisible que par le client, à son étape : le code de départ à ARRIVED,
+   * le code d'arrivée (une fois demandé par le Zem) à IN_PROGRESS.
+   */
+  private visibleRideToUser<
+    T extends { clientId: string; status: string; pickupCode?: string | null; dropCode?: string | null }
+  >(ride: T, userId: string) {
+    const safe = this.withoutPickupCode(ride);
+    if (userId !== ride.clientId) return safe;
+    if (ride.status === "ARRIVED") return { ...safe, pickupCode: ride.pickupCode };
+    if (ride.status === "IN_PROGRESS" && ride.dropCode) return { ...safe, dropCode: ride.dropCode };
+    return safe;
   }
 
   private async getOwnedByDriver(rideId: string, driverId: string) {
