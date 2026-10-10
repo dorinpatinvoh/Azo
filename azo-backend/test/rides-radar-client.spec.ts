@@ -92,7 +92,11 @@ describe("le pseudo du client reste dans les réponses utilisées par l'écran Z
       {} as any,
       { push: jest.fn().mockResolvedValue({}) } as any,
       pricing as any,
-      { emitStatus: jest.fn() } as any
+      {
+        emitStatus: jest.fn(),
+        clearClientLocationState: jest.fn(),
+        clearRideLocations: jest.fn(),
+      } as any
     );
     return { service, prisma };
   }

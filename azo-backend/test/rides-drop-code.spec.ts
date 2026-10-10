@@ -45,7 +45,11 @@ function makeService(overrides: Record<string, unknown> = {}) {
     rideCommission: jest.fn().mockReturnValue(0),
     radarSettings: jest.fn().mockReturnValue({ pendingExpiryMinutes: 20 }),
   };
-  const gateway = { emitStatus: jest.fn() };
+  const gateway = {
+    emitStatus: jest.fn(),
+    clearRideLocations: jest.fn(),
+    clearClientLocationState: jest.fn(),
+  };
   const service = new RidesService(prisma as any, wallet as any, notifications as any, pricing as any, gateway as any);
   return { service, prisma, wallet, notifications, gateway, ride };
 }
@@ -96,7 +100,20 @@ describe("fin de course par le Zem avec le code d'arrivée", () => {
     const { service, wallet, prisma, gateway } = makeService({ dropCode: "4829" });
     const result: any = await service.complete("ride-1", driverId, "4829");
     expect(wallet.transfer).toHaveBeenCalledTimes(1);
-    expect(prisma.ride.update.mock.calls[0][0].data.status).toBe("COMPLETED");
+    expect(prisma.ride.update.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({
+        status: "COMPLETED",
+        driverLat: null,
+        driverLng: null,
+        driverHeading: null,
+        driverSpeed: null,
+        driverLocatedAt: null,
+        clientLat: null,
+        clientLng: null,
+        clientLocatedAt: null,
+      })
+    );
+    expect(gateway.clearRideLocations).toHaveBeenCalledWith("ride-1");
     expect(gateway.emitStatus).toHaveBeenCalledWith("ride-1", "COMPLETED");
     expect(result).not.toHaveProperty("dropCode");
   });

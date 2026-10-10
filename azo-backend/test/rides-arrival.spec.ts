@@ -46,6 +46,7 @@ function makeService(status: string, code = pickupCode) {
       findUnique: jest.fn().mockResolvedValue(ride),
       findUniqueOrThrow: jest.fn().mockResolvedValue(ride),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...ride, ...data })),
     },
     wallet: { findUnique: jest.fn().mockResolvedValue({ balance: 5000 }) },
   };
@@ -55,7 +56,11 @@ function makeService(status: string, code = pickupCode) {
     isZem: jest.fn().mockReturnValue(true),
     radarSettings: jest.fn().mockReturnValue({ pendingExpiryMinutes: 20 }),
   };
-  const gateway = { emitStatus: jest.fn() };
+  const gateway = {
+    emitStatus: jest.fn(),
+    clearRideLocations: jest.fn(),
+    clearClientLocationState: jest.fn(),
+  };
 
   return {
     ride,
@@ -95,9 +100,16 @@ describe("sécurisation de l'arrivée et du démarrage d'une course", () => {
 
     expect(prisma.ride.updateMany).toHaveBeenCalledWith({
       where: { id: rideId, driverId, status: "ARRIVED", pickupCode },
-      data: { status: "IN_PROGRESS", pickupCode: null },
+      data: expect.objectContaining({
+        status: "IN_PROGRESS",
+        pickupCode: null,
+        clientLat: null,
+        clientLng: null,
+        clientLocatedAt: null,
+      }),
     });
     expect(gateway.emitStatus).toHaveBeenCalledWith(rideId, "IN_PROGRESS");
+    expect(gateway.clearClientLocationState).toHaveBeenCalledWith(rideId);
     expect(result).not.toHaveProperty("pickupCode");
   });
 
@@ -157,5 +169,53 @@ describe("sécurisation de l'arrivée et du démarrage d'une course", () => {
 
     expect(clientView.pickupCode).toBe(pickupCode);
     expect(driverView).not.toHaveProperty("pickupCode");
+  });
+
+  it("expose chaque dernière position uniquement à l'autre participant", async () => {
+    const { service, ride } = makeService("ARRIVED");
+    Object.assign(ride, {
+      driverLat: 6.37,
+      driverLng: 2.39,
+      driverHeading: 92,
+      driverSpeed: 3.5,
+      driverLocatedAt: new Date("2026-10-10T12:00:00.000Z"),
+      clientLat: 6.4,
+      clientLng: 2.42,
+      clientLocatedAt: new Date("2026-10-10T12:00:01.000Z"),
+    });
+
+    const clientView = await service.findOne(rideId, clientId);
+    const driverView = await service.findOne(rideId, driverId);
+
+    expect(clientView).toMatchObject({
+      driverLocation: { lat: 6.37, lng: 2.39, heading: 92, speed: 3.5 },
+    });
+    expect(clientView).not.toHaveProperty("clientLocation");
+    expect(clientView).not.toHaveProperty("driverLat");
+    expect(driverView).toMatchObject({ clientLocation: { lat: 6.4, lng: 2.42 } });
+    expect(driverView).not.toHaveProperty("driverLocation");
+    expect(driverView).not.toHaveProperty("clientLat");
+  });
+
+  it("efface les positions du trajet à son annulation", async () => {
+    const { service, prisma, gateway } = makeService("ARRIVED");
+
+    await service.cancel(rideId, clientId);
+
+    expect(prisma.ride.update).toHaveBeenCalledWith({
+      where: { id: rideId },
+      data: expect.objectContaining({
+        status: "CANCELLED",
+        driverLat: null,
+        driverLng: null,
+        driverHeading: null,
+        driverSpeed: null,
+        driverLocatedAt: null,
+        clientLat: null,
+        clientLng: null,
+        clientLocatedAt: null,
+      }),
+    });
+    expect(gateway.clearRideLocations).toHaveBeenCalledWith(rideId);
   });
 });

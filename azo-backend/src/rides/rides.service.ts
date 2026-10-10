@@ -161,10 +161,21 @@ export class RidesService {
   private async expireRide(ride: { id: string; clientId: string }): Promise<boolean> {
     const { count } = await this.prisma.ride.updateMany({
       where: { id: ride.id, status: "PENDING" },
-      data: { status: "CANCELLED" },
+      data: {
+        status: "CANCELLED",
+        driverLat: null,
+        driverLng: null,
+        driverHeading: null,
+        driverSpeed: null,
+        driverLocatedAt: null,
+        clientLat: null,
+        clientLng: null,
+        clientLocatedAt: null,
+      },
     });
     if (count === 0) return false;
 
+    this.gateway.clearRideLocations(ride.id);
     const minutes = this.pricing.radarSettings().pendingExpiryMinutes;
     await this.notifications.push(
       ride.clientId,
@@ -345,10 +356,17 @@ export class RidesService {
 
     const { count } = await this.prisma.ride.updateMany({
       where: { id: rideId, driverId, status: "ARRIVED", pickupCode: cleanPin },
-      data: { status: "IN_PROGRESS", pickupCode: null },
+      data: {
+        status: "IN_PROGRESS",
+        pickupCode: null,
+        clientLat: null,
+        clientLng: null,
+        clientLocatedAt: null,
+      },
     });
     if (count === 0) throw new BadRequestException("Le statut de la course a changé. Actualise l'écran.");
 
+    this.gateway.clearClientLocationState(rideId);
     await this.notifications.push(ride.clientId, "Course démarrée", "Ton chauffeur est en route vers la destination.", "ride");
     this.gateway.emitStatus(rideId, "IN_PROGRESS");
     const updated = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
@@ -456,7 +474,22 @@ export class RidesService {
     // Débit client + crédit chauffeur atomiques (le chauffeur reçoit prix - commission)
     await this.wallet.transfer(ride.clientId, driverId, ride.price, driverGain, "Course AZƆ̀", "Gain de course", ref);
 
-    const updated = await this.prisma.ride.update({ where: { id: rideId }, data: { status: "COMPLETED", commission } });
+    const updated = await this.prisma.ride.update({
+      where: { id: rideId },
+      data: {
+        status: "COMPLETED",
+        commission,
+        driverLat: null,
+        driverLng: null,
+        driverHeading: null,
+        driverSpeed: null,
+        driverLocatedAt: null,
+        clientLat: null,
+        clientLng: null,
+        clientLocatedAt: null,
+      },
+    });
+    this.gateway.clearRideLocations(rideId);
     await this.notifications.push(ride.clientId, "Course terminée", `${ride.price} FCFA débités de ton portefeuille.`, "payment");
     await this.notifications.push(driverId, "Paiement reçu", `+${driverGain} FCFA (commission AZƆ̀ : ${commission} F).`, "payment");
     this.gateway.emitStatus(rideId, "COMPLETED");
@@ -478,11 +511,38 @@ export class RidesService {
     // Client : la course est annulée pour de bon.
     // Chauffeur : elle repart en recherche avec un nouveau code (l'ancien a pu être révélé).
     const updated = isClient
-      ? await this.prisma.ride.update({ where: { id: rideId }, data: { status: "CANCELLED" } })
+      ? await this.prisma.ride.update({
+          where: { id: rideId },
+          data: {
+            status: "CANCELLED",
+            driverLat: null,
+            driverLng: null,
+            driverHeading: null,
+            driverSpeed: null,
+            driverLocatedAt: null,
+            clientLat: null,
+            clientLng: null,
+            clientLocatedAt: null,
+          },
+        })
       : await this.prisma.ride.update({
           where: { id: rideId },
-          data: { status: "PENDING", driverId: null, driverArrivedAt: null, pickupCode: createPickupCode() },
+          data: {
+            status: "PENDING",
+            driverId: null,
+            driverArrivedAt: null,
+            pickupCode: createPickupCode(),
+            driverLat: null,
+            driverLng: null,
+            driverHeading: null,
+            driverSpeed: null,
+            driverLocatedAt: null,
+            clientLat: null,
+            clientLng: null,
+            clientLocatedAt: null,
+          },
         });
+    this.gateway.clearRideLocations(rideId);
 
     if (isClient) {
       if (ride.driverId) {
@@ -581,13 +641,72 @@ export class RidesService {
    * le code d'arrivée (une fois demandé par le Zem) à IN_PROGRESS.
    */
   private visibleRideToUser<
-    T extends { clientId: string; status: string; pickupCode?: string | null; dropCode?: string | null }
+    T extends {
+      clientId: string;
+      driverId?: string | null;
+      status: string;
+      pickupCode?: string | null;
+      dropCode?: string | null;
+      driverLat?: number | null;
+      driverLng?: number | null;
+      driverHeading?: number | null;
+      driverSpeed?: number | null;
+      driverLocatedAt?: Date | null;
+      clientLat?: number | null;
+      clientLng?: number | null;
+      clientLocatedAt?: Date | null;
+    }
   >(ride: T, userId: string) {
-    const safe = this.withoutPickupCode(ride);
-    if (userId !== ride.clientId) return safe;
-    if (ride.status === "ARRIVED") return { ...safe, pickupCode: ride.pickupCode };
-    if (ride.status === "IN_PROGRESS" && ride.dropCode) return { ...safe, dropCode: ride.dropCode };
-    return safe;
+    const {
+      driverLat,
+      driverLng,
+      driverHeading,
+      driverSpeed,
+      driverLocatedAt,
+      clientLat,
+      clientLng,
+      clientLocatedAt,
+      ...rideWithoutLocations
+    } = ride;
+    const safe = this.withoutPickupCode(rideWithoutLocations);
+    let visible = safe;
+    if (userId === ride.clientId) {
+      if (ride.status === "ARRIVED") visible = { ...visible, pickupCode: ride.pickupCode };
+      if (ride.status === "IN_PROGRESS" && ride.dropCode) visible = { ...visible, dropCode: ride.dropCode };
+      if (
+        ["MATCHED", "ARRIVED", "IN_PROGRESS"].includes(ride.status) &&
+        driverLat !== null &&
+        driverLat !== undefined &&
+        driverLng !== null &&
+        driverLng !== undefined &&
+        driverLocatedAt
+      ) {
+        visible = {
+          ...visible,
+          driverLocation: {
+            lat: driverLat,
+            lng: driverLng,
+            ...(driverHeading !== null && driverHeading !== undefined ? { heading: driverHeading } : {}),
+            ...(driverSpeed !== null && driverSpeed !== undefined ? { speed: driverSpeed } : {}),
+            at: driverLocatedAt.getTime(),
+          },
+        };
+      }
+    } else if (
+      userId === ride.driverId &&
+      ["MATCHED", "ARRIVED"].includes(ride.status) &&
+      clientLat !== null &&
+      clientLat !== undefined &&
+      clientLng !== null &&
+      clientLng !== undefined &&
+      clientLocatedAt
+    ) {
+      visible = {
+        ...visible,
+        clientLocation: { lat: clientLat, lng: clientLng, at: clientLocatedAt.getTime() },
+      };
+    }
+    return visible;
   }
 
   private async getOwnedByDriver(rideId: string, driverId: string) {

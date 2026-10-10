@@ -220,6 +220,14 @@ model Ride {
   pickupCode      String? // code de départ : visible du client à ARRIVED, saisi par le Zem
   dropCode        String? // code d'arrivée : demandé par le Zem, visible du client à IN_PROGRESS, saisi par le Zem
   driverArrivedAt DateTime?
+  driverLat       Float?
+  driverLng       Float?
+  driverHeading   Int?
+  driverSpeed     Float?
+  driverLocatedAt DateTime?
+  clientLat       Float?
+  clientLng       Float?
+  clientLocatedAt DateTime?
   createdAt       DateTime @default(now())
 }
 
