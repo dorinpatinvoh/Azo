@@ -1,4 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { randomInt } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { WalletService } from "../wallet/wallet.module";
@@ -22,25 +28,60 @@ export class RidesService {
     private gateway: RidesGateway
   ) {}
 
-  // Distance approximative en km (formule de Haversine)
-  private distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLng = ((lng2 - lng1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  private async drivingRoute(dto: CreateRideDto): Promise<{ distanceKm: number; durationMinutes: number }> {
+    const coordinates = `${dto.originLng},${dto.originLat};${dto.destLng},${dto.destLat}`;
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=false&steps=false`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error(`OSRM HTTP ${response.status}`);
+
+      const result: unknown = await response.json();
+      const route =
+        typeof result === "object" && result !== null && "routes" in result && Array.isArray(result.routes)
+          ? result.routes[0]
+          : null;
+      if (
+        typeof route !== "object" ||
+        route === null ||
+        !("distance" in route) ||
+        typeof route.distance !== "number" ||
+        !Number.isFinite(route.distance) ||
+        route.distance <= 0 ||
+        !("duration" in route) ||
+        typeof route.duration !== "number" ||
+        !Number.isFinite(route.duration) ||
+        route.duration <= 0
+      ) {
+        throw new Error("OSRM returned no valid route");
+      }
+
+      return {
+        distanceKm: route.distance / 1000,
+        durationMinutes: Math.max(1, Math.ceil(route.duration / 60)),
+      };
+    } catch (error) {
+      throw new ServiceUnavailableException(
+        "Impossible de calculer l’itinéraire routier pour le moment. Réessaie dans quelques instants.",
+        { cause: error },
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // Estimation affichée avant confirmation (écran "Sélection trajet").
-  // Le prix vient du barème configuré : tarif de base + coût kilométrique par tranche.
-  estimate(dto: CreateRideDto) {
-    const km = this.distanceKm(dto.originLat, dto.originLng, dto.destLat, dto.destLng);
+  // La distance, l'ETA et le prix sont basés sur le même itinéraire routier.
+  async estimate(dto: CreateRideDto) {
+    const route = await this.drivingRoute(dto);
+    const km = route.distanceKm;
     const breakdown = this.pricing.breakdown(km, dto.vehicleType);
     return {
       distanceKm: Number(km.toFixed(1)),
-      etaMinutes: Math.max(3, Math.round(km * 3)),
+      etaMinutes: route.durationMinutes,
+      durationMin: route.durationMinutes,
       price: breakdown.price,
       gamme: breakdown.gamme,
       breakdown,
@@ -48,7 +89,7 @@ export class RidesService {
   }
 
   async create(clientId: string, dto: CreateRideDto) {
-    const { price } = this.estimate(dto);
+    const { price } = await this.estimate(dto);
     const ride = await this.prisma.ride.create({
       data: { ...dto, clientId, price, commission: 0, status: "PENDING", pickupCode: createPickupCode() },
     });

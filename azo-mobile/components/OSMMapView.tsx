@@ -1,16 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 export type LatLng = { latitude: number; longitude: number };
 
 export type OSMMarker = {
-  /** Identifiant stable : permet de faire glisser (animer) un marqueur qui bouge. */
   id?: string;
   coordinate: LatLng;
   title?: string;
   color?: "green" | "red" | "blue" | "orange";
-  /** Cap en degrés (0 = nord) : fait pivoter la flèche du marqueur, comme Google Maps. */
   heading?: number;
 };
 
@@ -19,12 +17,7 @@ type Props = {
   markers?: OSMMarker[];
   polyline?: LatLng[];
   onPress?: (coord: LatLng) => void;
-  /**
-   * Suivre ce marqueur (ex: "driver") comme le suivi live Google Maps :
-   * la caméra reste centrée dessus, sans recadrage intempestif.
-   */
   followMarkerId?: string;
-  /** Zoom caméra en mode suivi (défaut : 16, niveau rue). */
   zoom?: number;
 };
 
@@ -36,17 +29,8 @@ type MapPayload = {
   zoom?: number;
 };
 
-/*
- * ⚠️ IMPORTANT : ce HTML est construit UNE SEULE FOIS (au montage), avec tout au plus
- * le centre initial dedans — il ne change plus jamais ensuite.
- *
- * Avant, le HTML était reconstruit avec la position dedans à chaque mise à jour GPS :
- * la WebView se rechargait entièrement (react-native-webview recharge quand `source`
- * change), et le marqueur ne bougeait jamais. Désormais, la carte est chargée une
- * seule fois et TOUTES les mises à jour passent par `window.updateMap(...)` en JS.
- */
 function buildMapHtml(initial?: LatLng) {
-  const startLat = initial?.latitude ?? 6.3703; // Cotonou par défaut
+  const startLat = initial?.latitude ?? 6.3703;
   const startLng = initial?.longitude ?? 2.3912;
   return `
 <!DOCTYPE html>
@@ -87,10 +71,9 @@ function buildMapHtml(initial?: LatLng) {
     <script>
       var map = L.map('map', { zoomControl: false }).setView([${startLat}, ${startLng}], 14);
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-
       var markersLayer = L.layerGroup().addTo(map);
       var polylineLayer = L.layerGroup().addTo(map);
-      var markerStore = {};   // id -> { marker, anim, lastIconKey }
+      var markerStore = {};
       var polyline = null;
       var followId = null;
       var followZoom = 16;
@@ -128,12 +111,10 @@ function buildMapHtml(initial?: LatLng) {
         });
       }
 
-      // Glissement animé du marqueur (comme Google Maps) au lieu d'une téléportation.
       function animateMarker(entry, to) {
         if (entry.anim) cancelAnimationFrame(entry.anim);
         var from = entry.marker.getLatLng();
         if (map.distance(from, to) > 2000) {
-          // Saut trop grand (reprise de course, GPS erratique) : pas d'interpolation.
           entry.marker.setLatLng(to);
           return;
         }
@@ -141,7 +122,7 @@ function buildMapHtml(initial?: LatLng) {
         var dur = 800;
         function step(t) {
           var k = Math.min(1, (t - t0) / dur);
-          var e = k * (2 - k); // ease-out
+          var e = k * (2 - k);
           entry.marker.setLatLng([
             from.lat + (to.lat - from.lat) * e,
             from.lng + (to.lng - from.lng) * e
@@ -154,8 +135,6 @@ function buildMapHtml(initial?: LatLng) {
 
       function latLngOf(p) { return L.latLng(p.latitude, p.longitude); }
 
-      // Recadrage prudent : uniquement si le cadre demandé change vraiment,
-      // sinon la carte saute à chaque tick GPS.
       function maybeFit(points) {
         if (points.length < 2) return;
         var b = L.latLngBounds(points);
@@ -170,8 +149,6 @@ function buildMapHtml(initial?: LatLng) {
       window.updateMap = function (data) {
         if (!data) return;
         var m, i, id, entry;
-
-        // --- Marqueurs : création / mise à jour / glissement animé ---
         var seen = {};
         if (data.markers) {
           for (i = 0; i < data.markers.length; i++) {
@@ -188,7 +165,6 @@ function buildMapHtml(initial?: LatLng) {
               markerStore[id] = entry;
             } else {
               var to = latLngOf(m.coordinate);
-              // Ne glisse que si la position a réellement bougé (évite les micro-animations).
               if (map.distance(entry.marker.getLatLng(), to) > 0.5) animateMarker(entry, to);
             }
             var iconKey = (m.title || '') + '|' + (m.color || '') + '|' + (m.heading == null ? '' : Math.round(m.heading));
@@ -206,7 +182,6 @@ function buildMapHtml(initial?: LatLng) {
           }
         }
 
-        // --- Tracé ---
         if (data.polyline && data.polyline.length > 1) {
           var latlngs = data.polyline.map(latLngOf);
           if (!polyline) polyline = L.polyline(latlngs, { color: '#6200EE', weight: 4 }).addTo(polylineLayer);
@@ -216,12 +191,10 @@ function buildMapHtml(initial?: LatLng) {
           polyline = null;
         }
 
-        // --- Caméra ---
         if ('follow' in data) followId = data.follow || null;
         if (typeof data.zoom === 'number' && isFinite(data.zoom)) followZoom = data.zoom;
 
         if (followId && markerStore[followId]) {
-          // Mode suivi Google Maps : la caméra reste sur le véhicule, zoom stable.
           var target = markerStore[followId].marker.getLatLng();
           if (!followReady) {
             followReady = true;
@@ -249,7 +222,6 @@ function buildMapHtml(initial?: LatLng) {
         }
       };
 
-      // Carte prête : React Native renverra la dernière position connue.
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
     </script>
   </body>
@@ -266,7 +238,6 @@ export default function OSMMapView({
   zoom,
 }: Props) {
   const webViewRef = useRef<WebView>(null);
-  // Dernier état connu : rejoué quand la carte devient prête (course au chargement).
   const latestPayloadRef = useRef<MapPayload>({
     center: center ?? null,
     markers,
@@ -275,14 +246,10 @@ export default function OSMMapView({
     zoom,
   });
 
-  // HTML construit AU MONTAGE avec le centre initial, puis figé : `source` ne change
-  // plus jamais → aucun rechargement de la WebView pendant le suivi.
-  const htmlContent = useMemo(() => buildMapHtml(center), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const htmlContent = useMemo(() => buildMapHtml(center), []);
   const source = useMemo(() => ({ html: htmlContent }), [htmlContent]);
 
   const inject = useCallback((payload: MapPayload) => {
-    // Les noms propres peuvent contenir des caractères spéciaux : JSON.stringify les échappe.
-    // \u2028/\u2029 sont des fins de ligne en JS : on les neutralise par sécurité.
     const json = JSON.stringify(payload).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
     webViewRef.current?.injectJavaScript(`window.updateMap && window.updateMap(${json}); true;`);
   }, []);
@@ -298,8 +265,6 @@ export default function OSMMapView({
       try {
         const data = JSON.parse(event.nativeEvent.data);
         if (data.type === "ready") {
-          // La carte est chargée : on rejoue l'état courant (les injections
-          // envoyées pendant le chargement de Leaflet ont été perdues).
           inject(latestPayloadRef.current);
         } else if (data.type === "click" && onPress) {
           onPress({ latitude: data.latitude, longitude: data.longitude });
@@ -317,9 +282,25 @@ export default function OSMMapView({
         source={source}
         style={StyleSheet.absoluteFill}
         onMessage={handleMessage}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
+        javaScriptEnabled
+        domStorageEnabled
       />
+      <Text style={styles.attribution}>© OpenStreetMap contributors</Text>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  attribution: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    overflow: "hidden",
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.88)",
+    color: "#333",
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    fontSize: 10,
+  },
+});

@@ -8,8 +8,8 @@ export type DrivingRoute = {
 
 /**
  * Itinéraire routier OpenStreetMap via le service public OSRM.
- * Cette API gratuite est utilisée en best effort pour le MVP; l'écran conserve une
- * estimation directe si le service est indisponible ou ne couvre pas la zone.
+ * La réservation exige une route routière valide afin que l'affichage et le devis
+ * restent cohérents ; un échec n'est pas remplacé par une ligne droite approximative.
  */
 export async function getDrivingRoute(
   origin: LatLng,
