@@ -192,8 +192,11 @@ export class RidesService {
 
     const driverVehicle = driver?.provider?.vehicleType ?? null;
     const settings = this.pricing.radarSettings();
+    // Le chauffeur voit la destination (destLat/destLng) et le pseudo du client avant
+    // d'accepter. Seul `fullName` est lu : le radar ne diffuse rien d'autre du client.
     const rides = await this.prisma.ride.findMany({
       where: { status: "PENDING" },
+      include: { client: { select: { fullName: true } } },
       orderBy: { createdAt: "asc" },
     });
 
