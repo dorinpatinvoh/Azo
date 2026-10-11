@@ -93,6 +93,31 @@ export class RidesController {
     return this.rides.pending(user.userId, query.position());
   }
 
+  @Get(":id/route")
+  route(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.route(id, user.userId);
+  }
+
+  @Post(":id/stop-request")
+  requestStop(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.requestStop(id, user.userId);
+  }
+
+  @Post(":id/stop-accept")
+  acceptStop(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.acceptStop(id, user.userId);
+  }
+
+  @Post(":id/stop-decline")
+  declineStop(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.declineStop(id, user.userId);
+  }
+
+  @Post(":id/stop-cancel")
+  cancelStop(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.cancelStop(id, user.userId);
+  }
+
   @Post(":id/accept")
   @Roles(Role.DRIVER)
   accept(@Param("id") id: string, @CurrentUser() user) {

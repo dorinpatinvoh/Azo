@@ -86,7 +86,12 @@ describe("le pseudo du client reste dans les réponses utilisées par l'écran Z
       },
       wallet: { findUnique: jest.fn().mockResolvedValue({ balance: 5000 }) },
     };
-    const pricing = { isZem: jest.fn().mockReturnValue(true), radarSettings: jest.fn().mockReturnValue({}) };
+    const pricing = {
+      isZem: jest.fn().mockReturnValue(true),
+      radarSettings: jest.fn().mockReturnValue({}),
+      breakdown: jest.fn().mockReturnValue({ price: 1000 }),
+      rideSettings: jest.fn().mockReturnValue({ stopRequestExpiryMinutes: 2 }),
+    };
     const service = new RidesService(
       prisma as any,
       {} as any,
@@ -96,6 +101,7 @@ describe("le pseudo du client reste dans les réponses utilisées par l'écran Z
         emitStatus: jest.fn(),
         clearClientLocationState: jest.fn(),
         clearRideLocations: jest.fn(),
+        invalidateRideLocationContext: jest.fn(),
       } as any
     );
     return { service, prisma };

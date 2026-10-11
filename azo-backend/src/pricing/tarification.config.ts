@@ -93,6 +93,11 @@ export type ProvisionalRule = {
 export type TarificationConfig = {
   currency: string;
   vehicles: Record<VehicleKey, VehiclePricing>;
+  rides?: {
+    stopRequestExpiryMinutes?: number;
+    destinationToleranceMeters?: number;
+    routeCacheSeconds?: number;
+  };
   /** Réglages du radar des demandes (filtrage, proximité, expiration). */
   radar?: {
     strictVehicleMatch?: boolean;

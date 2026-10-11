@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomInt } from "crypto";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { WalletService } from "../wallet/wallet.module";
 import { NotificationsService } from "../notifications/notifications.module";
@@ -13,6 +14,7 @@ import { PricingService } from "../pricing/pricing.module";
 import { RidesGateway } from "./rides.gateway";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { LatLng, buildRadar, isRideExpired, rideAgeMinutes } from "./radar";
+import { haversineMeters } from "./odometer";
 
 // Le client attaché à la course, tel que le chauffeur le reçoit (même forme que `accept`).
 // L'app Zem remplace sa course active par chaque réponse (accept, arrive, start) : toutes
@@ -25,6 +27,9 @@ function createPickupCode(): string {
 
 @Injectable()
 export class RidesService {
+  private readonly routeCache = new Map<string, { expiresAt: number; route: Record<string, unknown> }>();
+  private readonly lastValidRoutes = new Map<string, Record<string, unknown>>();
+
   constructor(
     private prisma: PrismaService,
     private wallet: WalletService,
@@ -91,6 +96,118 @@ export class RidesService {
       gamme: breakdown.gamme,
       breakdown,
     };
+  }
+
+  async route(rideId: string, userId: string) {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException("Course introuvable");
+    if (ride.clientId !== userId && ride.driverId !== userId) throw new ForbiddenException();
+    if (!["MATCHED", "ARRIVED", "IN_PROGRESS"].includes(ride.status)) {
+      throw new BadRequestException("L'itinéraire n'est plus disponible pour cette course.");
+    }
+
+    const inProgress = ride.status === "IN_PROGRESS";
+    const from = {
+      lat: ride.driverLat ?? ride.odoLat ?? ride.originLat,
+      lng: ride.driverLng ?? ride.odoLng ?? ride.originLng,
+    };
+    const to = inProgress
+      ? { lat: ride.destLat, lng: ride.destLng }
+      : { lat: ride.originLat, lng: ride.originLng };
+    const stage = inProgress ? "destination" : "pickup";
+    const latitudeGrid = Math.round(from.lat / (50 / 111_195));
+    const longitudeMetersPerDegree = 111_195 * Math.max(0.1, Math.cos((from.lat * Math.PI) / 180));
+    const longitudeGrid = Math.round(from.lng / (50 / longitudeMetersPerDegree));
+    const cacheKey = `${rideId}:${stage}:${latitudeGrid}:${longitudeGrid}`;
+    const cached = this.routeCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.route;
+
+    const routeKey = `${rideId}:${stage}`;
+    const routeCoordinates = `${from.lng},${from.lat};${to.lng},${to.lat}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${routeCoordinates}?overview=full&geometries=geojson&steps=false`,
+        { signal: controller.signal }
+      );
+      if (!response.ok) throw new Error(`OSRM HTTP ${response.status}`);
+      const result: unknown = await response.json();
+      const candidate =
+        typeof result === "object" && result !== null && "routes" in result && Array.isArray(result.routes)
+          ? result.routes[0]
+          : null;
+      if (
+        typeof candidate !== "object" ||
+        candidate === null ||
+        !("distance" in candidate) ||
+        typeof candidate.distance !== "number" ||
+        !("duration" in candidate) ||
+        typeof candidate.duration !== "number" ||
+        !("geometry" in candidate) ||
+        typeof candidate.geometry !== "object" ||
+        candidate.geometry === null ||
+        !("coordinates" in candidate.geometry) ||
+        !Array.isArray(candidate.geometry.coordinates)
+      ) {
+        throw new Error("OSRM returned no valid route geometry");
+      }
+      const simplifiedCoordinates = this.simplifyRouteCoordinates(candidate.geometry.coordinates);
+      if (simplifiedCoordinates.length < 2) throw new Error("OSRM route geometry is empty");
+      const computedAt = new Date().toISOString();
+      const route = {
+        rideId,
+        stage,
+        coordinates: simplifiedCoordinates,
+        distanceKm: candidate.distance / 1000,
+        durationMinutes: Math.max(1, Math.ceil(candidate.duration / 60)),
+        computedAt,
+        fallback: false,
+      };
+      if (this.lastValidRoutes.size >= 500 && !this.lastValidRoutes.has(routeKey)) {
+        const oldestRouteKey = this.lastValidRoutes.keys().next().value;
+        if (oldestRouteKey) this.lastValidRoutes.delete(oldestRouteKey);
+      }
+      this.lastValidRoutes.set(routeKey, route);
+      for (const [key, entry] of this.routeCache) {
+        if (entry.expiresAt <= Date.now()) this.routeCache.delete(key);
+      }
+      if (this.routeCache.size >= 500) {
+        const oldestKey = this.routeCache.keys().next().value;
+        if (oldestKey) this.routeCache.delete(oldestKey);
+      }
+      this.routeCache.set(cacheKey, {
+        expiresAt: Date.now() + this.pricing.rideSettings().routeCacheSeconds * 1000,
+        route,
+      });
+      return route;
+    } catch {
+      const lastValid = this.lastValidRoutes.get(routeKey);
+      if (lastValid) return { ...lastValid, fallback: true };
+      throw new ServiceUnavailableException("L'itinéraire routier est temporairement indisponible.");
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private simplifyRouteCoordinates(raw: unknown[]): Array<{ latitude: number; longitude: number }> {
+    const valid = raw
+      .filter(
+        (point): point is number[] =>
+          Array.isArray(point) &&
+          point.length >= 2 &&
+          typeof point[0] === "number" &&
+          Number.isFinite(point[0]) &&
+          typeof point[1] === "number" &&
+          Number.isFinite(point[1])
+      )
+      .map(([longitude, latitude]) => ({ latitude, longitude }));
+    if (valid.length <= 250) return valid;
+    const simplified: Array<{ latitude: number; longitude: number }> = [];
+    const stride = (valid.length - 1) / 249;
+    for (let i = 0; i < 249; i++) simplified.push(valid[Math.floor(i * stride)]);
+    simplified.push(valid[valid.length - 1]);
+    return simplified;
   }
 
   async create(clientId: string, dto: CreateRideDto) {
@@ -266,6 +383,7 @@ export class RidesService {
       where: { id: rideId },
       include: WITH_CLIENT,
     });
+    this.gateway.invalidateRideLocationContext(rideId);
     await this.notifications.push(ride.clientId, "Chauffeur trouvé", "Un chauffeur a accepté ta course et arrive vers toi.", "ride");
     this.gateway.emitStatus(rideId, "MATCHED");
     return this.withoutPickupCode(ride);
@@ -297,6 +415,7 @@ export class RidesService {
     if (count === 0) throw new BadRequestException("Le statut de la course a changé. Actualise l'écran.");
 
     const arrivedRide = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
+    this.gateway.invalidateRideLocationContext(rideId);
     const arrivalTitle = this.pricing.isZem(arrivedRide.vehicleType)
       ? "Ton Zem est arrivé"
       : "Ton chauffeur est arrivé";
@@ -367,6 +486,7 @@ export class RidesService {
     if (count === 0) throw new BadRequestException("Le statut de la course a changé. Actualise l'écran.");
 
     this.gateway.clearClientLocationState(rideId);
+    this.gateway.invalidateRideLocationContext(rideId);
     await this.notifications.push(ride.clientId, "Course démarrée", "Ton chauffeur est en route vers la destination.", "ride");
     this.gateway.emitStatus(rideId, "IN_PROGRESS");
     const updated = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
@@ -423,6 +543,207 @@ export class RidesService {
     return { ...this.withoutPickupCode(updated), dropCodeRequested: true };
   }
 
+  async requestStop(rideId: string, userId: string) {
+    let ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException("Course introuvable");
+    const requester = this.participantRole(ride, userId);
+    if (!requester) throw new ForbiddenException();
+    if (ride.status !== "IN_PROGRESS") {
+      throw new BadRequestException("L'arrêt anticipé est disponible uniquement pendant une course en cours.");
+    }
+    if (await this.expireStopRequestIfNeeded(ride)) {
+      ride = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId } });
+    }
+    if (ride.stopRequestedAt) throw new BadRequestException("Une demande d'arrêt est déjà en attente.");
+
+    const progress = await this.gateway.freezeRideProgress(rideId);
+    const distanceMeters = progress?.traveledMeters ?? ride.traveledMeters;
+    const price = progress?.currentPrice ?? this.currentRidePrice(ride);
+    const requestedAt = new Date();
+    const count = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.ride.updateMany({
+        where: { id: rideId, status: "IN_PROGRESS", stopRequestedAt: null, stopRequestedBy: null },
+        data: {
+          stopRequestedBy: requester,
+          stopRequestedAt: requestedAt,
+          stopRequestedPrice: price,
+          stopRequestedDistanceMeters: distanceMeters,
+          ...(progress?.dirtyOdometer && progress.odometer
+            ? {
+                traveledMeters: { increment: progress.pendingMeters },
+                odoLat: progress.odometer.lat,
+                odoLng: progress.odometer.lng,
+                odoAt: new Date(progress.odometer.at),
+              }
+            : {}),
+        },
+      });
+      if (result.count && progress?.dirtyOdometer && progress.odometer) {
+        await tx.rideTrackPoint.create({
+          data: {
+            rideId,
+            lat: progress.odometer.lat,
+            lng: progress.odometer.lng,
+            accuracy: progress.odometerAccuracy,
+            speed: progress.odometerSpeed,
+            at: new Date(progress.odometer.at),
+          },
+        });
+      }
+      return result.count;
+    });
+    if (!count) {
+      this.gateway.invalidateRideLocationContext(rideId);
+      throw new BadRequestException("Une demande d'arrêt est déjà en attente.");
+    }
+
+    this.gateway.invalidateRideLocationContext(rideId);
+    const otherId = requester === "CLIENT" ? ride.driverId : ride.clientId;
+    if (otherId) {
+      await this.notifications
+        .push(otherId, "Demande d'arrêt de course", "L'autre participant demande d'arrêter la course ici.", "ride")
+        .catch(() => null);
+    }
+    const request = this.stopRequestPayload(requester, requestedAt, price, distanceMeters);
+    this.gateway.emitStopRequest(rideId, request);
+    return { rideId, stopRequest: request };
+  }
+
+  async acceptStop(rideId: string, userId: string) {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException("Course introuvable");
+    const accepter = this.participantRole(ride, userId);
+    if (!accepter) throw new ForbiddenException();
+    if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course n'est pas en cours.");
+    if (await this.expireStopRequestIfNeeded(ride)) {
+      throw new BadRequestException("La demande d'arrêt a expiré. La course continue.");
+    }
+    if (!ride.stopRequestedBy || !ride.stopRequestedAt || ride.stopRequestedPrice === null) {
+      throw new BadRequestException("Aucune demande d'arrêt n'est en attente.");
+    }
+    if (ride.stopRequestedBy === accepter) {
+      throw new ForbiddenException("Seul l'autre participant peut accepter cette demande.");
+    }
+    if (!ride.driverId) throw new BadRequestException("Aucun chauffeur n'est assigné à cette course.");
+
+    const amount = Math.min(ride.stopRequestedPrice, ride.price);
+    const result = await this.settle(ride, ride.driverId, {
+      amount,
+      settledDistanceMeters: ride.stopRequestedDistanceMeters ?? ride.traveledMeters,
+      priceMode: "PARTIAL",
+      stopRequestAt: ride.stopRequestedAt,
+      stopRequestedBy: ride.stopRequestedBy,
+    });
+    this.gateway.emitStopRequest(rideId, null, { accepted: true });
+    return result;
+  }
+
+  async declineStop(rideId: string, userId: string) {
+    return this.removeStopRequest(rideId, userId, "declined");
+  }
+
+  async cancelStop(rideId: string, userId: string) {
+    return this.removeStopRequest(rideId, userId, "cancelled");
+  }
+
+  private async removeStopRequest(rideId: string, userId: string, action: "declined" | "cancelled") {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException("Course introuvable");
+    const actor = this.participantRole(ride, userId);
+    if (!actor) throw new ForbiddenException();
+    if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course n'est pas en cours.");
+    if (await this.expireStopRequestIfNeeded(ride)) {
+      throw new BadRequestException("La demande d'arrêt a expiré. La course continue.");
+    }
+    if (!ride.stopRequestedBy || !ride.stopRequestedAt) {
+      throw new BadRequestException("Aucune demande d'arrêt n'est en attente.");
+    }
+    if ((action === "cancelled" && ride.stopRequestedBy !== actor) ||
+        (action === "declined" && ride.stopRequestedBy === actor)) {
+      throw new ForbiddenException(
+        action === "cancelled" ? "Seul l'auteur peut annuler sa demande." : "Seul l'autre participant peut refuser."
+      );
+    }
+
+    const { count } = await this.prisma.ride.updateMany({
+      where: {
+        id: rideId,
+        status: "IN_PROGRESS",
+        stopRequestedBy: ride.stopRequestedBy,
+        stopRequestedAt: ride.stopRequestedAt,
+      },
+      data: {
+        stopRequestedBy: null,
+        stopRequestedAt: null,
+        stopRequestedPrice: null,
+        stopRequestedDistanceMeters: null,
+      },
+    });
+    if (!count) throw new BadRequestException("La demande d'arrêt a déjà été traitée.");
+    this.gateway.invalidateRideLocationContext(rideId);
+
+    const notifyId =
+      action === "declined"
+        ? ride.stopRequestedBy === "CLIENT"
+          ? ride.clientId
+          : ride.driverId
+        : actor === "CLIENT"
+          ? ride.driverId
+          : ride.clientId;
+    if (notifyId) {
+      const message =
+        action === "declined"
+          ? "L'autre participant a refusé l'arrêt. La course continue."
+          : "La demande d'arrêt a été annulée.";
+      await this.notifications.push(notifyId, "Demande d'arrêt mise à jour", message, "ride").catch(() => null);
+    }
+    this.gateway.emitStopRequest(rideId, null, { [action]: true });
+    return { rideId, stopRequest: null };
+  }
+
+  private participantRole(ride: { clientId: string; driverId: string | null }, userId: string) {
+    if (ride.clientId === userId) return "CLIENT" as const;
+    if (ride.driverId === userId) return "DRIVER" as const;
+    return null;
+  }
+
+  private currentRidePrice(ride: { traveledMeters: number; vehicleType: string; price: number }) {
+    return Math.min(this.pricing.breakdown(ride.traveledMeters / 1000, ride.vehicleType).price, ride.price);
+  }
+
+  private stopRequestPayload(by: "CLIENT" | "DRIVER", at: Date, price: number, distanceMeters: number) {
+    const ttl = this.pricing.rideSettings().stopRequestExpiryMinutes * 60_000;
+    return {
+      by,
+      at: at.toISOString(),
+      expiresAt: new Date(at.getTime() + ttl).toISOString(),
+      price,
+      distanceMeters,
+    };
+  }
+
+  private async expireStopRequestIfNeeded(ride: {
+    id: string;
+    stopRequestedAt: Date | null;
+  }) {
+    const ttl = this.pricing.rideSettings().stopRequestExpiryMinutes * 60_000;
+    if (!ride.stopRequestedAt || Date.now() - ride.stopRequestedAt.getTime() < ttl) return false;
+    const { count } = await this.prisma.ride.updateMany({
+      where: { id: ride.id, status: "IN_PROGRESS", stopRequestedAt: ride.stopRequestedAt },
+      data: {
+        stopRequestedBy: null,
+        stopRequestedAt: null,
+        stopRequestedPrice: null,
+        stopRequestedDistanceMeters: null,
+      },
+    });
+    if (count) {
+      this.gateway.invalidateRideLocationContext(ride.id);
+      this.gateway.emitStopRequest(ride.id, null, { expired: true });
+    }
+    return count > 0;
+  }
+
   /** Fin de course par le Zem : le code d'arrivée donné par le client est obligatoire. */
   async complete(rideId: string, driverId: string, code?: string) {
     const ride = await this.getOwnedByDriver(rideId, driverId);
@@ -434,18 +755,82 @@ export class RidesService {
     if (!/^\d{4}$/.test(clean) || clean !== ride.dropCode) {
       throw new BadRequestException("Code d'arrivée incorrect. Demande au client le code affiché dans son application.");
     }
-    return this.settle(ride, driverId);
+    this.assertAtDestination(ride);
+    return this.settle(ride, driverId, {
+      amount: ride.price,
+      settledDistanceMeters: ride.traveledMeters,
+      priceMode: "FULL",
+    });
   }
 
   /** Fin de course validée par le client lui-même (confirmation du dépôt) : pas de code. */
   async completeConfirmedByClient(rideId: string, driverId: string) {
     const ride = await this.getOwnedByDriver(rideId, driverId);
     if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course n'est pas en cours");
-    return this.settle(ride, driverId);
+    this.assertAtDestination(ride);
+    return this.settle(ride, driverId, {
+      amount: ride.price,
+      settledDistanceMeters: ride.traveledMeters,
+      priceMode: "FULL",
+    });
   }
 
-  private async settle(ride: { id: string; clientId: string; price: number }, driverId: string) {
+  private assertAtDestination(ride: {
+    odoLat: number | null;
+    odoLng: number | null;
+    odoAt: Date | null;
+    driverLat: number | null;
+    driverLng: number | null;
+    driverLocatedAt: Date | null;
+    destLat: number;
+    destLng: number;
+  }) {
+    const odometerAge = ride.odoAt ? Date.now() - ride.odoAt.getTime() : Number.POSITIVE_INFINITY;
+    const odometerIsAvailable =
+      ride.odoLat !== null &&
+      ride.odoLng !== null &&
+      odometerAge <= 30_000 &&
+      odometerAge >= -60_000;
+    const latestLocationIsFresh =
+      ride.driverLat !== null &&
+      ride.driverLng !== null &&
+      ride.driverLocatedAt instanceof Date &&
+      Date.now() - ride.driverLocatedAt.getTime() <= 30_000 &&
+      Date.now() - ride.driverLocatedAt.getTime() >= -60_000;
+    const latitude = odometerIsAvailable ? ride.odoLat : latestLocationIsFresh ? ride.driverLat : null;
+    const longitude = odometerIsAvailable ? ride.odoLng : latestLocationIsFresh ? ride.driverLng : null;
+    if (latitude === null || longitude === null) {
+      throw new BadRequestException("La position du chauffeur n'est pas suffisamment précise pour confirmer l'arrivée.");
+    }
+    const tolerance = this.pricing.rideSettings().destinationToleranceMeters;
+    if (haversineMeters({ lat: latitude, lng: longitude }, { lat: ride.destLat, lng: ride.destLng }) > tolerance) {
+      throw new BadRequestException(
+        "Le chauffeur est encore loin de la destination. Demande un arrêt anticipé et attends l'accord de l'autre participant."
+      );
+    }
+  }
+
+  private async settle(
+    ride: {
+      id: string;
+      clientId: string;
+      price: number;
+      traveledMeters: number;
+      stopRequestedBy?: string | null;
+      stopRequestedAt?: Date | null;
+      stopRequestedPrice?: number | null;
+    },
+    driverId: string,
+    options: {
+      amount: number;
+      settledDistanceMeters: number;
+      priceMode: "FULL" | "PARTIAL";
+      stopRequestAt?: Date;
+      stopRequestedBy?: string;
+    }
+  ) {
     const rideId = ride.id;
+    const amount = Math.min(Math.max(0, Math.trunc(options.amount)), ride.price);
 
     const driver = await this.prisma.user.findUnique({
       where: { id: driverId },
@@ -466,33 +851,85 @@ export class RidesService {
         profile: this.profileKeyOf(driver),
         agencyLevel: driver?.agency?.plan ?? null,
       },
-      ride.price
+      amount
     );
-    const driverGain = ride.price - commission;
+    const driverGain = amount - commission;
     const ref = `Course #${ride.id.slice(0, 6)}`;
 
-    // Débit client + crédit chauffeur atomiques (le chauffeur reçoit prix - commission)
-    await this.wallet.transfer(ride.clientId, driverId, ride.price, driverGain, "Course AZƆ̀", "Gain de course", ref);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const clientWallet = await tx.wallet.upsert({
+        where: { userId: ride.clientId },
+        create: { userId: ride.clientId },
+        update: {},
+      });
+      const driverWallet = await tx.wallet.upsert({
+        where: { userId: driverId },
+        create: { userId: driverId },
+        update: {},
+      });
+      const debit = await tx.wallet.updateMany({
+        where: { id: clientWallet.id, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
+      });
+      if (debit.count !== 1) throw new BadRequestException("Solde insuffisant");
 
-    const updated = await this.prisma.ride.update({
-      where: { id: rideId },
-      data: {
-        status: "COMPLETED",
-        commission,
-        driverLat: null,
-        driverLng: null,
-        driverHeading: null,
-        driverSpeed: null,
-        driverLocatedAt: null,
-        clientLat: null,
-        clientLng: null,
-        clientLocatedAt: null,
-      },
+      await tx.wallet.update({
+        where: { id: driverWallet.id },
+        data: { balance: { increment: driverGain } },
+      });
+      await tx.transaction.createMany({
+        data: [
+          { walletId: clientWallet.id, type: "DEBIT", amount, label: "Course AZƆ̀", meta: ref },
+          { walletId: driverWallet.id, type: "CREDIT", amount: driverGain, label: "Gain de course", meta: ref },
+        ],
+      });
+
+      const where: Prisma.RideWhereInput = { id: rideId, driverId, status: "IN_PROGRESS" };
+      if (options.stopRequestAt) {
+        where.stopRequestedBy = options.stopRequestedBy;
+        where.stopRequestedAt = options.stopRequestAt;
+        where.stopRequestedPrice = options.amount;
+      }
+      const completed = await tx.ride.updateMany({
+        where,
+        data: {
+          status: "COMPLETED",
+          commission,
+          finalPrice: amount,
+          settledDistanceMeters: options.settledDistanceMeters,
+          priceMode: options.priceMode,
+          stopRequestedBy: null,
+          stopRequestedAt: null,
+          stopRequestedPrice: null,
+          stopRequestedDistanceMeters: null,
+          driverLat: null,
+          driverLng: null,
+          driverHeading: null,
+          driverSpeed: null,
+          driverLocatedAt: null,
+          clientLat: null,
+          clientLng: null,
+          clientLocatedAt: null,
+        },
+      });
+      if (completed.count !== 1) {
+        throw new BadRequestException("Le statut de la course ou la demande d'arrêt a changé. Actualise l'écran.");
+      }
+      return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
     });
     this.gateway.clearRideLocations(rideId);
-    await this.notifications.push(ride.clientId, "Course terminée", `${ride.price} FCFA débités de ton portefeuille.`, "payment");
-    await this.notifications.push(driverId, "Paiement reçu", `+${driverGain} FCFA (commission AZƆ̀ : ${commission} F).`, "payment");
+    await this.notifications
+      .push(ride.clientId, "Course terminée", `${amount} FCFA débités de ton portefeuille.`, "payment")
+      .catch(() => null);
+    await this.notifications
+      .push(driverId, "Paiement reçu", `+${driverGain} FCFA (commission AZƆ̀ : ${commission} F).`, "payment")
+      .catch(() => null);
     this.gateway.emitStatus(rideId, "COMPLETED");
+    this.gateway.emitRideSettled(rideId, {
+      finalPrice: amount,
+      settledDistanceMeters: options.settledDistanceMeters,
+      priceMode: options.priceMode,
+    });
     return this.withoutPickupCode(updated);
   }
 
@@ -566,7 +1003,7 @@ export class RidesService {
   // Détail d'une course (avec les infos du chauffeur ET du client) — lu par l'écran
   // de suivi côté client et par la fiche course côté chauffeur.
   async findOne(id: string, userId: string) {
-    const ride = await this.prisma.ride.findUnique({
+    let ride = await this.prisma.ride.findUnique({
       where: { id },
       include: {
         driver: { select: { fullName: true, phone: true } },
@@ -591,6 +1028,15 @@ export class RidesService {
         { ...ride, expiresInMinutes: Math.max(0, Math.ceil(expiryMinutes - ageMinutes)) },
         userId
       );
+    }
+    if (ride.status === "IN_PROGRESS" && (await this.expireStopRequestIfNeeded(ride))) {
+      ride = await this.prisma.ride.findUniqueOrThrow({
+        where: { id },
+        include: {
+          driver: { select: { fullName: true, phone: true } },
+          client: { select: { fullName: true, phone: true } },
+        },
+      });
     }
     return this.visibleRideToUser(ride, userId);
   }
@@ -629,11 +1075,88 @@ export class RidesService {
   }
 
   /** Retire les deux codes secrets (départ et arrivée) d'une course avant de la renvoyer. */
-  private withoutPickupCode<T extends { pickupCode?: string | null; dropCode?: string | null }>(
+  private withoutPickupCode<
+    T extends {
+      pickupCode?: string | null;
+      dropCode?: string | null;
+      status?: string;
+      traveledMeters?: number;
+      vehicleType?: string;
+      price?: number;
+      finalPrice?: number | null;
+      settledDistanceMeters?: number | null;
+      priceMode?: string | null;
+      stopRequestedBy?: string | null;
+      stopRequestedAt?: Date | null;
+      stopRequestedPrice?: number | null;
+      stopRequestedDistanceMeters?: number | null;
+    }
+  >(
     ride: T
-  ): Omit<T, "pickupCode" | "dropCode"> {
-    const { pickupCode: _pickupCode, dropCode: _dropCode, ...safeRide } = ride;
-    return safeRide;
+  ): Omit<
+    T,
+    | "pickupCode"
+    | "dropCode"
+    | "stopRequestedBy"
+    | "stopRequestedAt"
+    | "stopRequestedPrice"
+    | "stopRequestedDistanceMeters"
+  > & ReturnType<RidesService["progressFields"]> {
+    const {
+      pickupCode: _pickupCode,
+      dropCode: _dropCode,
+      stopRequestedBy: _stopRequestedBy,
+      stopRequestedAt: _stopRequestedAt,
+      stopRequestedPrice: _stopRequestedPrice,
+      stopRequestedDistanceMeters: _stopRequestedDistanceMeters,
+      ...safeRide
+    } = ride;
+    return { ...safeRide, ...this.progressFields(ride) };
+  }
+
+  private progressFields(ride: {
+    id?: string;
+    status?: string;
+    traveledMeters?: number;
+    vehicleType?: string;
+    price?: number;
+    finalPrice?: number | null;
+    settledDistanceMeters?: number | null;
+    priceMode?: string | null;
+    stopRequestedBy?: string | null;
+    stopRequestedAt?: Date | null;
+    stopRequestedPrice?: number | null;
+    stopRequestedDistanceMeters?: number | null;
+  }) {
+    const traveledMeters = ride.traveledMeters ?? 0;
+    const stopRequest =
+      (ride.stopRequestedBy === "CLIENT" || ride.stopRequestedBy === "DRIVER") &&
+      ride.stopRequestedAt &&
+      ride.stopRequestedPrice !== null &&
+      ride.stopRequestedPrice !== undefined &&
+      Date.now() - ride.stopRequestedAt.getTime() <
+        this.pricing.rideSettings().stopRequestExpiryMinutes * 60_000
+        ? this.stopRequestPayload(
+            ride.stopRequestedBy,
+            ride.stopRequestedAt,
+            ride.stopRequestedPrice,
+            ride.stopRequestedDistanceMeters ?? traveledMeters
+          )
+        : null;
+    return {
+      traveledMeters,
+      ...(ride.status === "IN_PROGRESS" && ride.vehicleType && typeof ride.price === "number"
+        ? { currentPrice: this.currentRidePrice({ traveledMeters, vehicleType: ride.vehicleType, price: ride.price }) }
+        : {}),
+      stopRequest,
+      ...(ride.status === "COMPLETED" && ride.finalPrice !== null && ride.finalPrice !== undefined
+        ? {
+            finalPrice: ride.finalPrice,
+            settledDistanceMeters: ride.settledDistanceMeters ?? traveledMeters,
+            priceMode: ride.priceMode,
+          }
+        : {}),
+    };
   }
 
   /**

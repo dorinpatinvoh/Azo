@@ -9,12 +9,34 @@ function makeGateway(ride: Record<string, unknown> | null) {
   const server = {
     to: jest.fn().mockReturnValue({ emit }),
   };
+  const rideData = ride
+    ? {
+        clientId,
+        driverId,
+        status: "IN_PROGRESS",
+        driverLocatedAt: null,
+        traveledMeters: 0,
+        odoLat: null,
+        odoLng: null,
+        odoAt: null,
+        stopRequestedBy: null,
+        stopRequestedAt: null,
+        vehicleType: "ZEM_ESSENCE",
+        price: 1000,
+        ...ride,
+      }
+    : null;
   const prisma = {
     ride: {
-      findUnique: jest.fn().mockResolvedValue(ride),
+      findUnique: jest.fn().mockResolvedValue(rideData),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
+    rideTrackPoint: {
+      create: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
   };
+  (prisma as any).$transaction = jest.fn((callback) => callback(prisma));
   const gateway = new RidesGateway({} as any, prisma as any);
   (gateway as any).server = server;
 
@@ -92,7 +114,12 @@ describe("RidesGateway real-time ride events", () => {
           accuracy: 8.2,
         });
 
-        expect(emit).toHaveBeenCalledTimes(2);
+        expect(emit).toHaveBeenCalledWith("ride:progress", expect.objectContaining({
+          rideId,
+          traveledMeters: expect.any(Number),
+          currentPrice: expect.any(Number),
+        }));
+        expect(emit.mock.calls.filter(([event]) => event === "driver:location")).toHaveLength(2);
         expect(emit).toHaveBeenLastCalledWith(
           "driver:location",
           expect.objectContaining({ lat: 6.39, lng: 2.41, speed: 4.6, accuracy: 8, at: Date.now() - 1_000 })
@@ -112,9 +139,28 @@ describe("RidesGateway real-time ride events", () => {
             }),
           })
         );
+        expect(prisma.ride.findUnique).toHaveBeenCalledTimes(1);
       } finally {
         jest.useRealTimers();
       }
+    });
+
+    it.each(["MATCHED", "ARRIVED"])("does not meter pre-trip locations in %s", async (status) => {
+      const { gateway, prisma, emit } = makeGateway({ driverId, status });
+      await gateway.location(makeSocket(driverId), {
+        rideId,
+        lat: 6.37,
+        lng: 2.39,
+        accuracy: 5,
+      });
+
+      expect(emit).toHaveBeenCalledWith("driver:location", expect.anything());
+      expect(emit).not.toHaveBeenCalledWith("ride:progress", expect.anything());
+      expect(prisma.ride.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.not.objectContaining({ traveledMeters: expect.anything() }),
+        })
+      );
     });
 
     describe("client:location", () => {

@@ -73,6 +73,12 @@
     "driverNotificationMax": 30
   },
 
+  "rides": {
+    "stopRequestExpiryMinutes": 2,
+    "destinationToleranceMeters": 150,
+    "routeCacheSeconds": 5
+  },
+
   "agencyLevels": {
     "PRO": { "activationFee": 100000, "commissionPct": 3, "withdrawalFeePct": 1, "maxAccounts": 25 },
     "SILVER": { "activationFee": 215500, "commissionPct": 2.5, "withdrawalFeePct": 0.75, "maxAccounts": 50 },

@@ -55,11 +55,14 @@ function makeService(status: string, code = pickupCode) {
   const pricing = {
     isZem: jest.fn().mockReturnValue(true),
     radarSettings: jest.fn().mockReturnValue({ pendingExpiryMinutes: 20 }),
+    breakdown: jest.fn().mockReturnValue({ price: 1000 }),
+    rideSettings: jest.fn().mockReturnValue({ stopRequestExpiryMinutes: 2 }),
   };
   const gateway = {
     emitStatus: jest.fn(),
     clearRideLocations: jest.fn(),
     clearClientLocationState: jest.fn(),
+    invalidateRideLocationContext: jest.fn(),
   };
 
   return {

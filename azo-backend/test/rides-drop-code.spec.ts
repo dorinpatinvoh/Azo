@@ -22,6 +22,12 @@ function makeService(overrides: Record<string, unknown> = {}) {
     status: "IN_PROGRESS",
     vehicleType: "ZEM_ESSENCE",
     price: 1000,
+    traveledMeters: 1000,
+    destLat: 6.37,
+    destLng: 2.39,
+    odoLat: 6.37,
+    odoLng: 2.39,
+    odoAt: new Date(),
     pickupCode: null,
     dropCode: null,
     createdAt: new Date(),
@@ -37,6 +43,26 @@ function makeService(overrides: Record<string, unknown> = {}) {
     },
     user: { findUnique: jest.fn().mockResolvedValue({ agency: null, provider: null }) },
   };
+  const tx = {
+    wallet: {
+      upsert: jest.fn().mockResolvedValue({ id: "wallet-1" }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    transaction: { createMany: jest.fn().mockResolvedValue({ count: 2 }) },
+    ride: {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({
+        ...ride,
+        status: "COMPLETED",
+        finalPrice: ride.price,
+        settledDistanceMeters: ride.traveledMeters,
+        priceMode: "FULL",
+      }),
+    },
+  };
+  const $transaction = jest.fn((callback) => callback(tx));
+  (prisma as any).$transaction = $transaction;
   const wallet = { transfer: jest.fn().mockResolvedValue(undefined) };
   const notifications = { push: jest.fn().mockResolvedValue({}) };
   const pricing = {
@@ -44,14 +70,30 @@ function makeService(overrides: Record<string, unknown> = {}) {
     agencyCanOperate: jest.fn().mockReturnValue(true),
     rideCommission: jest.fn().mockReturnValue(0),
     radarSettings: jest.fn().mockReturnValue({ pendingExpiryMinutes: 20 }),
+    rideSettings: jest.fn().mockReturnValue({
+      stopRequestExpiryMinutes: 2,
+      destinationToleranceMeters: 150,
+      routeCacheSeconds: 5,
+    }),
+    breakdown: jest.fn((_distance, _vehicleType) => ({ price: ride.price })),
   };
   const gateway = {
     emitStatus: jest.fn(),
     clearRideLocations: jest.fn(),
     clearClientLocationState: jest.fn(),
+    emitRideSettled: jest.fn(),
+    emitStopRequest: jest.fn(),
+    invalidateRideLocationContext: jest.fn(),
+    freezeRideProgress: jest.fn().mockResolvedValue({
+      traveledMeters: ride.traveledMeters,
+      pendingMeters: 0,
+      dirtyOdometer: false,
+      odometer: null,
+      currentPrice: ride.price,
+    }),
   };
   const service = new RidesService(prisma as any, wallet as any, notifications as any, pricing as any, gateway as any);
-  return { service, prisma, wallet, notifications, gateway, ride };
+  return { service, prisma, tx, $transaction, wallet, notifications, gateway, ride };
 }
 
 describe("code d'arrivée (dropCode) demandé par le Zem", () => {
@@ -85,43 +127,40 @@ describe("code d'arrivée (dropCode) demandé par le Zem", () => {
 
 describe("fin de course par le Zem avec le code d'arrivée", () => {
   it("refuse si le code n'a pas encore été demandé", async () => {
-    const { service, wallet } = makeService();
+    const { service, $transaction } = makeService();
     await expect(service.complete("ride-1", driverId, "4829")).rejects.toBeInstanceOf(BadRequestException);
-    expect(wallet.transfer).not.toHaveBeenCalled();
+    expect($transaction).not.toHaveBeenCalled();
   });
 
   it.each([[undefined], [""], ["1111"], ["abcd"], ["482"]])("refuse le code %p, sans paiement", async (code) => {
-    const { service, wallet } = makeService({ dropCode: "4829" });
+    const { service, $transaction } = makeService({ dropCode: "4829" });
     await expect(service.complete("ride-1", driverId, code as any)).rejects.toBeInstanceOf(BadRequestException);
-    expect(wallet.transfer).not.toHaveBeenCalled();
+    expect($transaction).not.toHaveBeenCalled();
   });
 
   it("accepte le bon code : paiement et statut COMPLETED", async () => {
-    const { service, wallet, prisma, gateway } = makeService({ dropCode: "4829" });
+    const { service, tx, gateway, $transaction } = makeService({ dropCode: "4829" });
     const result: any = await service.complete("ride-1", driverId, "4829");
-    expect(wallet.transfer).toHaveBeenCalledTimes(1);
-    expect(prisma.ride.update.mock.calls[0][0].data).toEqual(
-      expect.objectContaining({
+    expect($transaction).toHaveBeenCalledTimes(1);
+    expect(tx.ride.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
         status: "COMPLETED",
+        finalPrice: 1000,
+        settledDistanceMeters: 1000,
+        priceMode: "FULL",
         driverLat: null,
-        driverLng: null,
-        driverHeading: null,
-        driverSpeed: null,
-        driverLocatedAt: null,
         clientLat: null,
-        clientLng: null,
-        clientLocatedAt: null,
-      })
-    );
+      }),
+    }));
     expect(gateway.clearRideLocations).toHaveBeenCalledWith("ride-1");
     expect(gateway.emitStatus).toHaveBeenCalledWith("ride-1", "COMPLETED");
     expect(result).not.toHaveProperty("dropCode");
   });
 
   it("la confirmation du client termine la course sans code", async () => {
-    const { service, wallet } = makeService();
+    const { service, $transaction } = makeService();
     await service.completeConfirmedByClient("ride-1", driverId);
-    expect(wallet.transfer).toHaveBeenCalledTimes(1);
+    expect($transaction).toHaveBeenCalledTimes(1);
   });
 });
 

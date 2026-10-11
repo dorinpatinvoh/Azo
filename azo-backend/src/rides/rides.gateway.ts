@@ -6,10 +6,13 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from "@nestjs/websockets";
-import { Logger } from "@nestjs/common";
+import { Logger, Optional } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { PricingService } from "../pricing/pricing.module";
 import { Server, Socket } from "socket.io";
+import { OdometerPoint, odometerStep } from "./odometer";
 
 export type RideChatMessage = {
   id: string;
@@ -34,6 +37,22 @@ type LiveLocationPayload = {
 const ACTIVE_DRIVER_LOCATION_STATUSES = ["MATCHED", "ARRIVED", "IN_PROGRESS"] as const;
 const ACTIVE_CLIENT_LOCATION_STATUSES = ["MATCHED", "ARRIVED"] as const;
 const LOCATION_PERSIST_INTERVAL_MS = 5_000;
+const TRACK_RETENTION_DAYS = 30;
+
+type RideLocationContext = {
+  driverId: string | null;
+  status: string;
+  vehicleType: string;
+  estimatedPrice: number;
+  lastDriverAt: number;
+  traveledMeters: number;
+  odometer: OdometerPoint | null;
+  odometerAccuracy: number | null;
+  odometerSpeed: number | null;
+  pendingMeters: number;
+  dirtyOdometer: boolean;
+  pendingStop: boolean;
+};
 
 // Suivi en direct + Messagerie sécurisée in-app :
 // Côté mobile : socket.emit("ride:join", { rideId }) puis socket.on("driver:location" | "ride:chat", ...)
@@ -47,8 +66,20 @@ export class RidesGateway implements OnGatewayConnection {
   private lastClientTimestamp = new Map<string, number>();
   private lastDriverPersistAt = new Map<string, number>();
   private lastClientPersistAt = new Map<string, number>();
+  private rideLocationContexts = new Map<string, RideLocationContext>();
+  private rideContextGeneration = new Map<string, number>();
+  private driverLocationTasks = new Map<string, Promise<unknown>>();
+  private lastProgressEmitAt = new Map<string, number>();
+  private lastTrackCleanupAt = 0;
+  private readonly pricing: PricingService;
 
-  constructor(private jwt: JwtService, private prisma: PrismaService) {}
+  constructor(
+    private jwt: JwtService,
+    private prisma: PrismaService,
+    @Optional() pricing?: PricingService
+  ) {
+    this.pricing = pricing ?? new PricingService();
+  }
 
   handleConnection(client: Socket) {
     const raw =
@@ -78,6 +109,8 @@ export class RidesGateway implements OnGatewayConnection {
         clientId: true,
         driverId: true,
         status: true,
+        vehicleType: true,
+        price: true,
         driverLat: true,
         driverLng: true,
         driverHeading: true,
@@ -142,34 +175,168 @@ export class RidesGateway implements OnGatewayConnection {
   ) {
     const userId = client.data?.user?.userId;
     if (!userId || !this.hasValidCoordinates(data)) return;
+    await this.serializeDriverLocation(data.rideId, async () => {
+      const ride = await this.getRideLocationContext(data.rideId);
+      if (
+        !ride ||
+        ride.driverId !== userId ||
+        !ACTIVE_DRIVER_LOCATION_STATUSES.includes(ride.status as (typeof ACTIVE_DRIVER_LOCATION_STATUSES)[number])
+      ) {
+        return;
+      }
 
-    const ride = await this.prisma.ride.findUnique({
-      where: { id: data.rideId },
-      select: { driverId: true, status: true, driverLocatedAt: true },
+      const at = this.locationTimestamp(data.ts);
+      if (at <= Math.max(this.lastDriverTimestamp.get(data.rideId) ?? 0, ride.lastDriverAt)) return;
+      this.lastDriverTimestamp.set(data.rideId, at);
+      ride.lastDriverAt = at;
+      const heading = this.validHeading(data.heading);
+      const speed = this.validNonNegative(data.speed);
+      const accuracy = this.validNonNegative(data.accuracy);
+      this.server?.to(`ride:${data.rideId}`).emit("driver:location", {
+        lat: data.lat,
+        lng: data.lng,
+        ...(heading !== undefined ? { heading } : {}),
+        ...(speed !== undefined ? { speed } : {}),
+        ...(accuracy !== undefined ? { accuracy: Math.round(accuracy) } : {}),
+        at,
+      });
+
+      if (ride.status === "IN_PROGRESS") {
+        await this.expireStopRequest(data.rideId, ride);
+        if (!ride.pendingStop) {
+          const result = odometerStep(
+            ride.odometer,
+            { lat: data.lat, lng: data.lng, at },
+            accuracy
+          );
+          if (result?.accepted) {
+            ride.odometer = result.point;
+            ride.odometerAccuracy = accuracy !== undefined ? Math.round(accuracy) : null;
+            ride.odometerSpeed = speed ?? null;
+            ride.traveledMeters += result.meters;
+            ride.pendingMeters += result.meters;
+            ride.dirtyOdometer = true;
+          }
+        }
+        this.emitRideProgress(data.rideId, ride);
+      }
+
+      await this.persistDriverLocation(data.rideId, data, at, heading, speed, ride);
     });
-    if (
-      !ride ||
-      ride.driverId !== userId ||
-      !ACTIVE_DRIVER_LOCATION_STATUSES.includes(ride.status as (typeof ACTIVE_DRIVER_LOCATION_STATUSES)[number])
-    ) {
-      return;
+  }
+
+  private async serializeDriverLocation<T>(rideId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.driverLocationTasks.get(rideId) ?? Promise.resolve();
+    const current = previous.then(work, work);
+    this.driverLocationTasks.set(rideId, current);
+    try {
+      return await current;
+    } finally {
+      if (this.driverLocationTasks.get(rideId) === current) this.driverLocationTasks.delete(rideId);
     }
+  }
 
-    const at = this.locationTimestamp(data.ts);
-    if (at < Math.max(this.lastDriverTimestamp.get(data.rideId) ?? 0, ride.driverLocatedAt?.getTime() ?? 0)) return;
-    this.lastDriverTimestamp.set(data.rideId, at);
-    const heading = this.validHeading(data.heading);
-    const speed = this.validNonNegative(data.speed);
-    const accuracy = this.validNonNegative(data.accuracy);
-    this.server?.to(`ride:${data.rideId}`).emit("driver:location", {
-      lat: data.lat,
-      lng: data.lng,
-      ...(heading !== undefined ? { heading } : {}),
-      ...(speed !== undefined ? { speed } : {}),
-      ...(accuracy !== undefined ? { accuracy: Math.round(accuracy) } : {}),
-      at,
+  async freezeRideProgress(rideId: string) {
+    return this.serializeDriverLocation(rideId, async () => {
+      const context = await this.getRideLocationContext(rideId);
+      if (!context || context.status !== "IN_PROGRESS") return null;
+      context.pendingStop = true;
+      return {
+        traveledMeters: context.traveledMeters,
+        pendingMeters: context.pendingMeters,
+        dirtyOdometer: context.dirtyOdometer,
+        odometer: context.odometer,
+        odometerAccuracy: context.odometerAccuracy,
+        odometerSpeed: context.odometerSpeed,
+        currentPrice: Math.min(
+          this.pricing.breakdown(context.traveledMeters / 1000, context.vehicleType).price,
+          context.estimatedPrice
+        ),
+      };
     });
-    await this.persistDriverLocation(data.rideId, data, at, heading, speed);
+  }
+
+  private async getRideLocationContext(rideId: string): Promise<RideLocationContext | null> {
+    const cached = this.rideLocationContexts.get(rideId);
+    if (cached) return cached;
+    const generation = this.rideContextGeneration.get(rideId) ?? 0;
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: rideId },
+      select: {
+        driverId: true,
+        status: true,
+        vehicleType: true,
+        price: true,
+        driverLocatedAt: true,
+        traveledMeters: true,
+        odoLat: true,
+        odoLng: true,
+        odoAt: true,
+        stopRequestedBy: true,
+        stopRequestedAt: true,
+      },
+    });
+    if (!ride) return null;
+    if ((this.rideContextGeneration.get(rideId) ?? 0) !== generation) {
+      return this.getRideLocationContext(rideId);
+    }
+    const context: RideLocationContext = {
+      driverId: ride.driverId,
+      status: ride.status,
+      vehicleType: ride.vehicleType,
+      estimatedPrice: ride.price,
+      lastDriverAt: ride.driverLocatedAt?.getTime() ?? 0,
+      traveledMeters: ride.traveledMeters,
+      odometer:
+        ride.odoLat !== null && ride.odoLng !== null && ride.odoAt
+          ? { lat: ride.odoLat, lng: ride.odoLng, at: ride.odoAt.getTime() }
+          : null,
+      odometerAccuracy: null,
+      odometerSpeed: null,
+      pendingMeters: 0,
+      dirtyOdometer: false,
+      pendingStop: !!ride.stopRequestedBy && !!ride.stopRequestedAt &&
+        Date.now() - ride.stopRequestedAt.getTime() <
+          this.pricing.rideSettings().stopRequestExpiryMinutes * 60_000,
+    };
+    this.rideLocationContexts.set(rideId, context);
+    return context;
+  }
+
+  private async expireStopRequest(rideId: string, context: RideLocationContext) {
+    if (!context.pendingStop) return;
+    const expiredBefore = new Date(
+      Date.now() - this.pricing.rideSettings().stopRequestExpiryMinutes * 60_000
+    );
+    const result = await this.prisma.ride.updateMany({
+      where: { id: rideId, status: "IN_PROGRESS", stopRequestedAt: { lte: expiredBefore } },
+      data: {
+        stopRequestedBy: null,
+        stopRequestedAt: null,
+        stopRequestedPrice: null,
+        stopRequestedDistanceMeters: null,
+      },
+    });
+    if (result.count > 0) {
+      context.pendingStop = false;
+      this.server?.to(`ride:${rideId}`).emit("ride:stop", { rideId, stopRequest: null, expired: true });
+    }
+  }
+
+  private emitRideProgress(rideId: string, context: RideLocationContext) {
+    const now = Date.now();
+    if (now - (this.lastProgressEmitAt.get(rideId) ?? 0) < LOCATION_PERSIST_INTERVAL_MS) return;
+    this.lastProgressEmitAt.set(rideId, now);
+    const price = Math.min(
+      this.pricing.breakdown(context.traveledMeters / 1000, context.vehicleType).price,
+      context.estimatedPrice
+    );
+    this.server?.to(`ride:${rideId}`).emit("ride:progress", {
+      rideId,
+      traveledMeters: context.traveledMeters,
+      currentPrice: price,
+      at: new Date(now).toISOString(),
+    });
   }
 
   @SubscribeMessage("client:location")
@@ -208,10 +375,32 @@ export class RidesGateway implements OnGatewayConnection {
   }
 
   clearRideLocations(rideId: string) {
+    this.rideContextGeneration.set(rideId, (this.rideContextGeneration.get(rideId) ?? 0) + 1);
     this.lastDriverTimestamp.delete(rideId);
     this.lastClientTimestamp.delete(rideId);
     this.lastDriverPersistAt.delete(rideId);
     this.lastClientPersistAt.delete(rideId);
+    this.rideLocationContexts.delete(rideId);
+    this.lastProgressEmitAt.delete(rideId);
+  }
+
+  invalidateRideLocationContext(rideId: string) {
+    this.rideContextGeneration.set(rideId, (this.rideContextGeneration.get(rideId) ?? 0) + 1);
+    this.rideLocationContexts.delete(rideId);
+  }
+
+  emitStopRequest(rideId: string, request: {
+    by: string;
+    at: string;
+    expiresAt: string;
+    price: number;
+    distanceMeters: number;
+  } | null, extra: { accepted?: boolean; declined?: boolean; cancelled?: boolean; expired?: boolean } = {}) {
+    this.server?.to(`ride:${rideId}`).emit("ride:stop", { rideId, stopRequest: request, ...extra });
+  }
+
+  emitRideSettled(rideId: string, payload: { finalPrice: number; settledDistanceMeters: number; priceMode: string }) {
+    this.server?.to(`ride:${rideId}`).emit("ride:progress", { rideId, ...payload });
   }
 
   clearClientLocationState(rideId: string) {
@@ -312,27 +501,75 @@ export class RidesGateway implements OnGatewayConnection {
     data: LiveLocationPayload & { lat: number; lng: number },
     at: number,
     heading: number | undefined,
-    speed: number | undefined
+    speed: number | undefined,
+    context: RideLocationContext
   ) {
     const now = Date.now();
     if (now - (this.lastDriverPersistAt.get(rideId) ?? 0) < LOCATION_PERSIST_INTERVAL_MS) return;
-    this.lastDriverPersistAt.set(rideId, now);
     const locatedAt = new Date(at);
     try {
-      await this.prisma.ride.updateMany({
-        where: {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const where: Prisma.RideWhereInput = {
           id: rideId,
+          driverId: context.driverId,
           status: { in: [...ACTIVE_DRIVER_LOCATION_STATUSES] },
           OR: [{ driverLocatedAt: null }, { driverLocatedAt: { lt: locatedAt } }],
-        },
-        data: {
-          driverLat: data.lat,
-          driverLng: data.lng,
-          driverHeading: heading ?? null,
-          driverSpeed: speed ?? null,
-          driverLocatedAt: locatedAt,
-        },
+        };
+        if (context.status === "IN_PROGRESS" && context.dirtyOdometer && context.odometer) {
+          where.AND = [
+            {
+              OR: [{ odoAt: null }, { odoAt: { lt: new Date(context.odometer.at) } }],
+            },
+          ];
+        }
+        const updated = await tx.ride.updateMany({
+          where,
+          data: {
+            driverLat: data.lat,
+            driverLng: data.lng,
+            driverHeading: heading ?? null,
+            driverSpeed: speed ?? null,
+            driverLocatedAt: locatedAt,
+            ...(context.status === "IN_PROGRESS" && context.dirtyOdometer && context.odometer
+              ? {
+                  traveledMeters: { increment: context.pendingMeters },
+                  odoLat: context.odometer.lat,
+                  odoLng: context.odometer.lng,
+                  odoAt: new Date(context.odometer.at),
+                }
+              : {}),
+          },
+        });
+        if (updated.count === 0) return false;
+        if (context.status === "IN_PROGRESS" && context.dirtyOdometer && context.odometer) {
+          await tx.rideTrackPoint.create({
+            data: {
+              rideId,
+              lat: context.odometer.lat,
+              lng: context.odometer.lng,
+              accuracy: context.odometerAccuracy,
+              speed: context.odometerSpeed,
+              at: new Date(context.odometer.at),
+            },
+          });
+        }
+        return true;
       });
+      if (!result) {
+        this.rideLocationContexts.delete(rideId);
+        return;
+      }
+      this.lastDriverPersistAt.set(rideId, now);
+      if (context.status === "IN_PROGRESS" && context.dirtyOdometer) {
+        context.pendingMeters = 0;
+        context.dirtyOdometer = false;
+      }
+      if (Date.now() - this.lastTrackCleanupAt > 60 * 60_000) {
+        this.lastTrackCleanupAt = Date.now();
+        await this.prisma.rideTrackPoint.deleteMany({
+          where: { at: { lt: new Date(Date.now() - TRACK_RETENTION_DAYS * 24 * 60 * 60_000) } },
+        });
+      }
     } catch (error) {
       this.lastDriverPersistAt.delete(rideId);
       this.logger.error(`Could not persist driver location for ride ${rideId}`, error);

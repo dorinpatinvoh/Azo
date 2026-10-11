@@ -181,6 +181,15 @@ export class PricingService {
     };
   }
 
+  rideSettings() {
+    const rides = this.config.rides ?? {};
+    return {
+      stopRequestExpiryMinutes: rides.stopRequestExpiryMinutes ?? 2,
+      destinationToleranceMeters: rides.destinationToleranceMeters ?? 150,
+      routeCacheSeconds: rides.routeCacheSeconds ?? 5,
+    };
+  }
+
   /**
    * Prix d'une course = base (remisée le cas échéant) + somme des paliers kilométriques.
    *
