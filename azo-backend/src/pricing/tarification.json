@@ -31,11 +31,11 @@
     },
     "ZEM_ELECTRIC": {
       "family": "ZEM",
-      "base": 100,
+      "base": 120,
       "brackets": [
-        { "upToKm": 15, "perKm": 70 },
-        { "upToKm": 25, "perKm": 60 },
-        { "upToKm": null, "perKm": 50 }
+        { "upToKm": 15, "perKm": 60 },
+        { "upToKm": 24, "perKm": 50 },
+        { "upToKm": null, "perKm": 45 }
       ]
     },
     "GAZELLE": {
