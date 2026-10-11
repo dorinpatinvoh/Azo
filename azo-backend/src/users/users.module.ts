@@ -118,7 +118,7 @@ export class UsersService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+      await tx.$queryRaw`SELECT TRUE AS locked FROM (SELECT pg_advisory_xact_lock(hashtext(${userId}))) AS lock_result`;
       const attempts = await tx.npiRegistrationAttempt.count({
         where: { userId, createdAt: { gt: new Date(Date.now() - REGISTRATION_ATTEMPT_WINDOW_MS) } },
       });

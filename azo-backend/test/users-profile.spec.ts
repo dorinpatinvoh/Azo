@@ -69,9 +69,9 @@ function makeService(options: { complete?: boolean; updateError?: unknown } = {}
       count: jest.fn().mockResolvedValue(0),
       create: jest.fn().mockResolvedValue({}),
     },
+    $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]),
   };
   (prisma as any).$transaction = jest.fn((callback) => callback(prisma));
-  (prisma as any).$queryRaw = jest.fn();
   const crypto = {
     hash: jest.fn().mockReturnValue("hmac-value"),
     encrypt: jest.fn().mockReturnValue("v1:iv:tag:ciphertext"),
@@ -107,6 +107,7 @@ describe("inscription client POST /users/me/registration", () => {
     expect(stored.profileCompletedAt).toBeInstanceOf(Date);
     expect(crypto.hash).toHaveBeenCalledWith("1234567890");
     expect(crypto.encrypt).toHaveBeenCalledWith("1234567890");
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ profileComplete: true, npiMasked: "••••••7890" });
     expect(result).not.toHaveProperty("npi");
     expect(result).not.toHaveProperty("npiCipher");
