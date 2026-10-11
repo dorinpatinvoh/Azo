@@ -13,9 +13,23 @@ import {
 type Row = { id: string; phone: string; code: string; consumed: boolean; attempts: number; createdAt: Date; expiresAt: Date };
 
 /** Mini base en mémoire : assez fidèle pour tester les essais sur plusieurs codes. */
-function makeService() {
+function makeService(options: { completeProfile?: boolean } = {}) {
   const codes: Row[] = [];
   let seq = 0;
+  const user = {
+    id: "u1",
+    phone: "+2290197000042",
+    role: "CLIENT",
+    status: "ACTIVE",
+    fullName: null,
+    createdAt: new Date("2026-10-11T00:00:00Z"),
+    firstName: options.completeProfile ? "Kossi" : null,
+    lastName: options.completeProfile ? "Adjovi" : null,
+    gender: options.completeProfile ? "M" : null,
+    npiHash: options.completeProfile ? "private-hmac" : null,
+    npiCipher: options.completeProfile ? "private-cipher" : null,
+    npiLast4: options.completeProfile ? "7890" : null,
+  };
   const matches = (r: Row, w: any) =>
     (!w.phone || w.phone.in.includes(r.phone)) &&
     (w.consumed === undefined || r.consumed === w.consumed) &&
@@ -46,17 +60,18 @@ function makeService() {
       }),
     },
     user: {
-      findFirst: jest.fn().mockResolvedValue({ id: "u1", phone: "+2290197000042", role: "CLIENT", status: "ACTIVE", fullName: null }),
+      findFirst: jest.fn().mockResolvedValue(user),
       findUnique: jest.fn().mockResolvedValue(null),
     },
   };
   const providers = { statusOf: jest.fn().mockResolvedValue(null), openDraftOnSignup: jest.fn() };
-  const service = new AuthService(prisma as any, { signAsync: jest.fn().mockResolvedValue("jwt") } as any, providers as any);
+  const jwt = { signAsync: jest.fn().mockResolvedValue("jwt") };
+  const service = new AuthService(prisma as any, jwt as any, providers as any);
   const issue = async (code: string) => {
     await service.requestOtp("0197000042");
     codes[codes.length - 1].code = code; // le code généré est aléatoire : on le fixe
   };
-  return { service, prisma, codes, issue };
+  return { service, prisma, codes, issue, jwt };
 }
 
 const PHONE = "0197000042";
@@ -140,8 +155,28 @@ describe("3 essais par heure sur le code OTP de connexion", () => {
   it("un même code ne peut pas ouvrir deux sessions", async () => {
     const { service, issue } = makeService();
     await issue("4829");
-    await service.verifyOtp(PHONE, "4829");
+    const result = await service.verifyOtp(PHONE, "4829");
+    expect(result.user.profileComplete).toBe(false);
+    expect(result.user.npiMasked).toBeNull();
     await expect(service.verifyOtp(PHONE, "4829")).rejects.toThrow("Code invalide ou expiré");
+  });
+
+  it("inclut l'état du profil vérifié sans mettre le NPI dans le JWT", async () => {
+    const { service, issue, jwt } = makeService({ completeProfile: true });
+    await issue("4829");
+    const result = await service.verifyOtp(PHONE, "4829");
+
+    expect(result.user).toMatchObject({ firstName: "Kossi", lastName: "Adjovi", gender: "M" });
+    expect(result.user.profileComplete).toBe(true);
+    expect(result.user.npiMasked).toBe("••••••7890");
+    expect(result.user).not.toHaveProperty("npi");
+    expect(result.user).not.toHaveProperty("npiCipher");
+    expect(result.user).not.toHaveProperty("npiHash");
+    expect(jwt.signAsync).toHaveBeenCalledWith({
+      sub: "u1",
+      role: "CLIENT",
+      phone: "+2290197000042",
+    });
   });
 
   it("en simulation, la demande de code n'est pas bloquée (0000 reste utilisable)", async () => {

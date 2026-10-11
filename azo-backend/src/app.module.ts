@@ -15,10 +15,12 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { ProvidersModule } from "./providers/providers.module";
 import { PricingModule } from "./pricing/pricing.module";
 import { HealthController } from "./health.controller";
+import { RegistrationModule } from "./common/registration.module";
 
 @Module({
   imports: [
     PrismaModule,
+    RegistrationModule,
     AuthModule,
     UsersModule,
     RidesModule,

@@ -14,6 +14,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { PricingModule, PricingService } from "../pricing/pricing.module";
+import { RegistrationCompleteGuard } from "../common/guards/registration-complete.guard";
 
 class RechargeDto {
   @IsInt() @Min(100) amount: number;
@@ -240,6 +241,7 @@ export class WalletController {
   // ⚠️ Simulation : en production, appeler l'API FedaPay/CinetPay et ne créditer
   // qu'après confirmation du paiement par webhook.
   @Post("recharge")
+  @UseGuards(RegistrationCompleteGuard)
   recharge(@CurrentUser() user, @Body() dto: RechargeDto) {
     return this.wallet.credit(user.userId, dto.amount, `Rechargement ${dto.method}`, "Simulation");
   }
@@ -255,6 +257,7 @@ export class WalletController {
 
   // POST /wallet/withdraw  { "amount": 50000 }
   @Post("withdraw")
+  @UseGuards(RegistrationCompleteGuard)
   withdraw(@CurrentUser() user, @Body() dto: WithdrawDto) {
     return this.wallet.withdraw(user.userId, dto.amount);
   }

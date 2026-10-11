@@ -8,6 +8,7 @@ import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { RegistrationCompleteGuard } from "../common/guards/registration-complete.guard";
 
 /**
  * Position optionnelle du chauffeur, transmise quand il ouvre son radar
@@ -72,6 +73,7 @@ export class RidesController {
 
   // POST /rides  -> le client confirme sa demande
   @Post()
+  @UseGuards(RegistrationCompleteGuard)
   @Roles(Role.CLIENT)
   create(@CurrentUser() user, @Body() dto: CreateRideDto) {
     return this.rides.create(user.userId, dto);

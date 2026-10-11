@@ -12,7 +12,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main || node dist/main",
-    "render:start": "node dist/src/main.js || node dist/main.js",
+    "render:start": "npx --no-install prisma migrate deploy && (node dist/src/main.js || node dist/main.js)",
     "test": "jest",
     "seed": "prisma db seed",
     "render:build": "npm ci && npx --no-install prisma generate && npm run build"

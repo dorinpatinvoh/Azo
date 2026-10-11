@@ -26,6 +26,11 @@ enum UserStatus {
   BLOCKED
 }
 
+enum Gender {
+  M
+  F
+}
+
 // ---------------------------------------------------------------------------
 // Prestataires : un dossier unique pour tous les types d'activité
 // (voir PROJECT_SUMMARY/PRESTATAIRES.md)
@@ -130,12 +135,19 @@ enum AgencyPlan {
 }
 
 model User {
-  id        String     @id @default(uuid())
-  phone     String     @unique
-  fullName  String?
-  role      Role       @default(CLIENT)
-  status    UserStatus @default(ACTIVE)
-  createdAt DateTime   @default(now())
+  id                 String     @id @default(uuid())
+  phone              String     @unique
+  fullName           String?
+  firstName          String?
+  lastName           String?
+  gender             Gender?
+  npiHash            String?    @unique
+  npiCipher          String?
+  npiLast4           String?
+  profileCompletedAt DateTime?
+  role               Role       @default(CLIENT)
+  status             UserStatus @default(ACTIVE)
+  createdAt          DateTime   @default(now())
 
   agencyId String?
   agency   Agency? @relation(fields: [agencyId], references: [id])
@@ -143,15 +155,34 @@ model User {
   // Dossier prestataire (null pour un simple client)
   provider ProviderProfile?
 
-  wallet          Wallet?
-  ridesAsClient   Ride[]             @relation("ClientRides")
-  ridesAsDriver   Ride[]             @relation("DriverRides")
-  notifications   Notification[]
-  pushTokens      DevicePushToken[]
-  deliveriesSent  Delivery[]         @relation("DeliveryClient")
-  rentalBookings  RentalBooking[]
-  marketOrders    MarketplaceOrder[]
-  artisanRequests ArtisanRequest[]   @relation("ArtisanRequestClient")
+  wallet                  Wallet?
+  ridesAsClient           Ride[]                   @relation("ClientRides")
+  ridesAsDriver           Ride[]                   @relation("DriverRides")
+  notifications           Notification[]
+  pushTokens              DevicePushToken[]
+  deliveriesSent          Delivery[]               @relation("DeliveryClient")
+  rentalBookings          RentalBooking[]
+  marketOrders            MarketplaceOrder[]
+  artisanRequests         ArtisanRequest[]         @relation("ArtisanRequestClient")
+  npiRegistrationAttempts NpiRegistrationAttempt[]
+}
+
+model NpiRegistrationAttempt {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model NpiAccessAudit {
+  id        String   @id @default(uuid())
+  actorId   String
+  targetId  String
+  createdAt DateTime @default(now())
+
+  @@index([targetId, createdAt])
 }
 
 model OtpCode {

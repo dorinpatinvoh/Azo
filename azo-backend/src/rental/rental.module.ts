@@ -3,6 +3,7 @@ import { IsInt, IsString } from "class-validator";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { RegistrationCompleteGuard } from "../common/guards/registration-complete.guard";
 
 class BookDto {
   @IsString() vehicleModel: string;
@@ -29,7 +30,7 @@ export class RentalService {
 export class RentalController {
   constructor(private svc: RentalService) {}
   @Get("catalog") catalog() { return this.svc.catalog(); }
-  @Post() book(@CurrentUser() u, @Body() dto: BookDto) { return this.svc.book(u.userId, dto); }
+  @Post() @UseGuards(RegistrationCompleteGuard) book(@CurrentUser() u, @Body() dto: BookDto) { return this.svc.book(u.userId, dto); }
   @Get("mine") mine(@CurrentUser() u) { return this.svc.mine(u.userId); }
 }
 

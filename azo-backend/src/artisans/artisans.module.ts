@@ -3,6 +3,7 @@ import { IsString } from "class-validator";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { RegistrationCompleteGuard } from "../common/guards/registration-complete.guard";
 
 class RequestDto {
   @IsString() category: string;
@@ -28,7 +29,7 @@ export class ArtisansService {
 export class ArtisansController {
   constructor(private svc: ArtisansService) {}
   @Get() list(@Query("category") _category?: string) { return this.svc.list(); }
-  @Post("requests") request(@CurrentUser() u, @Body() dto: RequestDto) { return this.svc.request(u.userId, dto); }
+  @Post("requests") @UseGuards(RegistrationCompleteGuard) request(@CurrentUser() u, @Body() dto: RequestDto) { return this.svc.request(u.userId, dto); }
 }
 
 @Module({ controllers: [ArtisansController], providers: [ArtisansService] })

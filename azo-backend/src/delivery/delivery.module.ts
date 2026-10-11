@@ -19,6 +19,7 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { WalletModule, WalletService } from "../wallet/wallet.module";
 import { NotificationsModule, NotificationsService } from "../notifications/notifications.module";
 import { PricingModule, PricingService } from "../pricing/pricing.module";
+import { RegistrationCompleteGuard } from "../common/guards/registration-complete.guard";
 
 
 class CreateDeliveryDto {
@@ -329,6 +330,7 @@ export class DeliveryController {
   constructor(private svc: DeliveryService) {}
 
   @Post()
+  @UseGuards(RegistrationCompleteGuard)
   create(@CurrentUser() u, @Body() dto: CreateDeliveryDto) {
     return this.svc.create(u.userId, dto);
   }

@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { WalletModule, WalletService } from "../wallet/wallet.module";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { RegistrationCompleteGuard } from "../common/guards/registration-complete.guard";
 
 class OrderDto {
   @IsString() market: string;
@@ -35,7 +36,7 @@ export class MarketplaceService {
 @UseGuards(JwtAuthGuard)
 export class MarketplaceController {
   constructor(private svc: MarketplaceService) {}
-  @Post("orders") order(@CurrentUser() u, @Body() dto: OrderDto) { return this.svc.order(u.userId, dto); }
+  @Post("orders") @UseGuards(RegistrationCompleteGuard) order(@CurrentUser() u, @Body() dto: OrderDto) { return this.svc.order(u.userId, dto); }
   @Post("orders/:id/validate") validate(@Param("id") id: string, @CurrentUser() u) { return this.svc.validate(id, u.userId); }
 }
 

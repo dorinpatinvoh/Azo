@@ -3,6 +3,7 @@ import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProvidersService } from "../providers/providers.module";
 import { beninPhoneVariants, extractLocalBeninDigits, normalizeBeninPhone } from "../common/phone";
+import { toUserProfile } from "../common/registration-profile";
 
 const MAX_OTP_REQUESTS_WINDOW = 15;
 const OTP_WINDOW_MS = 10 * 60 * 1000; // 10 min
@@ -208,13 +209,20 @@ export class AuthService {
     const token = await this.jwt.signAsync({ sub: user.id, role: user.role, phone: user.phone });
     return {
       token,
-      user: {
+      user: toUserProfile({
         id: user.id,
         phone: user.phone,
         role: user.role,
         status: user.status,
         fullName: user.fullName,
-      },
+        createdAt: user.createdAt,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        gender: user.gender,
+        npiHash: user.npiHash,
+        npiCipher: user.npiCipher,
+        npiLast4: user.npiLast4,
+      }),
       provider: provider ? { id: provider.id, type: provider.type, status: provider.status } : null,
     };
   }

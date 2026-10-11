@@ -20,6 +20,8 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { WalletModule, WalletService } from "../wallet/wallet.module";
 import { PricingModule, PricingService } from "../pricing/pricing.module";
+import { UsersModule } from "../users/users.module";
+import { NpiCryptoService } from "../common/npi-crypto.service";
 
 class MonthlySettlementDto {
   /** Mois à prélever, format AAAA-MM (par défaut : mois en cours). */
@@ -44,7 +46,8 @@ export class AdminService {
   constructor(
     private prisma: PrismaService,
     private wallet: WalletService,
-    private pricing: PricingService
+    private pricing: PricingService,
+    private npiCrypto: NpiCryptoService
   ) {}
 
   // Prélèvement mensuel des Zem indépendants (15 % des revenus du mois), délégué au
@@ -110,7 +113,13 @@ export class AdminService {
             }
           : {}),
       },
-      include: {
+      select: {
+        id: true,
+        phone: true,
+        fullName: true,
+        role: true,
+        status: true,
+        createdAt: true,
         wallet: { select: { balance: true } },
         provider: { select: { id: true, type: true, status: true, kycScore: true } },
         agency: { select: { id: true, name: true, plan: true } },
@@ -133,7 +142,13 @@ export class AdminService {
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: { status: dto.status },
-      include: {
+      select: {
+        id: true,
+        phone: true,
+        fullName: true,
+        role: true,
+        status: true,
+        createdAt: true,
         wallet: { select: { balance: true } },
         provider: { select: { id: true, type: true, status: true, kycScore: true } },
         agency: { select: { id: true, name: true, plan: true } },
@@ -155,6 +170,20 @@ export class AdminService {
     }
 
     return updated;
+  }
+
+  async getUserNpi(adminId: string, userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, npiCipher: true },
+    });
+    if (!user) throw new NotFoundException("Utilisateur introuvable");
+    if (!user.npiCipher) throw new NotFoundException("NPI indisponible");
+
+    await this.prisma.npiAccessAudit.create({
+      data: { actorId: adminId, targetId: user.id },
+    });
+    return { userId: user.id, npi: this.npiCrypto.decrypt(user.npiCipher) };
   }
 
   async auditLog() {
@@ -205,6 +234,11 @@ export class AdminController {
     return this.svc.users(q, role);
   }
 
+  @Get("users/:id/npi")
+  userNpi(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.getUserNpi(u.userId, id);
+  }
+
   @Post("users/:id/status")
   setUserStatus(@CurrentUser() u, @Param("id") id: string, @Body() dto: UpdateUserStatusDto) {
     return this.svc.setUserStatus(u.userId, id, dto);
@@ -224,7 +258,7 @@ export class AdminController {
 }
 
 @Module({
-  imports: [WalletModule, PricingModule],
+  imports: [WalletModule, PricingModule, UsersModule],
   controllers: [AdminController],
   providers: [AdminService],
 })
