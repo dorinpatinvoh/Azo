@@ -1,3 +1,6 @@
+export const SUPPORTED_LANGUAGES = ["fr", "en", "es", "de"] as const;
+export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
+
 type RegistrationProfile = {
   firstName?: string | null;
   lastName?: string | null;

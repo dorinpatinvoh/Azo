@@ -1,5 +1,5 @@
 import { PlacesModule } from "./places/places.module";
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
 import { UsersModule } from "./users/users.module";
@@ -16,6 +16,7 @@ import { ProvidersModule } from "./providers/providers.module";
 import { PricingModule } from "./pricing/pricing.module";
 import { HealthController } from "./health.controller";
 import { RegistrationModule } from "./common/registration.module";
+import { LanguageMiddleware } from "./common/language.middleware";
 
 @Module({
   imports: [
@@ -38,4 +39,9 @@ import { RegistrationModule } from "./common/registration.module";
   ],
   controllers: [HealthController],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // Applique la résolution de langue (Accept-Language) sur toutes les routes.
+    consumer.apply(LanguageMiddleware).forRoutes({ path: "*", method: RequestMethod.ALL });
+  }
+}

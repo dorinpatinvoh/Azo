@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { json, urlencoded } from "express";
 import { AppModule } from "./app.module";
+import { HttpExceptionFilter } from "./common/http-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,6 +14,10 @@ async function bootstrap() {
   app.use(urlencoded({ extended: true, limit: "15mb" }));
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  // Enrichit toutes les réponses d'erreur HTTP avec un champ `code` stable (ex. "WALLET_INSUFFICIENT")
+  // que le mobile peut utiliser pour afficher le message traduit dans la langue de l'utilisateur.
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   const port = process.env.PORT || 3000;
 

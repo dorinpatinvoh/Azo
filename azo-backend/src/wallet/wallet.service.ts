@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PricingService } from "../pricing/pricing.service";
 import { FedaPayService } from "./fedapay.service";
-import { Prisma, TransactionType } from "@prisma/client";
+import { Prisma, TransactionStatus, TransactionType } from "@prisma/client";
 
 const MONTHLY_ZEM_SETTLEMENT_LABEL = "Prélèvement mensuel Zem";
 
@@ -32,29 +32,84 @@ export class WalletService {
   }
 
   async initRecharge(userId: string, amount: number, email: string) {
+    // Repli si l'utilisateur n'a pas d'e-mail (inscription par téléphone uniquement).
+    const safeEmail = email || `${userId}@azo.placeholder`;
+
     const { transaction, token } = await this.fedaPay.createTransaction(
       amount,
-      email,
+      safeEmail,
       `Recharge AZO ${amount} FCFA`,
     );
     const wallet = await this.getWallet(userId);
+    // La transaction est enregistrée comme CREDIT PENDING (et non DEBIT) pour qu'elle
+    // apparaisse correctement dans l'historique : c'est un crédit attendu, pas une dépense.
+    // Le webhook FedaPay (POST /wallet/recharge/callback) la confirmera en CONFIRMED et
+    // créditera réellement le solde.
     await this.prisma.transaction.create({
       data: {
         walletId: wallet.id,
-        type: TransactionType.DEBIT,
+        type: TransactionType.CREDIT,
+        status: TransactionStatus.PENDING,
         amount,
         label: "Recharge en attente FedaPay",
+        labelKey: "TRANSACTION_RECHARGE_PENDING",
+        labelParams: { amount },
         meta: `fedaPayId:${transaction.id}`,
       },
     });
     return { url: token.url, transactionId: transaction.id };
   }
 
-  async credit(userId: string, amount: number, label: string, meta?: string) {
+  /**
+   * Callback FedaPay — crédite le solde si le paiement est approuvé.
+   *
+   * FedaPay envoie un événement `transaction.approved` en POST sur FEDAPAY_CALLBACK_URL.
+   * On trouve la transaction PENDING correspondante via le fedaPayId dans le meta, on la
+   * passe à CONFIRMED, et on incrémente le solde.
+   * Si la transaction est introuvable ou déjà traitée, on répond 200 sans rien faire
+   * (idempotence — FedaPay peut réémettre l'événement).
+   */
+  async handleFedaPayCallback(fedaPayTransactionId: number) {
+    const remote = await this.fedaPay.verifyTransaction(fedaPayTransactionId);
+    // L'objet FedaPay expose `status` comme une string (ex. "approved", "declined").
+    const remoteStatus = (remote as any)?.status ?? "";
+    if (remoteStatus !== "approved") return { credited: false, reason: "not_approved", remoteStatus };
+
+    const meta = `fedaPayId:${fedaPayTransactionId}`;
+    const pending = await this.prisma.transaction.findFirst({
+      where: { meta, type: TransactionType.CREDIT, status: TransactionStatus.PENDING },
+      include: { wallet: true },
+    });
+    if (!pending) return { credited: false, reason: "already_processed_or_not_found" };
+
+    await this.prisma.$transaction([
+      this.prisma.transaction.update({
+        where: { id: pending.id },
+        data: { status: TransactionStatus.CONFIRMED },
+      }),
+      this.prisma.wallet.update({
+        where: { id: pending.walletId },
+        data: { balance: { increment: pending.amount } },
+      }),
+    ]);
+    return { credited: true, amount: pending.amount, walletId: pending.walletId };
+  }
+
+  async credit(userId: string, amount: number, label: string, meta?: string, labelKey?: string, labelParams?: Prisma.InputJsonValue) {
     const wallet = await this.getWallet(userId);
     const [updated] = await this.prisma.$transaction([
       this.prisma.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: amount } } }),
-      this.prisma.transaction.create({ data: { walletId: wallet.id, type: TransactionType.CREDIT, amount, label, meta } }),
+      this.prisma.transaction.create({
+        data: {
+          walletId: wallet.id,
+          type: TransactionType.CREDIT,
+          amount,
+          label,
+          meta,
+          ...(labelKey ? { labelKey } : {}),
+          ...(labelParams !== undefined ? { labelParams } : {}),
+        },
+      }),
     ]);
     return updated;
   }
@@ -80,12 +135,22 @@ export class WalletService {
     return { debited: debitAmount, credited: creditAmount };
   }
 
-  async debit(userId: string, amount: number, label: string, meta?: string) {
+  async debit(userId: string, amount: number, label: string, meta?: string, labelKey?: string, labelParams?: Prisma.InputJsonValue) {
     const wallet = await this.getWallet(userId);
     if (wallet.balance < amount) throw new BadRequestException("Solde insuffisant");
     const [updated] = await this.prisma.$transaction([
       this.prisma.wallet.update({ where: { id: wallet.id }, data: { balance: { decrement: amount } } }),
-      this.prisma.transaction.create({ data: { walletId: wallet.id, type: TransactionType.DEBIT, amount, label, meta } }),
+      this.prisma.transaction.create({
+        data: {
+          walletId: wallet.id,
+          type: TransactionType.DEBIT,
+          amount,
+          label,
+          meta,
+          ...(labelKey ? { labelKey } : {}),
+          ...(labelParams !== undefined ? { labelParams } : {}),
+        },
+      }),
     ]);
     return updated;
   }
@@ -183,6 +248,8 @@ export class WalletService {
                   type: TransactionType.DEBIT,
                   amount: amountDue,
                   label: MONTHLY_ZEM_SETTLEMENT_LABEL,
+                  labelKey: "TRANSACTION_MONTHLY_ZEM_SETTLEMENT",
+                  labelParams: { period: targetPeriod },
                   meta,
                 },
               });
@@ -258,6 +325,8 @@ export class WalletService {
           type: TransactionType.DEBIT,
           amount,
           label: "Retrait AZƆ̀ Pay",
+          labelKey: "TRANSACTION_WITHDRAWAL",
+          labelParams: { fee: quote.fee, feePct: quote.feePct, netAmount: quote.netAmount },
           meta: `Frais ${quote.feePct} % : ${quote.fee} FCFA · Net versé : ${quote.netAmount} FCFA`,
         },
       }),

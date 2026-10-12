@@ -18,6 +18,12 @@ type PushOptions = {
   /** Send an OS-level notification through Expo Push Service as well as saving it in-app. */
   sendPush?: boolean;
   data?: Record<string, string | number | boolean | null>;
+  /** Clé i18n stable pour le titre (ex. "NOTIFICATION_RIDE_MATCHED") — traduite par le mobile. */
+  titleKey?: string;
+  /** Clé i18n stable pour le corps. */
+  bodyKey?: string;
+  /** Paramètres à interpoler dans la traduction (ex. { "driver": "Romaric", "amount": 1500 }). */
+  params?: Record<string, string | number | boolean | null>;
 };
 
 @Injectable()
@@ -29,7 +35,15 @@ export class NotificationsService {
   // Save every notification in the inbox. Callers opt in to an OS push when it is urgent.
   async push(userId: string, title: string, body: string, type: string, options: PushOptions = {}) {
     const notification = await this.prisma.notification.create({
-      data: { userId, title, body, type },
+      data: {
+        userId,
+        title,
+        body,
+        type,
+        ...(options.titleKey ? { titleKey: options.titleKey } : {}),
+        ...(options.bodyKey ? { bodyKey: options.bodyKey } : {}),
+        ...(options.params ? { params: options.params } : {}),
+      },
     });
 
     if (options.sendPush) {

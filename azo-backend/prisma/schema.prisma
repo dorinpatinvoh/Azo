@@ -120,6 +120,12 @@ enum TransactionType {
   DEBIT
 }
 
+enum TransactionStatus {
+  CONFIRMED // transaction finalisée (défaut)
+  PENDING   // en attente de confirmation (ex. recharge FedaPay avant callback)
+  FAILED    // paiement annulé ou échoué
+}
+
 enum Payer {
   SENDER
   RECIPIENT
@@ -147,6 +153,7 @@ model User {
   profileCompletedAt DateTime?
   role               Role       @default(CLIENT)
   status             UserStatus @default(ACTIVE)
+  language           String     @default("fr") // fr | en | es | de
   createdAt          DateTime   @default(now())
 
   agencyId String?
@@ -206,14 +213,17 @@ model Wallet {
 }
 
 model Transaction {
-  id        String          @id @default(uuid())
-  walletId  String
-  wallet    Wallet          @relation(fields: [walletId], references: [id])
-  type      TransactionType
-  amount    Int
-  label     String
-  meta      String?
-  createdAt DateTime        @default(now())
+  id          String            @id @default(uuid())
+  walletId    String
+  wallet      Wallet            @relation(fields: [walletId], references: [id])
+  type        TransactionType
+  status      TransactionStatus @default(CONFIRMED)
+  amount      Int
+  label       String
+  labelKey    String? // clé i18n stable (ex. "TRANSACTION_RIDE_PAYMENT") — traduite par le mobile
+  labelParams Json?   // paramètres à interpoler dans la traduction (ex. { "ref": "#abc123" })
+  meta        String?
+  createdAt   DateTime          @default(now())
 }
 
 model Agency {
@@ -335,14 +345,17 @@ model ArtisanRequest {
 }
 
 model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  title     String
-  body      String
-  type      String
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  title      String
+  body       String
+  type       String
+  read       Boolean  @default(false)
+  titleKey   String? // clé i18n stable (ex. "NOTIFICATION_RIDE_MATCHED") — traduite par le mobile
+  bodyKey    String? // clé i18n stable pour le corps
+  params     Json?   // paramètres à interpoler (ex. { "driver": "Romaric", "amount": 1500 })
+  createdAt  DateTime @default(now())
 }
 
 model DevicePushToken {

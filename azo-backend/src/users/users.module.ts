@@ -14,14 +14,14 @@ import {
 } from "@nestjs/common";
 import { Gender, Role } from "@prisma/client";
 import { Transform } from "class-transformer";
-import { IsEnum, IsNotEmpty, IsString, Matches, MaxLength, MinLength } from "class-validator";
+import { IsEnum, IsIn, IsNotEmpty, IsString, Matches, MaxLength, MinLength } from "class-validator";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { NpiCryptoService } from "../common/npi-crypto.service";
-import { isRegistrationComplete, toUserProfile } from "../common/registration-profile";
+import { isRegistrationComplete, toUserProfile, SUPPORTED_LANGUAGES } from "../common/registration-profile";
 
 export const MAX_REGISTRATION_ATTEMPTS = 3;
 export const REGISTRATION_ATTEMPT_WINDOW_MS = 60 * 60 * 1000;
@@ -71,6 +71,11 @@ export class UpdateProfileDto {
   fullName: string;
 }
 
+export class UpdateLanguageDto {
+  @IsIn(SUPPORTED_LANGUAGES, { message: "Langue non supportée. Valeurs acceptées : fr, en, es, de" })
+  language: string;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -87,6 +92,7 @@ export class UsersService {
         fullName: true,
         role: true,
         status: true,
+        language: true,
         createdAt: true,
         firstName: true,
         lastName: true,
@@ -180,6 +186,13 @@ export class UsersService {
     await this.prisma.user.update({ where: { id: userId }, data: { fullName: dto.fullName } });
     return this.me(userId);
   }
+
+  async updateLanguage(userId: string, dto: UpdateLanguageDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new NotFoundException("Compte introuvable");
+    await this.prisma.user.update({ where: { id: userId }, data: { language: dto.language } });
+    return this.me(userId);
+  }
 }
 
 @Controller("users")
@@ -202,6 +215,11 @@ export class UsersController {
   @Roles(Role.CLIENT)
   updateLegacyProfile(@CurrentUser() user, @Body() dto: UpdateProfileDto) {
     return this.users.updateLegacyProfile(user.userId, dto);
+  }
+
+  @Patch("me/language")
+  updateLanguage(@CurrentUser() user, @Body() dto: UpdateLanguageDto) {
+    return this.users.updateLanguage(user.userId, dto);
   }
 }
 
