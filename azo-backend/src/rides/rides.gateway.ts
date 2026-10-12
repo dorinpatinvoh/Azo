@@ -457,6 +457,8 @@ export class RidesGateway implements OnGatewayConnection {
     expiresAt: string;
     price: number;
     distanceMeters: number;
+    accepted?: boolean;
+    codeRequired?: boolean;
   } | null, extra: { accepted?: boolean; declined?: boolean; cancelled?: boolean; expired?: boolean } = {}) {
     this.server?.to(`ride:${rideId}`).emit("ride:stop", { rideId, stopRequest: request, ...extra });
   }

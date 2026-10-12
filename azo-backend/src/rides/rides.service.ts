@@ -1240,16 +1240,43 @@ export class RidesService {
     }
     if (!ride.driverId) throw new BadRequestException("Aucun chauffeur n'est assigné à cette course.");
 
-    const amount = Math.min(ride.stopRequestedPrice, ride.price);
-    const result = await this.settle(ride, ride.driverId, {
-      amount,
-      settledDistanceMeters: ride.stopRequestedDistanceMeters ?? ride.traveledMeters,
-      priceMode: "PARTIAL",
-      stopRequestAt: ride.stopRequestedAt,
-      stopRequestedBy: ride.stopRequestedBy,
+    // Arrêt accepté : le paiement n'est PAS encore fait. Un code d'arrivée est généré pour le client ; le client le
+    // communique au Zem, qui le saisit (POST /rides/:id/complete) : c'est cette saisie qui débite le client.
+    if (ride.stopAcceptedAt) {
+      return { rideId, stopRequest: this.stopRequestPayload(ride.stopRequestedBy as "CLIENT" | "DRIVER", ride.stopRequestedAt, ride.stopRequestedPrice, ride.stopRequestedDistanceMeters ?? ride.traveledMeters, ride.stopAcceptedAt) };
+    }
+    const acceptedAt = new Date();
+    const { count } = await this.prisma.ride.updateMany({
+      where: { id: rideId, status: "IN_PROGRESS", stopRequestedAt: ride.stopRequestedAt, stopAcceptedAt: null },
+      data: { stopAcceptedAt: acceptedAt, dropCode: ride.dropCode ?? createPickupCode() },
     });
-    this.gateway.emitStopRequest(rideId, null, { accepted: true });
-    return result;
+    if (!count) throw new BadRequestException("La demande d'arrêt a déjà été traitée.");
+    this.gateway.invalidateRideLocationContext(rideId);
+    const request = this.stopRequestPayload(
+      ride.stopRequestedBy as "CLIENT" | "DRIVER",
+      ride.stopRequestedAt,
+      ride.stopRequestedPrice,
+      ride.stopRequestedDistanceMeters ?? ride.traveledMeters,
+      acceptedAt
+    );
+    await this.notifications
+      .push(ride.clientId, "Confirme ton arrivée", "Arrêt accepté. Donne à ton Zem le code affiché dans l'application pour confirmer le paiement.", "ride", {
+        sendPush: true,
+        data: { event: "ride-drop-code", rideId },
+        titleKey: "NOTIFICATION_RIDE_DROP_CODE",
+        bodyKey: "NOTIFICATION_RIDE_DROP_CODE_BODY",
+      })
+      .catch(() => null);
+    await this.notifications
+      .push(ride.driverId, "Arrêt accepté", "Demande le code d'arrivée au client et saisis-le pour terminer la course.", "ride", {
+        sendPush: true,
+        data: { event: "ride-stop-accepted", rideId },
+        titleKey: "NOTIFICATION_RIDE_STOP_UPDATED",
+        bodyKey: "NOTIFICATION_RIDE_STOP_ACCEPTED_BODY",
+      })
+      .catch(() => null);
+    this.gateway.emitStopRequest(rideId, request, { accepted: true });
+    return { rideId, stopRequest: request };
   }
 
   async declineStop(rideId: string, userId: string) {
@@ -1271,6 +1298,9 @@ export class RidesService {
     }
     if (!ride.stopRequestedBy || !ride.stopRequestedAt) {
       throw new BadRequestException("Aucune demande d'arrêt n'est en attente.");
+    }
+    if (ride.stopAcceptedAt) {
+      throw new BadRequestException("L'arrêt est déjà accepté : saisis le code d'arrivée, ou la demande expirera.");
     }
     if ((action === "cancelled" && ride.stopRequestedBy !== actor) ||
         (action === "declined" && ride.stopRequestedBy === actor)) {
@@ -1328,23 +1358,28 @@ export class RidesService {
     return Math.min(this.pricing.breakdown(ride.traveledMeters / 1000, ride.vehicleType).price, ride.price);
   }
 
-  private stopRequestPayload(by: "CLIENT" | "DRIVER", at: Date, price: number, distanceMeters: number) {
+  private stopRequestPayload(by: "CLIENT" | "DRIVER", at: Date, price: number, distanceMeters: number, acceptedAt?: Date | null) {
     const ttl = this.pricing.rideSettings().stopRequestExpiryMinutes * 60_000;
     return {
       by,
       at: at.toISOString(),
-      expiresAt: new Date(at.getTime() + ttl).toISOString(),
+      // Une fois l'arrêt accepté, le délai repart de l'acceptation : le temps de lire et dicter le code
+      expiresAt: new Date((acceptedAt ?? at).getTime() + ttl).toISOString(),
       price,
       distanceMeters,
+      // Arrêt accepté : le client lit le code d'arrivée, le Zem le saisit (POST /rides/:id/complete) et le paiement part
+      ...(acceptedAt ? { accepted: true, codeRequired: true } : {}),
     };
   }
 
   private async expireStopRequestIfNeeded(ride: {
     id: string;
     stopRequestedAt: Date | null;
+    stopAcceptedAt?: Date | null;
   }) {
     const ttl = this.pricing.rideSettings().stopRequestExpiryMinutes * 60_000;
-    if (!ride.stopRequestedAt || Date.now() - ride.stopRequestedAt.getTime() < ttl) return false;
+    const since = ride.stopAcceptedAt ?? ride.stopRequestedAt;
+    if (!ride.stopRequestedAt || !since || Date.now() - since.getTime() < ttl) return false;
     const { count } = await this.prisma.ride.updateMany({
       where: { id: ride.id, status: "IN_PROGRESS", stopRequestedAt: ride.stopRequestedAt },
       data: {
@@ -1352,6 +1387,8 @@ export class RidesService {
         stopRequestedAt: null,
         stopRequestedPrice: null,
         stopRequestedDistanceMeters: null,
+        // le code généré pour cet arrêt n'a plus d'objet : la course continue
+        ...(ride.stopAcceptedAt ? { stopAcceptedAt: null, dropCode: null } : {}),
       },
     });
     if (count) {
@@ -1371,6 +1408,22 @@ export class RidesService {
     const clean = typeof code === "string" ? code.trim() : "";
     if (!/^\d{4}$/.test(clean) || clean !== ride.dropCode) {
       throw new BadRequestException("Code d'arrivée incorrect. Demande au client le code affiché dans son application.");
+    }
+    // Arrêt anticipé accepté par le client : on règle la distance réellement parcourue, sans exiger d'être à destination.
+    if (ride.stopAcceptedAt && ride.stopRequestedBy && ride.stopRequestedAt && ride.stopRequestedPrice !== null) {
+      if (await this.expireStopRequestIfNeeded(ride)) {
+        throw new BadRequestException("La demande d'arrêt a expiré. La course continue.");
+      }
+      const amount = Math.min(ride.stopRequestedPrice, ride.price);
+      const result = await this.settle(ride, driverId, {
+        amount,
+        settledDistanceMeters: ride.stopRequestedDistanceMeters ?? ride.traveledMeters,
+        priceMode: "PARTIAL",
+        stopRequestAt: ride.stopRequestedAt,
+        stopRequestedBy: ride.stopRequestedBy,
+      });
+      this.gateway.emitStopRequest(rideId, null, { accepted: true });
+      return result;
     }
     this.assertAtDestination(ride);
     return this.settle(ride, driverId, {
@@ -1519,6 +1572,7 @@ export class RidesService {
           stopRequestedAt: null,
           stopRequestedPrice: null,
           stopRequestedDistanceMeters: null,
+          stopAcceptedAt: null,
           driverLat: null,
           driverLng: null,
           driverHeading: null,
@@ -1875,6 +1929,7 @@ export class RidesService {
       stopRequestedAt?: Date | null;
       stopRequestedPrice?: number | null;
       stopRequestedDistanceMeters?: number | null;
+      stopAcceptedAt?: Date | null;
     }
   >(
     ride: T
@@ -1886,6 +1941,7 @@ export class RidesService {
     | "stopRequestedAt"
     | "stopRequestedPrice"
     | "stopRequestedDistanceMeters"
+    | "stopAcceptedAt"
   > & ReturnType<RidesService["progressFields"]> {
     const {
       pickupCode: _pickupCode,
@@ -1894,6 +1950,7 @@ export class RidesService {
       stopRequestedAt: _stopRequestedAt,
       stopRequestedPrice: _stopRequestedPrice,
       stopRequestedDistanceMeters: _stopRequestedDistanceMeters,
+      stopAcceptedAt: _stopAcceptedAt,
       ...safeRide
     } = ride;
     return { ...safeRide, ...this.progressFields(ride) };
@@ -1912,6 +1969,7 @@ export class RidesService {
     stopRequestedAt?: Date | null;
     stopRequestedPrice?: number | null;
     stopRequestedDistanceMeters?: number | null;
+    stopAcceptedAt?: Date | null;
   }) {
     const traveledMeters = ride.traveledMeters ?? 0;
     const stopRequest =
@@ -1919,13 +1977,14 @@ export class RidesService {
       ride.stopRequestedAt &&
       ride.stopRequestedPrice !== null &&
       ride.stopRequestedPrice !== undefined &&
-      Date.now() - ride.stopRequestedAt.getTime() <
+      Date.now() - (ride.stopAcceptedAt ?? ride.stopRequestedAt).getTime() <
         this.pricing.rideSettings().stopRequestExpiryMinutes * 60_000
         ? this.stopRequestPayload(
             ride.stopRequestedBy,
             ride.stopRequestedAt,
             ride.stopRequestedPrice,
-            ride.stopRequestedDistanceMeters ?? traveledMeters
+            ride.stopRequestedDistanceMeters ?? traveledMeters,
+            ride.stopAcceptedAt
           )
         : null;
     return {

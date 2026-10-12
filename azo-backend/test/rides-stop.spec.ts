@@ -110,41 +110,67 @@ describe("accord bilatéral d'arrêt anticipé", () => {
     );
   });
 
-  it("seul l'autre participant peut accepter et le règlement utilise le prix/distance de la demande", async () => {
+  it("accepter l'arrêt ne paie pas encore : un code d'arrivée est généré pour le client", async () => {
+    const requestedAt = new Date();
+    const { service, prisma, tx, gateway } = makeService({
+      traveledMeters: 30,
+      stopRequestedBy: "DRIVER",
+      stopRequestedAt: requestedAt,
+      stopRequestedPrice: 220,
+      stopRequestedDistanceMeters: 30,
+    });
+    const result: any = await service.acceptStop(rideId, clientId);
+
+    expect(result.stopRequest).toMatchObject({ by: "DRIVER", price: 220, accepted: true, codeRequired: true });
+    expect(prisma.ride.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ stopRequestedAt: requestedAt, stopAcceptedAt: null }),
+        data: expect.objectContaining({ stopAcceptedAt: expect.any(Date), dropCode: expect.stringMatching(/^\d{4}$/) }),
+      })
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.wallet.updateMany).not.toHaveBeenCalled();
+    expect(gateway.emitStopRequest).toHaveBeenCalledWith(rideId, expect.objectContaining({ accepted: true }), { accepted: true });
+    // le demandeur ne peut pas accepter sa propre demande
+    await expect(service.acceptStop(rideId, driverId)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("le Zem saisit le code : le client est débité du prix de la demande, sans exiger d'être à destination", async () => {
     const requestedAt = new Date();
     const { service, prisma, tx, pricing, gateway } = makeService({
       traveledMeters: 2_500,
-      stopRequestedBy: "CLIENT",
+      dropCode: "4821",
+      stopRequestedBy: "DRIVER",
       stopRequestedAt: requestedAt,
+      stopAcceptedAt: new Date(),
       stopRequestedPrice: 220,
       stopRequestedDistanceMeters: 1_000,
     });
-    await service.acceptStop(rideId, driverId);
+    await expect(service.complete(rideId, driverId, "0000")).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
 
+    await service.complete(rideId, driverId, "4821");
     expect(pricing.rideCommission).toHaveBeenCalledWith(expect.anything(), 220);
-    expect(tx.wallet.update).toHaveBeenCalledWith({
-      where: { id: "wallet" },
-      data: { balance: { increment: 198 } },
-    });
+    expect(tx.wallet.update).toHaveBeenCalledWith({ where: { id: "wallet" }, data: { balance: { increment: 198 } } });
     expect(tx.ride.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          status: "IN_PROGRESS",
-          stopRequestedAt: requestedAt,
-          stopRequestedPrice: 220,
-        }),
-        data: expect.objectContaining({
-          status: "COMPLETED",
-          finalPrice: 220,
-          settledDistanceMeters: 1_000,
-          priceMode: "PARTIAL",
-        }),
+        where: expect.objectContaining({ status: "IN_PROGRESS", stopRequestedAt: requestedAt, stopRequestedPrice: 220 }),
+        data: expect.objectContaining({ status: "COMPLETED", finalPrice: 220, settledDistanceMeters: 1_000, priceMode: "PARTIAL", stopAcceptedAt: null }),
       })
     );
     expect(gateway.emitStatus).toHaveBeenCalledWith(rideId, "COMPLETED");
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
 
-    await expect(service.acceptStop(rideId, clientId)).rejects.toBeInstanceOf(ForbiddenException);
+  it("après acceptation, l'arrêt ne peut plus être refusé ni annulé", async () => {
+    const { service } = makeService({
+      dropCode: "4821",
+      stopRequestedBy: "DRIVER",
+      stopRequestedAt: new Date(),
+      stopAcceptedAt: new Date(),
+      stopRequestedPrice: 220,
+    });
+    await expect(service.cancelStop(rideId, driverId)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.declineStop(rideId, clientId)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it("expire une demande après deux minutes et ne règle rien", async () => {

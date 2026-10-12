@@ -295,6 +295,7 @@ model Ride {
   stopRequestedAt             DateTime?
   stopRequestedPrice          Int?
   stopRequestedDistanceMeters Int?
+  stopAcceptedAt              DateTime? // arrêt accepté : le paiement attend le code d'arrivée saisi par le Zem
   finalPrice                  Int?
   settledDistanceMeters       Int?
   priceMode                   String?
