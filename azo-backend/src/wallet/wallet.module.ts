@@ -8,6 +8,6 @@ import { PricingModule } from "../pricing/pricing.module";
   imports: [PricingModule],
   controllers: [WalletController],
   providers: [WalletService, FedaPayService],
-  exports: [WalletService, FedaPayService],
+  exports: [WalletService],
 })
 export class WalletModule {}
