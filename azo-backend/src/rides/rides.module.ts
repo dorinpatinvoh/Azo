@@ -6,11 +6,12 @@ import { RidesController } from "./rides.controller";
 import { RidesService } from "./rides.service";
 import { RidesGateway } from "./rides.gateway";
 import { RideSettlementController, RideSettlementService } from "./ride-settlement.service";
+import { RidesOfferExpiryTask } from "./rides-offer-expiry.task";
 
 @Module({
   imports: [WalletModule, NotificationsModule, PricingModule],
   controllers: [RidesController, RideSettlementController],
-  providers: [RidesService, RidesGateway, RideSettlementService],
+  providers: [RidesService, RidesGateway, RideSettlementService, RidesOfferExpiryTask],
   exports: [RidesService],
 })
 export class RidesModule {}

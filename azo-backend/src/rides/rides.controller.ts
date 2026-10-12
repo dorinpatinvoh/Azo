@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from "class-validator";
 import { Type } from "class-transformer";
 import { Role } from "@prisma/client";
@@ -18,6 +18,8 @@ import { RegistrationCompleteGuard } from "../common/guards/registration-complet
 class RadarQueryDto {
   @IsOptional() @Type(() => Number) @Min(-90) @Max(90) lat?: number;
   @IsOptional() @Type(() => Number) @Min(-180) @Max(180) lng?: number;
+  /** Rayon de recherche explicite en km. Défaut : radar.nearbyRadiusKm (10 km). */
+  @IsOptional() @Type(() => Number) @Min(1) @Max(50) radiusKm?: number;
 
   /** Position complète uniquement : une latitude sans longitude est ignorée. */
   position(): { latitude: number; longitude: number } | undefined {
@@ -85,17 +87,25 @@ export class RidesController {
     return this.rides.history(user.userId);
   }
 
-  // GET /rides/pending?lat=…&lng=…  -> courses à prendre (chauffeurs), filtrées sur leur
-  // véhicule puis sur le rayon de recherche autour de la position transmise.
+  // GET /rides/pending/summary?lat=…&lng=…&radiusKm=10  — compteur radar (DOIT être avant /pending)
+  @Get("pending/summary")
+  @Roles(Role.DRIVER)
+  async pendingSummary(@CurrentUser() user, @Query() query: RadarQueryDto) {
+    const position = query.position();
+    if (!position) throw new BadRequestException("Position requise (lat et lng)");
+    return this.rides.pendingSummary(user.userId, position);
+  }
+
+  // GET /rides/pending?lat=…&lng=…&radiusKm=10  -> courses à prendre (chauffeurs)
   @Get("pending")
   @Roles(Role.DRIVER)
   pending(@CurrentUser() user, @Query() query: RadarQueryDto) {
-    return this.rides.pending(user.userId, query.position());
+    return this.rides.pending(user.userId, query.position(), query.radiusKm);
   }
 
   @Get(":id/route")
-  route(@Param("id") id: string, @CurrentUser() user) {
-    return this.rides.route(id, user.userId);
+  route(@Param("id") id: string, @CurrentUser() user, @Query("stage") stage?: string) {
+    return this.rides.route(id, user.userId, stage);
   }
 
   @Post(":id/stop-request")
@@ -122,6 +132,34 @@ export class RidesController {
   @Roles(Role.DRIVER)
   accept(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.accept(id, user.userId);
+  }
+
+  /** Client confirme la proposition du Zem → MATCHED */
+  @Post(":id/approve-driver")
+  @Roles(Role.CLIENT)
+  approveDriver(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.approveDriver(id, user.userId);
+  }
+
+  /** Client refuse la proposition du Zem → PENDING */
+  @Post(":id/decline-driver")
+  @Roles(Role.CLIENT)
+  declineDriver(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.declineDriver(id, user.userId);
+  }
+
+  /** Zem retire sa proposition → PENDING */
+  @Post(":id/withdraw-offer")
+  @Roles(Role.DRIVER)
+  withdrawOffer(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.withdrawOffer(id, user.userId);
+  }
+
+  /** Profil public du Zem, accessible au client de la course */
+  @Get(":id/driver-profile")
+  @Roles(Role.CLIENT)
+  driverProfile(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.driverProfile(id, user.userId);
   }
 
   @Post(":id/arrive")
@@ -175,7 +213,7 @@ export class RidesController {
     return this.rides.sendMessage(id, user, dto);
   }
 
-  // GET /rides/:id  -> déclaré en DERNIER pour ne pas masquer /history et /pending
+  // GET /rides/:id  -> déclaré en DERNIER pour ne pas masquer /history, /pending et /pending/summary
   @Get(":id")
   findOne(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.findOne(id, user.userId);

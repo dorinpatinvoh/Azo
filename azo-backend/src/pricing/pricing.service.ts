@@ -171,11 +171,13 @@ export class PricingService {
    * chauffeur (`pendingExpiryMinutes`) et nombre de chauffeurs prévenus à la publication
    * (`driverNotificationMax`).
    */
-  radarSettings(): RadarSettings {
+  radarSettings(): RadarSettings & { nearbyRadiusKm: number; maxRadiusKm: number } {
     const radar = this.config.radar ?? {};
     return {
       strictVehicleMatch: radar.strictVehicleMatch ?? true,
       searchRadiusKm: radar.searchRadiusKm ?? 0,
+      nearbyRadiusKm: (radar as any).nearbyRadiusKm ?? 10,
+      maxRadiusKm: (radar as any).maxRadiusKm ?? 15,
       pendingExpiryMinutes: radar.pendingExpiryMinutes ?? 30,
       driverNotificationMax: radar.driverNotificationMax ?? 30,
     };
@@ -187,6 +189,8 @@ export class PricingService {
       stopRequestExpiryMinutes: rides.stopRequestExpiryMinutes ?? 2,
       destinationToleranceMeters: rides.destinationToleranceMeters ?? 150,
       routeCacheSeconds: rides.routeCacheSeconds ?? 5,
+      offerExpirySeconds: (rides as any).offerExpirySeconds ?? 45,
+      requireClientApproval: (rides as any).requireClientApproval ?? true,
     };
   }
 

@@ -69,6 +69,8 @@
   "radar": {
     "strictVehicleMatch": true,
     "searchRadiusKm": 8,
+    "nearbyRadiusKm": 10,
+    "maxRadiusKm": 15,
     "pendingExpiryMinutes": 20,
     "driverNotificationMax": 30
   },
@@ -76,7 +78,9 @@
   "rides": {
     "stopRequestExpiryMinutes": 2,
     "destinationToleranceMeters": 150,
-    "routeCacheSeconds": 5
+    "routeCacheSeconds": 5,
+    "offerExpirySeconds": 45,
+    "requireClientApproval": true
   },
 
   "agencyLevels": {

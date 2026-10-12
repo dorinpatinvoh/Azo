@@ -93,6 +93,7 @@ enum ProviderEventType {
 
 enum RideStatus {
   PENDING
+  OFFERED      // Un Zem a accepté, le client doit confirmer (délai offerExpirySeconds)
   MATCHED
   ARRIVED
   IN_PROGRESS
@@ -255,6 +256,10 @@ model Ride {
   destLat   Float
   destLng   Float
 
+  // Libellés d'adresses lisibles (optionnels, envoyés par le mobile au moment de la création)
+  originLabel String? // ex. "Place de l'Étoile Rouge, Cotonou"
+  destLabel   String? // ex. "Marché Dantokpa, Cotonou"
+
   price                       Int
   commission                  Int
   rating                      Int?
@@ -280,6 +285,11 @@ model Ride {
   finalPrice                  Int?
   settledDistanceMeters       Int?
   priceMode                   String?
+  // Champs pour le statut OFFERED (confirmation du client avant MATCHED)
+  offeredAt           DateTime?   // quand le Zem a accepté
+  offerExpiresAt      DateTime?   // offeredAt + rides.offerExpirySeconds
+  declinedDriverIds   String[]    @default([]) // Zem exclus de cette demande (refusés, sans réponse, retirés)
+  matchedAt           DateTime?   // quand le client a confirmé (OFFERED → MATCHED)
   trackPoints                 RideTrackPoint[]
   createdAt                   DateTime         @default(now())
 }
@@ -413,6 +423,7 @@ model ProviderProfile {
   // Vie du compte après approbation
   activatedAt   DateTime?
   rating        Float     @default(0)
+  ratingCount   Int       @default(0) // nombre de notes reçues (pour affichage « N notes »)
   jobsCompleted Int       @default(0)
   kycScore      Int       @default(0) // 0-100 : pièces valides et non expirées
 

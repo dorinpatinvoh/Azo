@@ -101,6 +101,10 @@ export class RidesGateway implements OnGatewayConnection {
       try {
         const payload = this.jwt.verify(raw);
         client.data.user = { userId: payload.sub, role: payload.role, phone: payload.phone };
+        // Les chauffeurs rejoignent la room "drivers" pour recevoir les événements radar
+        if (payload.role === "DRIVER") {
+          client.join("drivers");
+        }
       } catch {
         // Jeton expiré ou invalide : la socket ne pourra pas rejoindre une course privée.
       }
@@ -176,7 +180,7 @@ export class RidesGateway implements OnGatewayConnection {
     return result;
   }
 
-  // Le chauffeur émet sa position toutes les ~2-3 secondes pendant une course active.
+  // Autoriser la position du Zem pendant OFFERED (client voit sa distance)
   @SubscribeMessage("driver:location")
   async location(
     @ConnectedSocket() client: Socket,
@@ -186,10 +190,11 @@ export class RidesGateway implements OnGatewayConnection {
     if (!userId || !this.hasValidCoordinates(data)) return;
     await this.serializeDriverLocation(data.rideId, async () => {
       const ride = await this.getRideLocationContext(data.rideId);
+      const ACTIVE_DRIVER_WITH_OFFERED = ["OFFERED", "MATCHED", "ARRIVED", "IN_PROGRESS"] as const;
       if (
         !ride ||
         ride.driverId !== userId ||
-        !ACTIVE_DRIVER_LOCATION_STATUSES.includes(ride.status as (typeof ACTIVE_DRIVER_LOCATION_STATUSES)[number])
+        !ACTIVE_DRIVER_WITH_OFFERED.includes(ride.status as (typeof ACTIVE_DRIVER_WITH_OFFERED)[number])
       ) {
         return;
       }
@@ -715,12 +720,8 @@ export class RidesGateway implements OnGatewayConnection {
   }
 
   /**
-   * Nouvelle demande publiée : tous les appareils connectés sont prévenus
-   * (`ride:new`). L'application mobile filtre sur le véhicule de son dossier et
-   * rafraîchit son radar immédiatement, sans attendre le cycle de 8 secondes.
-   *
-   * Aucune donnée personnelle n'est diffusée : ni le nom du client, ni son numéro,
-   * uniquement ce qui figure déjà dans le radar (course, véhicule, prix, départ).
+   * Nouvelle demande publiée : émise uniquement dans la room `drivers`.
+   * Payload inclut `clientDisplayName` pour affichage sur le radar.
    */
   emitNewRequest(payload: {
     rideId: string;
@@ -728,7 +729,16 @@ export class RidesGateway implements OnGatewayConnection {
     price: number;
     originLat: number;
     originLng: number;
+    clientDisplayName?: string | null;
   }) {
-    this.server?.emit("ride:new", { ...payload, at: new Date().toISOString() });
+    this.server?.to("drivers").emit("ride:new", { ...payload, at: new Date().toISOString() });
+  }
+
+  /**
+   * Une demande quitte le radar (prise, offerte, annulée, expirée).
+   * Émis dans la room `drivers`.
+   */
+  emitRideRemoved(rideId: string, reason: "taken" | "offered" | "cancelled" | "expired") {
+    this.server?.to("drivers").emit("ride:removed", { rideId, reason, at: new Date().toISOString() });
   }
 }
