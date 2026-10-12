@@ -12,7 +12,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { PricingService } from "../pricing/pricing.module";
 import { Server, Socket } from "socket.io";
-import { OdometerPoint, odometerStep } from "./odometer";
+import { OdometerPoint, haversineMeters, odometerStep } from "./odometer";
 
 export type RideChatMessage = {
   id: string;
@@ -37,14 +37,20 @@ type LiveLocationPayload = {
 const ACTIVE_DRIVER_LOCATION_STATUSES = ["MATCHED", "ARRIVED", "IN_PROGRESS"] as const;
 const ACTIVE_CLIENT_LOCATION_STATUSES = ["MATCHED", "ARRIVED"] as const;
 const LOCATION_PERSIST_INTERVAL_MS = 5_000;
+const LOCATION_RATE_LIMIT_MS = 400;
+const MAX_PLAUSIBLE_LOCATION_SPEED_MPS = 100;
 const TRACK_RETENTION_DAYS = 30;
 
 type RideLocationContext = {
+  clientId: string;
   driverId: string | null;
   status: string;
   vehicleType: string;
   estimatedPrice: number;
   lastDriverAt: number;
+  lastDriverLocation: OdometerPoint | null;
+  lastClientAt: number;
+  lastClientLocation: OdometerPoint | null;
   traveledMeters: number;
   odometer: OdometerPoint | null;
   odometerAccuracy: number | null;
@@ -64,9 +70,12 @@ export class RidesGateway implements OnGatewayConnection {
   private readonly logger = new Logger(RidesGateway.name);
   private lastDriverTimestamp = new Map<string, number>();
   private lastClientTimestamp = new Map<string, number>();
+  private lastLocationReceivedAt = new Map<string, number>();
+  private lastLocationByEmitter = new Map<string, OdometerPoint>();
   private lastDriverPersistAt = new Map<string, number>();
   private lastClientPersistAt = new Map<string, number>();
   private rideLocationContexts = new Map<string, RideLocationContext>();
+  private rideLocationContextTasks = new Map<string, Promise<RideLocationContext | null>>();
   private rideContextGeneration = new Map<string, number>();
   private driverLocationTasks = new Map<string, Promise<unknown>>();
   private lastProgressEmitAt = new Map<string, number>();
@@ -187,8 +196,11 @@ export class RidesGateway implements OnGatewayConnection {
 
       const at = this.locationTimestamp(data.ts);
       if (at <= Math.max(this.lastDriverTimestamp.get(data.rideId) ?? 0, ride.lastDriverAt)) return;
+      const emitterKey = this.locationEmitterKey(data.rideId, userId);
+      if (!this.canAcceptLocation(emitterKey, ride.lastDriverLocation, data.lat, data.lng, at)) return;
       this.lastDriverTimestamp.set(data.rideId, at);
       ride.lastDriverAt = at;
+      ride.lastDriverLocation = { lat: data.lat, lng: data.lng, at };
       const heading = this.validHeading(data.heading);
       const speed = this.validNonNegative(data.speed);
       const accuracy = this.validNonNegative(data.accuracy);
@@ -259,15 +271,39 @@ export class RidesGateway implements OnGatewayConnection {
   private async getRideLocationContext(rideId: string): Promise<RideLocationContext | null> {
     const cached = this.rideLocationContexts.get(rideId);
     if (cached) return cached;
-    const generation = this.rideContextGeneration.get(rideId) ?? 0;
+    let task = this.rideLocationContextTasks.get(rideId);
+    if (!task) {
+      const generation = this.rideContextGeneration.get(rideId) ?? 0;
+      task = this.loadRideLocationContext(rideId, generation);
+      this.rideLocationContextTasks.set(rideId, task);
+    }
+    try {
+      return await task;
+    } finally {
+      if (this.rideLocationContextTasks.get(rideId) === task) {
+        this.rideLocationContextTasks.delete(rideId);
+      }
+    }
+  }
+
+  private async loadRideLocationContext(
+    rideId: string,
+    generation: number
+  ): Promise<RideLocationContext | null> {
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
       select: {
+        clientId: true,
         driverId: true,
         status: true,
         vehicleType: true,
         price: true,
         driverLocatedAt: true,
+        driverLat: true,
+        driverLng: true,
+        clientLocatedAt: true,
+        clientLat: true,
+        clientLng: true,
         traveledMeters: true,
         odoLat: true,
         odoLng: true,
@@ -278,14 +314,26 @@ export class RidesGateway implements OnGatewayConnection {
     });
     if (!ride) return null;
     if ((this.rideContextGeneration.get(rideId) ?? 0) !== generation) {
-      return this.getRideLocationContext(rideId);
+      return this.loadRideLocationContext(rideId, this.rideContextGeneration.get(rideId) ?? 0);
     }
     const context: RideLocationContext = {
+      clientId: ride.clientId,
       driverId: ride.driverId,
       status: ride.status,
       vehicleType: ride.vehicleType,
       estimatedPrice: ride.price,
       lastDriverAt: ride.driverLocatedAt?.getTime() ?? 0,
+      lastDriverLocation:
+        ride.driverLat !== null && ride.driverLat !== undefined &&
+        ride.driverLng !== null && ride.driverLng !== undefined && ride.driverLocatedAt
+          ? { lat: ride.driverLat, lng: ride.driverLng, at: ride.driverLocatedAt.getTime() }
+          : null,
+      lastClientAt: ride.clientLocatedAt?.getTime() ?? 0,
+      lastClientLocation:
+        ride.clientLat !== null && ride.clientLat !== undefined &&
+        ride.clientLng !== null && ride.clientLng !== undefined && ride.clientLocatedAt
+          ? { lat: ride.clientLat, lng: ride.clientLng, at: ride.clientLocatedAt.getTime() }
+          : null,
       traveledMeters: ride.traveledMeters,
       odometer:
         ride.odoLat !== null && ride.odoLng !== null && ride.odoAt
@@ -347,10 +395,7 @@ export class RidesGateway implements OnGatewayConnection {
     const userId = client.data?.user?.userId;
     if (!userId || !this.hasValidCoordinates(data)) return;
 
-    const ride = await this.prisma.ride.findUnique({
-      where: { id: data.rideId },
-      select: { clientId: true, driverId: true, status: true, clientLocatedAt: true },
-    });
+    const ride = await this.getRideLocationContext(data.rideId);
     if (
       !ride ||
       ride.clientId !== userId ||
@@ -360,13 +405,21 @@ export class RidesGateway implements OnGatewayConnection {
     }
 
     const at = this.locationTimestamp(data.ts);
-    if (at < Math.max(this.lastClientTimestamp.get(data.rideId) ?? 0, ride.clientLocatedAt?.getTime() ?? 0)) return;
+    if (at <= Math.max(this.lastClientTimestamp.get(data.rideId) ?? 0, ride.lastClientAt)) return;
+    const emitterKey = this.locationEmitterKey(data.rideId, userId);
+    if (!this.canAcceptLocation(emitterKey, ride.lastClientLocation, data.lat, data.lng, at)) return;
     this.lastClientTimestamp.set(data.rideId, at);
+    ride.lastClientAt = at;
+    ride.lastClientLocation = { lat: data.lat, lng: data.lng, at };
     const accuracy = this.validNonNegative(data.accuracy);
+    const heading = this.validHeading(data.heading);
+    const speed = this.validNonNegative(data.speed);
     if (ride.driverId) {
       this.server?.to(`user:${ride.driverId}`).emit("client:location", {
         lat: data.lat,
         lng: data.lng,
+        ...(heading !== undefined ? { heading } : {}),
+        ...(speed !== undefined ? { speed } : {}),
         ...(accuracy !== undefined ? { accuracy: Math.round(accuracy) } : {}),
         at,
       });
@@ -378,6 +431,7 @@ export class RidesGateway implements OnGatewayConnection {
     this.rideContextGeneration.set(rideId, (this.rideContextGeneration.get(rideId) ?? 0) + 1);
     this.lastDriverTimestamp.delete(rideId);
     this.lastClientTimestamp.delete(rideId);
+    this.clearLocationRateState(rideId);
     this.lastDriverPersistAt.delete(rideId);
     this.lastClientPersistAt.delete(rideId);
     this.rideLocationContexts.delete(rideId);
@@ -406,6 +460,17 @@ export class RidesGateway implements OnGatewayConnection {
   clearClientLocationState(rideId: string) {
     this.lastClientTimestamp.delete(rideId);
     this.lastClientPersistAt.delete(rideId);
+    const clientId = this.rideLocationContexts.get(rideId)?.clientId;
+    if (clientId) {
+      const emitterKey = this.locationEmitterKey(rideId, clientId);
+      this.lastLocationReceivedAt.delete(emitterKey);
+      this.lastLocationByEmitter.delete(emitterKey);
+    }
+    const context = this.rideLocationContexts.get(rideId);
+    if (context) {
+      context.lastClientAt = 0;
+      context.lastClientLocation = null;
+    }
   }
 
   // Messagerie instantanée sécurisée Client <-> Prestataire (sans exposer les numéros)
@@ -488,12 +553,51 @@ export class RidesGateway implements OnGatewayConnection {
 
   private validHeading(heading: number | undefined): number | undefined {
     return typeof heading === "number" && Number.isFinite(heading) && heading >= 0 && heading < 360
-      ? Math.round(heading)
+      ? Math.round(heading) % 360
       : undefined;
   }
 
   private validNonNegative(value: number | undefined): number | undefined {
     return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+  }
+
+  private locationEmitterKey(rideId: string, userId: string): string {
+    return `${rideId}:${userId}`;
+  }
+
+  private canAcceptLocation(
+    emitterKey: string,
+    previous: OdometerPoint | null,
+    lat: number,
+    lng: number,
+    at: number
+  ): boolean {
+    const now = Date.now();
+    if (now - (this.lastLocationReceivedAt.get(emitterKey) ?? 0) < LOCATION_RATE_LIMIT_MS) return false;
+    const lastLocation = this.lastLocationByEmitter.get(emitterKey) ?? previous;
+    if (lastLocation) {
+      const elapsedMs = at - lastLocation.at;
+      if (
+        elapsedMs <= 0 ||
+        haversineMeters(lastLocation, { lat, lng }) / (elapsedMs / 1000) >
+          MAX_PLAUSIBLE_LOCATION_SPEED_MPS
+      ) {
+        return false;
+      }
+    }
+    this.lastLocationReceivedAt.set(emitterKey, now);
+    this.lastLocationByEmitter.set(emitterKey, { lat, lng, at });
+    return true;
+  }
+
+  private clearLocationRateState(rideId: string) {
+    const prefix = `${rideId}:`;
+    for (const key of this.lastLocationReceivedAt.keys()) {
+      if (key.startsWith(prefix)) this.lastLocationReceivedAt.delete(key);
+    }
+    for (const key of this.lastLocationByEmitter.keys()) {
+      if (key.startsWith(prefix)) this.lastLocationByEmitter.delete(key);
+    }
   }
 
   private async persistDriverLocation(
@@ -606,6 +710,7 @@ export class RidesGateway implements OnGatewayConnection {
 
   // Appelable depuis le service pour pousser un changement de statut aux clients
   emitStatus(rideId: string, status: string) {
+    this.invalidateRideLocationContext(rideId);
     this.server.to(`ride:${rideId}`).emit("ride:status", { rideId, status });
   }
 

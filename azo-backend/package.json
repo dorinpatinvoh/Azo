@@ -32,6 +32,7 @@
     "@prisma/engines": "^5.22.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "fedapay": "^1.2.5",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "prisma": "^5.22.0",
@@ -67,4 +68,4 @@
     },
     "testEnvironment": "node"
   }
-} 
+}
