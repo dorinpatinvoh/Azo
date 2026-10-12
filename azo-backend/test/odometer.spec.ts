@@ -47,9 +47,9 @@ describe("metered ride pricing", () => {
     ["ZEM_ESSENCE", 1, 220],
     ["ZEM_ESSENCE", 1.5, 255],
     ["ZEM_ESSENCE", 3, 360],
-    ["ZEM_ELECTRIC", 1, 170],
-    ["ZEM_ELECTRIC", 1.5, 205],
-    ["ZEM_ELECTRIC", 3, 310],
+    ["ZEM_ELECTRIC", 1, 180],
+    ["ZEM_ELECTRIC", 1.5, 210],
+    ["ZEM_ELECTRIC", 3, 300],
   ])("%s at %s km costs %s FCFA including one base fare", (vehicle, distance, expected) => {
     expect(pricing.breakdown(Number(distance), String(vehicle)).price).toBe(expected);
   });

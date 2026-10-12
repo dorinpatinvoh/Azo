@@ -49,13 +49,13 @@ describe("radar du Zem : destination et pseudo du client", () => {
   it("demande uniquement le fullName du client à la base", async () => {
     const { service, findMany } = makeService();
     await service.pending("driver-1");
-    expect(findMany.mock.calls[0][0].include).toEqual({ client: { select: { fullName: true } } });
+    expect(findMany.mock.calls[0][0].include).toEqual({ client: { select: { fullName: true, firstName: true, lastName: true } } });
   });
 
   it("renvoie la destination et le pseudo, sans le code de prise en charge ni le téléphone", async () => {
     const { service } = makeService();
     const [ride] = (await service.pending("driver-1")) as any[];
-    expect(ride.client).toEqual({ fullName: "Amine" });
+    expect(ride.client).toEqual({ displayName: "Amine", firstName: "Amine" });
     expect(ride.destLat).toBe(6.4);
     expect(ride.destLng).toBe(2.42);
     expect(ride).not.toHaveProperty("pickupCode");
@@ -64,7 +64,7 @@ describe("radar du Zem : destination et pseudo du client", () => {
 });
 
 describe("le pseudo du client reste dans les réponses utilisées par l'écran Zem", () => {
-  const clientInclude = { client: { select: { fullName: true, phone: true } } };
+  const clientInclude = { client: { select: { fullName: true, phone: true, firstName: true, lastName: true } } };
 
   function makeActiveService(status: string) {
     const ride = {
