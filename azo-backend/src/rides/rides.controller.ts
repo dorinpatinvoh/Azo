@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
-import { IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from "class-validator";
+import { IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min, ValidateIf } from "class-validator";
 import { Type } from "class-transformer";
 import { Role } from "@prisma/client";
 import { RidesService } from "./rides.service";
@@ -42,11 +42,20 @@ class StartRideDto {
   pin: string;
 }
 
+// Code d'arrivée : l'app l'envoie sous le nom `pin` (comme pour /start) ; `code` est accepté
+// aussi. L'un des deux est obligatoire, au format 4 chiffres.
 class CompleteRideDto {
+  @ValidateIf((o) => o.code !== undefined || o.pin === undefined)
   @IsString()
   @Length(4, 4)
   @Matches(/^\d{4}$/)
-  code: string;
+  code?: string;
+
+  @ValidateIf((o) => o.pin !== undefined)
+  @IsString()
+  @Length(4, 4)
+  @Matches(/^\d{4}$/)
+  pin?: string;
 }
 
 class SendChatDto {
@@ -210,11 +219,11 @@ export class RidesController {
     return this.rides.requestDropCode(id, user.userId);
   }
 
-  // POST /rides/:id/complete  { "code": "1234" } -> le Zem saisit le code donné par le client
+  // POST /rides/:id/complete  { "pin": "1234" } (ou "code") -> le Zem saisit le code donné par le client
   @Post(":id/complete")
   @Roles(Role.DRIVER)
   complete(@Param("id") id: string, @CurrentUser() user, @Body() dto: CompleteRideDto) {
-    return this.rides.complete(id, user.userId, dto.code);
+    return this.rides.complete(id, user.userId, dto.code ?? dto.pin);
   }
 
   // POST /rides/:id/rate  { "stars": 5 }
