@@ -74,8 +74,8 @@ describe("Radar — expiration des demandes", () => {
       expiryMinutes: 20,
       radiusKm: 0,
     });
-    // Sans position connue, le classement va du plus ancien au plus récent.
-    expect(visibles.map((r) => r.id)).toEqual(["limite", "jeune"]);
+    // Sans position connue, le classement va du plus récent au plus ancien.
+    expect(visibles.map((r) => r.id)).toEqual(["jeune", "limite"]);
     expect(expired.map((r) => r.id)).toEqual(["vieille", "très-vieille"]);
   });
 
@@ -95,24 +95,28 @@ describe("Radar — expiration des demandes", () => {
 });
 
 describe("Radar — proximité du chauffeur", () => {
-  it("classe les demandes de la plus proche à la plus lointaine", () => {
-    const rides = [ride("aeroport", 1, AEROPORT), ride("dantokpa", 2, DANTOKPA)];
+  it("avec la position, le classement reste du plus récent au plus ancien (pas par distance)", () => {
+    // L'aéroport est plus proche d'Étoile Rouge que Dantokpa, mais la demande de Dantokpa est
+    // plus ancienne : elle ne passe pas devant.
+    const rides = [ride("dantokpa", 5, DANTOKPA), ride("aeroport", 1, AEROPORT)];
     const { rides: visibles } = buildRadar(rides, {
       now: NOW,
       expiryMinutes: 20,
       radiusKm: 0,
       driver: ETOILE,
     });
-    // L'ordre attendu est recalculé ici indépendamment, à partir de la même formule.
-    const attendu = ["aeroport", "dantokpa"].sort(
-      (a, b) =>
-        haversineKm(ETOILE, a === "aeroport" ? AEROPORT : DANTOKPA) -
-        haversineKm(ETOILE, b === "aeroport" ? AEROPORT : DANTOKPA)
-    );
-    expect(visibles.map((r) => r.id)).toEqual(attendu);
-    // Les distances affichées sont bien croissantes.
-    const distances = visibles.map((r) => r.distanceKm ?? 0);
-    expect(distances).toEqual([...distances].sort((a, b) => a - b));
+    expect(visibles.map((r) => r.id)).toEqual(["aeroport", "dantokpa"]);
+    // La distance reste calculée et affichée pour chaque demande.
+    expect(visibles.every((r) => typeof r.distanceKm === "number")).toBe(true);
+    const parId = Object.fromEntries(visibles.map((r) => [r.id, r.distanceKm as number]));
+    expect(parId.aeroport).toBeCloseTo(haversineKm(ETOILE, AEROPORT), 0);
+    expect(parId.dantokpa).toBeCloseTo(haversineKm(ETOILE, DANTOKPA), 0);
+  });
+
+  it("deux demandes récentes : la plus récente d'abord, même si l'autre est plus proche", () => {
+    const rides = [ride("proche-ancienne", 8, AEROPORT), ride("loin-recente", 1, DANTOKPA)];
+    const { rides: visibles } = buildRadar(rides, { now: NOW, expiryMinutes: 20, radiusKm: 0, driver: ETOILE });
+    expect(visibles.map((r) => r.id)).toEqual(["loin-recente", "proche-ancienne"]);
   });
 
   it("écarte les demandes hors du rayon de recherche", () => {
@@ -141,18 +145,18 @@ describe("Radar — proximité du chauffeur", () => {
     expect(visibles[1].distanceKm).toBeGreaterThan(20);
   });
 
-  it("sans position connue : aucune demande écartée, classement du plus ancien au plus récent", () => {
+  it("sans position connue : aucune demande écartée, classement du plus récent au plus ancien", () => {
     const rides = [ride("recente", 1, DANTOKPA), ride("ancienne", 10, AEROPORT)];
     const { rides: visibles } = buildRadar(rides, {
       now: NOW,
       expiryMinutes: 20,
       radiusKm: 5,
     });
-    expect(visibles.map((r) => r.id)).toEqual(["ancienne", "recente"]);
+    expect(visibles.map((r) => r.id)).toEqual(["recente", "ancienne"]);
     expect(visibles.every((r) => r.distanceKm === null)).toBe(true);
   });
 
-  it("à distance égale, la demande la plus ancienne passe devant", () => {
+  it("à distance égale, la demande la plus récente passe devant", () => {
     const rides = [ride("recente", 1), ride("ancienne", 5)];
     const { rides: visibles } = buildRadar(rides, {
       now: NOW,
@@ -160,7 +164,7 @@ describe("Radar — proximité du chauffeur", () => {
       radiusKm: 0,
       driver: ETOILE,
     });
-    expect(visibles.map((r) => r.id)).toEqual(["ancienne", "recente"]);
+    expect(visibles.map((r) => r.id)).toEqual(["recente", "ancienne"]);
   });
 
   it("arrondit la distance au dixième de kilomètre (affichage « à 3,1 km »)", () => {
