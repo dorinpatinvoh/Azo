@@ -80,6 +80,21 @@ describe("RidesGateway real-time ride events", () => {
       expect(server.to).not.toHaveBeenCalled();
     });
 
+    it("ignores driver updates less than 400 ms apart", async () => {
+      jest.useFakeTimers().setSystemTime(new Date("2026-10-10T12:00:00.000Z"));
+      try {
+        const { gateway, emit } = makeGateway({ driverId, status: "MATCHED" });
+        const socket = makeSocket(driverId);
+        await gateway.location(socket, { rideId, lat: 6.37, lng: 2.39, ts: Date.now() });
+        jest.advanceTimersByTime(399);
+        await gateway.location(socket, { rideId, lat: 6.37, lng: 2.39, ts: Date.now() });
+
+        expect(emit.mock.calls.filter(([event]) => event === "driver:location")).toHaveLength(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it("ignores an older point and persists no more often than every five seconds", async () => {
       jest.useFakeTimers().setSystemTime(new Date("2026-10-10T12:00:00.000Z"));
       try {
@@ -107,8 +122,8 @@ describe("RidesGateway real-time ride events", () => {
         jest.advanceTimersByTime(2_000);
         await gateway.location(socket, {
           rideId,
-          lat: 6.39,
-          lng: 2.41,
+          lat: 6.3701,
+          lng: 2.3901,
           ts: Date.now() - 1_000,
           speed: 4.6,
           accuracy: 8.2,
@@ -122,7 +137,13 @@ describe("RidesGateway real-time ride events", () => {
         expect(emit.mock.calls.filter(([event]) => event === "driver:location")).toHaveLength(2);
         expect(emit).toHaveBeenLastCalledWith(
           "driver:location",
-          expect.objectContaining({ lat: 6.39, lng: 2.41, speed: 4.6, accuracy: 8, at: Date.now() - 1_000 })
+          expect.objectContaining({
+            lat: 6.3701,
+            lng: 2.3901,
+            speed: 4.6,
+            accuracy: 8,
+            at: Date.now() - 1_000,
+          })
         );
         expect(prisma.ride.updateMany).toHaveBeenCalledTimes(1);
         expect(prisma.ride.updateMany).toHaveBeenCalledWith(
@@ -186,6 +207,140 @@ describe("RidesGateway real-time ride events", () => {
             data: expect.objectContaining({ clientLat: 6.37, clientLng: 2.39 }),
           })
         );
+      });
+
+      it("relays valid heading and speed to the assigned driver", async () => {
+        const { gateway, emit } = makeGateway({ clientId, driverId, status: "MATCHED" });
+
+        await gateway.clientLocation(makeSocket(clientId, "CLIENT"), {
+          rideId,
+          lat: 6.37,
+          lng: 2.39,
+          heading: 92.4,
+          speed: 1.8,
+        });
+
+        expect(emit).toHaveBeenCalledWith(
+          "client:location",
+          expect.objectContaining({
+            lat: 6.37,
+            lng: 2.39,
+            heading: 92,
+            speed: 1.8,
+            at: expect.any(Number),
+          })
+        );
+      });
+
+      it.each([
+        { heading: 360, speed: 1.8 },
+        { heading: 92, speed: -1 },
+      ])("omits invalid heading and speed but still relays the point: %p", async (fields) => {
+        const { gateway, emit } = makeGateway({ clientId, driverId, status: "MATCHED" });
+
+        await gateway.clientLocation(makeSocket(clientId, "CLIENT"), {
+          rideId,
+          lat: 6.37,
+          lng: 2.39,
+          ...fields,
+        });
+
+        expect(emit).toHaveBeenCalledWith(
+          "client:location",
+          expect.objectContaining({ lat: 6.37, lng: 2.39, at: expect.any(Number) })
+        );
+        expect(emit.mock.calls[0][1]).not.toHaveProperty("heading", 360);
+        expect(emit.mock.calls[0][1]).not.toHaveProperty("speed", -1);
+      });
+
+      it("ignores updates less than 400 ms apart and resumes afterwards", async () => {
+        jest.useFakeTimers().setSystemTime(new Date("2026-10-10T12:00:00.000Z"));
+        try {
+          const { gateway, prisma, emit } = makeGateway({ clientId, driverId, status: "MATCHED" });
+          const socket = makeSocket(clientId, "CLIENT");
+          await gateway.clientLocation(socket, { rideId, lat: 6.37, lng: 2.39, ts: Date.now() });
+          jest.advanceTimersByTime(399);
+          await gateway.clientLocation(socket, { rideId, lat: 6.37, lng: 2.39, ts: Date.now() });
+          jest.advanceTimersByTime(2);
+          await gateway.clientLocation(socket, { rideId, lat: 6.37, lng: 2.39, ts: Date.now() });
+
+          expect(emit.mock.calls.filter(([event]) => event === "client:location")).toHaveLength(2);
+          expect(prisma.ride.findUnique).toHaveBeenCalledTimes(1);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("ignores physically impossible jumps", async () => {
+        jest.useFakeTimers().setSystemTime(new Date("2026-10-10T12:00:00.000Z"));
+        try {
+          const { gateway, emit } = makeGateway({ clientId, driverId, status: "MATCHED" });
+          const socket = makeSocket(clientId, "CLIENT");
+          await gateway.clientLocation(socket, { rideId, lat: 6.37, lng: 2.39, ts: Date.now() });
+          jest.advanceTimersByTime(1_000);
+          await gateway.clientLocation(socket, { rideId, lat: 6.42, lng: 2.39, ts: Date.now() });
+
+          expect(emit.mock.calls.filter(([event]) => event === "client:location")).toHaveLength(1);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("limits each participant independently and reuses the cached ride context", async () => {
+        jest.useFakeTimers().setSystemTime(new Date("2026-10-10T12:00:00.000Z"));
+        try {
+          const { gateway, prisma, emit } = makeGateway({ clientId, driverId, status: "MATCHED" });
+          const ts = Date.now();
+          await gateway.clientLocation(makeSocket(clientId, "CLIENT"), {
+            rideId,
+            lat: 6.37,
+            lng: 2.39,
+            ts,
+          });
+          await gateway.location(makeSocket(driverId), {
+            rideId,
+            lat: 6.37,
+            lng: 2.39,
+            ts,
+          });
+
+          expect(emit.mock.calls.filter(([event]) => event === "client:location")).toHaveLength(1);
+          expect(emit.mock.calls.filter(([event]) => event === "driver:location")).toHaveLength(1);
+          expect(prisma.ride.findUnique).toHaveBeenCalledTimes(1);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("loads one ride context per course for 20 simultaneous rides", async () => {
+        jest.useFakeTimers().setSystemTime(new Date("2026-10-10T12:00:00.000Z"));
+        try {
+          const { gateway, prisma } = makeGateway({ clientId, driverId, status: "MATCHED" });
+          await Promise.all(
+            Array.from({ length: 20 }, async (_, index) => {
+              const activeRideId = `ride-${index}`;
+              const ts = Date.now();
+              await Promise.all([
+                gateway.clientLocation(makeSocket(clientId, "CLIENT"), {
+                  rideId: activeRideId,
+                  lat: 6.37,
+                  lng: 2.39,
+                  ts,
+                }),
+                gateway.location(makeSocket(driverId), {
+                  rideId: activeRideId,
+                  lat: 6.37,
+                  lng: 2.39,
+                  ts,
+                }),
+              ]);
+            })
+          );
+
+          expect(prisma.ride.findUnique).toHaveBeenCalledTimes(20);
+        } finally {
+          jest.useRealTimers();
+        }
       });
 
       it.each([
