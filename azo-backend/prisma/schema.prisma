@@ -157,22 +157,34 @@ model User {
   language           String     @default("fr") // fr | en | es | de
   createdAt          DateTime   @default(now())
 
+  // Nouveaux champs profil (section 1 du cahier des charges)
+  email                    String?
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  identityCorrectedAt      DateTime?   // quand la correction « directe » a été utilisée (une seule fois)
+
   agencyId String?
   agency   Agency? @relation(fields: [agencyId], references: [id])
 
   // Dossier prestataire (null pour un simple client)
   provider ProviderProfile?
 
-  wallet                  Wallet?
-  ridesAsClient           Ride[]                   @relation("ClientRides")
-  ridesAsDriver           Ride[]                   @relation("DriverRides")
-  notifications           Notification[]
-  pushTokens              DevicePushToken[]
-  deliveriesSent          Delivery[]               @relation("DeliveryClient")
-  rentalBookings          RentalBooking[]
-  marketOrders            MarketplaceOrder[]
-  artisanRequests         ArtisanRequest[]         @relation("ArtisanRequestClient")
-  npiRegistrationAttempts NpiRegistrationAttempt[]
+  wallet                        Wallet?
+  ridesAsClient                 Ride[]                      @relation("ClientRides")
+  ridesAsDriver                 Ride[]                      @relation("DriverRides")
+  notifications                 Notification[]
+  pushTokens                    DevicePushToken[]
+  deliveriesSent                Delivery[]                  @relation("DeliveryClient")
+  rentalBookings                RentalBooking[]
+  marketOrders                  MarketplaceOrder[]
+  artisanRequests               ArtisanRequest[]            @relation("ArtisanRequestClient")
+  npiRegistrationAttempts       NpiRegistrationAttempt[]
+  identityCorrectionRequests    IdentityCorrectionRequest[]
+  phoneChangeRequests           PhoneChangeRequest[]
+  profileChanges                UserProfileChange[]
+  rideMessages                  RideMessage[]
+  rideTipsAsClient              RideTip[]                   @relation("TipClient")
+  rideTipsAsDriver              RideTip[]                   @relation("TipDriver")
 }
 
 model NpiRegistrationAttempt {
@@ -224,6 +236,7 @@ model Transaction {
   labelKey    String? // clé i18n stable (ex. "TRANSACTION_RIDE_PAYMENT") — traduite par le mobile
   labelParams Json?   // paramètres à interpoler dans la traduction (ex. { "ref": "#abc123" })
   meta        String?
+  kind        String? // "RIDE" | "TIP" | "RECHARGE" | "WITHDRAWAL" — filtrage pour calculs financiers
   createdAt   DateTime          @default(now())
 }
 
@@ -290,7 +303,10 @@ model Ride {
   offerExpiresAt      DateTime?   // offeredAt + rides.offerExpirySeconds
   declinedDriverIds   String[]    @default([]) // Zem exclus de cette demande (refusés, sans réponse, retirés)
   matchedAt           DateTime?   // quand le client a confirmé (OFFERED → MATCHED)
+  completedAt         DateTime?   // quand la course est passée à COMPLETED
   trackPoints                 RideTrackPoint[]
+  messages                    RideMessage[]
+  tip                         RideTip?
   createdAt                   DateTime         @default(now())
 }
 
@@ -469,4 +485,89 @@ model ProviderEvent {
   createdAt  DateTime          @default(now())
 
   @@index([providerId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Profil utilisateur — nouveaux modèles (section 1 du cahier des charges)
+// ---------------------------------------------------------------------------
+
+model IdentityCorrectionRequest {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName    String?
+  lastName     String?
+  gender       Gender?
+  reason       String   // motif du client, 10 à 300 caractères
+  status       String   @default("PENDING")  // PENDING | APPROVED | REJECTED
+  decidedById  String?
+  decidedAt    DateTime?
+  rejectReason String?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, status])
+}
+
+model PhoneChangeRequest {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  newPhone  String
+  codeHash  String              // jamais le code en clair
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model UserProfileChange {           // journal d'audit
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  field     String                  // "email" | "emergencyContact" | "firstName" | "lastName" | "gender" | "phone"
+  oldValue  String?                 // pour phone : 4 derniers chiffres seulement
+  newValue  String?
+  at        DateTime  @default(now())
+
+  @@index([userId, at])
+}
+
+// ---------------------------------------------------------------------------
+// Messagerie de course persistée (section 2 du cahier des charges)
+// ---------------------------------------------------------------------------
+
+model RideMessage {
+  id         String    @id @default(uuid())
+  rideId     String
+  ride       Ride      @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  senderRole String             // "CLIENT" | "PROVIDER"
+  text       String             // 1 à 300 caractères, après nettoyage
+  createdAt  DateTime  @default(now())
+  readAt     DateTime?          // lu par le destinataire
+
+  @@index([rideId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Pourboire (section 3 du cahier des charges)
+// ---------------------------------------------------------------------------
+
+model RideTip {
+  id        String    @id @default(uuid())
+  rideId    String    @unique             // un seul pourboire par course
+  ride      Ride      @relation(fields: [rideId], references: [id])
+  clientId  String
+  client    User      @relation("TipClient", fields: [clientId], references: [id])
+  driverId  String
+  driver    User      @relation("TipDriver", fields: [driverId], references: [id])
+  amount    Int                           // FCFA, entier
+  createdAt DateTime  @default(now())
+
+  @@index([driverId, createdAt])
+  @@index([clientId, createdAt])
 }

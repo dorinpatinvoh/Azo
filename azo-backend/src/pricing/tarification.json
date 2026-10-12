@@ -146,6 +146,19 @@
     ]
   },
 
+  "tips": {
+    "presets": [100, 200, 500, 1000],
+    "minAmount": 50,
+    "maxAmount": 10000,
+    "windowHours": 24,
+    "maxPerHourPerClient": 5
+  },
+
+  "chat": {
+    "retentionMonths": 12,
+    "minutesAfterRide": 0
+  },
+
   "aDefinir": [
     {
       "chemin": "delivery.commissionPct",

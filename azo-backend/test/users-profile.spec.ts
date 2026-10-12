@@ -69,6 +69,19 @@ function makeService(options: { complete?: boolean; updateError?: unknown } = {}
       count: jest.fn().mockResolvedValue(0),
       create: jest.fn().mockResolvedValue({}),
     },
+    identityCorrectionRequest: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
+    userProfileChange: {
+      count: jest.fn().mockResolvedValue(0),
+      createMany: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockResolvedValue({}),
+    },
+    phoneChangeRequest: {
+      findFirst: jest.fn().mockResolvedValue(null),
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn().mockResolvedValue({}),
+    },
     $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]),
   };
   (prisma as any).$transaction = jest.fn((callback) => callback(prisma));
@@ -76,7 +89,17 @@ function makeService(options: { complete?: boolean; updateError?: unknown } = {}
     hash: jest.fn().mockReturnValue("hmac-value"),
     encrypt: jest.fn().mockReturnValue("v1:iv:tag:ciphertext"),
   };
-  return { service: new UsersService(prisma as any, crypto as any), prisma, crypto, stored, updateMany };
+  const notifications = {
+    push: jest.fn().mockResolvedValue({}),
+  };
+  return {
+    service: new UsersService(prisma as any, crypto as any, notifications as any),
+    prisma,
+    crypto,
+    notifications,
+    stored,
+    updateMany,
+  };
 }
 
 describe("inscription client POST /users/me/registration", () => {

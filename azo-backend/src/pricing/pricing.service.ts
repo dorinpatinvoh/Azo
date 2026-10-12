@@ -194,6 +194,25 @@ export class PricingService {
     };
   }
 
+  tipSettings() {
+    const tips = (this.config as any).tips ?? {};
+    return {
+      presets: (tips.presets as number[]) ?? [100, 200, 500, 1000],
+      minAmount: tips.minAmount ?? 50,
+      maxAmount: tips.maxAmount ?? 10000,
+      windowHours: tips.windowHours ?? 24,
+      maxPerHourPerClient: tips.maxPerHourPerClient ?? 5,
+    };
+  }
+
+  chatSettings() {
+    const chat = (this.config as any).chat ?? {};
+    return {
+      retentionMonths: chat.retentionMonths ?? 12,
+      minutesAfterRide: chat.minutesAfterRide ?? 0,
+    };
+  }
+
   /**
    * Prix d'une course = base (remisée le cas échéant) + somme des paliers kilométriques.
    *

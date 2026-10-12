@@ -31,7 +31,15 @@ export class WalletService {
     });
   }
 
-  async initRecharge(userId: string, amount: number, email: string) {
+  async initRecharge(userId: string, amount: number, email?: string) {
+    // Relire l'email depuis la base — l'objet JWT ne le contient pas.
+    if (!email) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      });
+      email = user?.email ?? undefined;
+    }
     // Repli si l'utilisateur n'a pas d'e-mail (inscription par téléphone uniquement).
     const safeEmail = email || `${userId}@azo.placeholder`;
 

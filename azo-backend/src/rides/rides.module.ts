@@ -7,11 +7,14 @@ import { RidesService } from "./rides.service";
 import { RidesGateway } from "./rides.gateway";
 import { RideSettlementController, RideSettlementService } from "./ride-settlement.service";
 import { RidesOfferExpiryTask } from "./rides-offer-expiry.task";
+import { TipsService } from "./tips.service";
+import { MessagesService } from "./messages.service";
+import { MessagesController } from "./messages.controller";
 
 @Module({
   imports: [WalletModule, NotificationsModule, PricingModule],
-  controllers: [RidesController, RideSettlementController],
-  providers: [RidesService, RidesGateway, RideSettlementService, RidesOfferExpiryTask],
-  exports: [RidesService],
+  controllers: [RidesController, RideSettlementController, MessagesController],
+  providers: [RidesService, RidesGateway, RideSettlementService, RidesOfferExpiryTask, TipsService, MessagesService],
+  exports: [RidesService, MessagesService],
 })
 export class RidesModule {}

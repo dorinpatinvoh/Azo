@@ -1547,6 +1547,19 @@ export class RidesService {
       rideVisible.client = { ...c, displayName, firstName };
     }
 
+    // Pourboire (3.2) : le montant envoyé est visible du client ET du Zem de la course ;
+    // la fenêtre restante (`tipUntil`) n'est calculée que pour le client propriétaire.
+    const tipInfo = await this.readTipForRide(ride);
+    if (tipInfo?.tip) {
+      rideVisible.tip = tipInfo.tip;
+    }
+    if (userId === ride.clientId) {
+      const tipUntil = this.computeTipUntil(ride);
+      if (tipUntil && !rideVisible.tip) {
+        rideVisible.tipUntil = tipUntil;
+      }
+    }
+
     return rideVisible;
   }
 
@@ -1559,7 +1572,57 @@ export class RidesService {
       },
       orderBy: { createdAt: "desc" },
     });
-    return rides.map((ride) => this.withoutPickupCode(ride));
+    return Promise.all(
+      rides.map(async (ride) => {
+        const visible = this.withoutPickupCode(ride) as any;
+        const tipInfo = await this.readTipForRide(ride);
+        if (tipInfo?.tip) {
+          visible.tip = tipInfo.tip;
+        }
+        if (userId === ride.clientId) {
+          const tipUntil = this.computeTipUntil(ride);
+          if (tipUntil && !visible.tip) {
+            visible.tipUntil = tipUntil;
+          }
+        }
+        return visible;
+      })
+    );
+  }
+
+  /**
+   * Pourboire attaché à une course (3.2) : `{ amount, at }` si un pourboire a été
+   * envoyé, sinon `null`. Visible du client ET du Zem de la course.
+   */
+  private async readTipForRide(ride: { id: string }): Promise<{ tip: { amount: number; at: string } | null }> {
+    // Défensif : selon les contextes (tests avec mock partiel), le client Prisma peut ne
+    // pas exposer `rideTip`. Une panne de lecture du pourboire ne doit jamais faire
+    // échouer la lecture de la course.
+    const tip = await this.prisma.rideTip
+      ?.findUnique({
+        where: { rideId: ride.id },
+        select: { amount: true, createdAt: true },
+      })
+      .catch(() => null);
+    if (!tip) return { tip: null };
+    return { tip: { amount: tip.amount, at: tip.createdAt.toISOString() } };
+  }
+
+  /**
+   * Fin de la fenêtre d'envoi de pourboire (`completedAt + windowHours`), tant que la
+   * course est terminée avec un Zem et qu'aucun pourboire n'a encore été envoyé.
+   * Renvoie `null` si la fenêtre n'est pas (ou plus) ouverte. (3.2)
+   */
+  private computeTipUntil(ride: {
+    status: string;
+    driverId?: string | null;
+    completedAt?: Date | null;
+  }): string | null {
+    if (ride.status !== "COMPLETED" || !ride.driverId || !ride.completedAt) return null;
+    const windowHours = this.pricing.tipSettings().windowHours;
+    const until = new Date(ride.completedAt.getTime() + windowHours * 60 * 60 * 1000);
+    if (until.getTime() <= Date.now()) return null;
+    return until.toISOString();
   }
 
   /** Profil prestataire (spec tarifaire) d'un conducteur, d'après son dossier et son véhicule. */

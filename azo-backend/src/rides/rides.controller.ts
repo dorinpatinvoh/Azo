@@ -1,8 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from "class-validator";
 import { Type } from "class-transformer";
 import { Role } from "@prisma/client";
 import { RidesService } from "./rides.service";
+import { TipsService } from "./tips.service";
+import { MessagesService } from "./messages.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -62,10 +64,37 @@ class SendChatDto {
   senderName?: string;
 }
 
+class SendTipDto {
+  @IsInt()
+  @Min(1)
+  amount: number;
+}
+
+class GetMessagesQueryDto {
+  @IsOptional()
+  @IsString()
+  before?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  scope?: "ride" | "peer";
+}
+
 @Controller("rides")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RidesController {
-  constructor(private rides: RidesService) {}
+  constructor(
+    private rides: RidesService,
+    private tips: TipsService,
+    private messages: MessagesService,
+  ) {}
 
   // POST /rides/estimate  -> prix + durée avant confirmation
   @Post("estimate")
@@ -203,14 +232,37 @@ export class RidesController {
 
   // GET /rides/:id/messages -> Messagerie sécurisée in-app (course ou livraison)
   @Get(":id/messages")
-  getMessages(@Param("id") id: string) {
-    return this.rides.getMessages(id);
+  getMessages(@Param("id") id: string, @CurrentUser() user, @Query() query: GetMessagesQueryDto) {
+    return this.messages.getMessages(id, user.userId, {
+      before: query.before,
+      limit: query.limit,
+      scope: query.scope,
+    });
   }
 
   // POST /rides/:id/messages -> Envoyer un message sécurisé in-app
   @Post(":id/messages")
   sendMessage(@Param("id") id: string, @CurrentUser() user, @Body() dto: SendChatDto) {
-    return this.rides.sendMessage(id, user, dto);
+    return this.messages.sendMessage(id, user.userId, dto.text, dto.senderRole);
+  }
+
+  // POST /rides/:id/messages/read -> Marquer les messages comme lus
+  @Post(":id/messages/read")
+  markMessagesAsRead(@Param("id") id: string, @CurrentUser() user) {
+    return this.messages.markAsRead(id, user.userId);
+  }
+
+  // POST /rides/:id/tip -> Envoyer un pourboire au Zem
+  @Post(":id/tip")
+  @Roles(Role.CLIENT)
+  @UseGuards(RegistrationCompleteGuard)
+  sendTip(
+    @Param("id") id: string,
+    @CurrentUser() user,
+    @Body() dto: SendTipDto,
+    @Headers("idempotency-key") idempotencyKey?: string
+  ) {
+    return this.tips.sendTip(id, user.userId, dto.amount, idempotencyKey);
   }
 
   // GET /rides/:id  -> déclaré en DERNIER pour ne pas masquer /history, /pending et /pending/summary
