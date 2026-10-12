@@ -1,24 +1,26 @@
-import { Injectable } from '@nestjs/common';
-const FedaPay = require('fedapay');
+import { Injectable } from "@nestjs/common";
+import { FedaPay, Transaction } from "fedapay";
 
 @Injectable()
 export class FedaPayService {
   constructor() {
     FedaPay.setApiKey(process.env.FEDAPAY_SECRET_KEY);
-    FedaPay.setEnvironment(process.env.FEDAPAY_ENV || 'sandbox');
+    FedaPay.setEnvironment(process.env.FEDAPAY_ENV || "sandbox");
   }
+
   async createTransaction(amount: number, email: string, description: string) {
-    const transaction = await FedaPay.Transaction.create({
+    const transaction = await Transaction.create({
       description,
       amount,
-      currency: { iso: 'XOF' },
+      currency: { iso: "XOF" },
       callback_url: process.env.FEDAPAY_CALLBACK_URL,
-      customer: { email }
+      customer: { email },
     });
-    const token = await FedaPay.Transaction.generateToken(transaction);
+    const token = await transaction.generateToken();
     return { transaction, token };
   }
+
   async verifyTransaction(id: number) {
-    return await FedaPay.Transaction.retrieve(id);
+    return Transaction.retrieve(id);
   }
 }
