@@ -101,6 +101,9 @@ export class RidesGateway implements OnGatewayConnection {
       try {
         const payload = this.jwt.verify(raw);
         client.data.user = { userId: payload.sub, role: payload.role, phone: payload.phone };
+        // Room personnelle dès la connexion : le client reçoit la popup « un Zem a accepté », quel que soit
+        // l'écran affiché, sans avoir à ouvrir le suivi de la course (ride:join).
+        client.join(`user:${payload.sub}`);
         // Les chauffeurs rejoignent la room "drivers" pour recevoir les événements radar
         if (payload.role === "DRIVER") {
           client.join("drivers");
@@ -732,6 +735,21 @@ export class RidesGateway implements OnGatewayConnection {
     clientDisplayName?: string | null;
   }) {
     this.server?.to("drivers").emit("ride:new", { ...payload, at: new Date().toISOString() });
+  }
+
+  /** Un Zem a accepté la course : le client reçoit le profil du Zem (popup) dans sa room personnelle. */
+  emitOffered(clientId: string, payload: Record<string, unknown>) {
+    this.server?.to(`user:${clientId}`).emit("ride:offered", payload);
+  }
+
+  /** La proposition est terminée : la popup du client se ferme (retirée, expirée, annulée, choisie ailleurs). */
+  emitOfferEnded(clientId: string, rideId: string, outcome: "declined" | "withdrawn" | "expired" | "cancelled" | "approved") {
+    this.server?.to(`user:${clientId}`).emit("ride:offer-ended", { rideId, outcome, at: new Date().toISOString() });
+  }
+
+  /** Le client a ouvert la popup : le Zem peut afficher « Le client regarde ton profil ». */
+  emitOfferSeen(driverId: string, rideId: string, at: string) {
+    this.server?.to(`user:${driverId}`).emit("ride:offer-seen", { rideId, at });
   }
 
   /**

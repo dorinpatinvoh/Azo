@@ -24,7 +24,13 @@ type PushOptions = {
   bodyKey?: string;
   /** Paramètres à interpoler dans la traduction (ex. { "driver": "Romaric", "amount": 1500 }). */
   params?: Record<string, string | number | boolean | null>;
+  /** Canal Android de la notification poussée (ex. "ride-offers", créé par le mobile). Défaut : "default". */
+  channelId?: string;
+  /** Durée de vie de la notification poussée (secondes) : passé ce délai, Expo ne la livre plus. */
+  ttlSeconds?: number;
 };
+
+type ExpoPushExtras = { channelId?: string; ttlSeconds?: number; silent?: boolean };
 
 @Injectable()
 export class NotificationsService {
@@ -47,10 +53,25 @@ export class NotificationsService {
     });
 
     if (options.sendPush) {
-      await this.sendExpoPush(userId, title, body, options.data);
+      await this.sendExpoPush(userId, title, body, options.data, {
+        channelId: options.channelId,
+        ttlSeconds: options.ttlSeconds,
+      });
     }
 
     return notification;
+  }
+
+  /**
+   * Notification poussée SILENCIEUSE (aucun titre, aucune ligne dans la boîte de réception) : elle ne sert
+   * qu'à prévenir l'application d'un changement, par exemple pour retirer une alerte devenue périmée.
+   */
+  async pushSilent(
+    userId: string,
+    data: Record<string, string | number | boolean | null>,
+    options: { channelId?: string; ttlSeconds?: number } = {}
+  ) {
+    await this.sendExpoPush(userId, "", "", data, { ...options, silent: true });
   }
 
   async registerPushToken(userId: string, token: string, platform?: string) {
@@ -76,7 +97,8 @@ export class NotificationsService {
     userId: string,
     title: string,
     body: string,
-    data?: PushOptions["data"]
+    data?: PushOptions["data"],
+    extras: ExpoPushExtras = {}
   ) {
     let devices: { token: string }[];
     try {
@@ -95,15 +117,30 @@ export class NotificationsService {
 
     for (let start = 0; start < devices.length; start += batchSize) {
       const batch = devices.slice(start, start + batchSize);
-      const messages = batch.map(({ token }) => ({
-        to: token,
-        title,
-        body,
-        sound: "default",
-        priority: "high",
-        channelId: "default",
-        ...(data ? { data } : {}),
-      }));
+      const channelId = extras.channelId ?? "default";
+      const ttl = typeof extras.ttlSeconds === "number" && extras.ttlSeconds > 0 ? { ttl: Math.round(extras.ttlSeconds) } : {};
+      const messages = batch.map(({ token }) =>
+        extras.silent
+          ? {
+              // Message de données uniquement : rien n'est affiché, l'application se met à jour
+              to: token,
+              priority: "high",
+              channelId,
+              _contentAvailable: true,
+              ...ttl,
+              ...(data ? { data } : {}),
+            }
+          : {
+              to: token,
+              title,
+              body,
+              sound: "default",
+              priority: "high",
+              channelId,
+              ...ttl,
+              ...(data ? { data } : {}),
+            }
+      );
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 6000);

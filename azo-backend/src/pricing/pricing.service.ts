@@ -191,6 +191,8 @@ export class PricingService {
       routeCacheSeconds: rides.routeCacheSeconds ?? 5,
       offerExpirySeconds: (rides as any).offerExpirySeconds ?? 45,
       requireClientApproval: (rides as any).requireClientApproval ?? true,
+      // Marge laissée au client après la fin du compte à rebours (latence réseau)
+      offerApprovalGraceSeconds: (rides as any).offerApprovalGraceSeconds ?? 5,
     };
   }
 

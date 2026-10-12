@@ -17,6 +17,7 @@ import { CreateRideDto } from "./dto/create-ride.dto";
 import { LatLng, buildRadar, haversineKm, isRideExpired, rideAgeMinutes } from "./radar";
 import { haversineMeters } from "./odometer";
 import { buildDisplayName, buildDriverDisplayName } from "./display-name";
+import { offerPushText } from "./offer-texts";
 
 // Le client attaché à la course, tel que le chauffeur le reçoit.
 // On envoie firstName, lastName, fullName, phone pour pouvoir calculer displayName.
@@ -547,18 +548,9 @@ export class RidesService {
 
       const ride = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
       this.gateway.invalidateRideLocationContext(rideId);
-      await this.notifications.push(
-        ride.clientId,
-        "Un Zem a accepté ta course",
-        "Vois son profil et confirme avant de partir.",
-        "ride",
-        {
-          sendPush: true,
-          data: { event: "ride-offered", rideId },
-          titleKey: "NOTIFICATION_RIDE_OFFERED",
-          bodyKey: "NOTIFICATION_RIDE_OFFERED_BODY",
-        }
-      ).catch(() => null);
+      // Popup du client : événement temps réel + notification poussée. NON bloquant : la réponse au Zem ne
+      // doit jamais attendre la livraison d'une notification (l'API Expo peut mettre 6 s à répondre).
+      void this.announceOffer(rideId).catch((e) => this.logger.warn(`announceOffer ${rideId} : ${e?.message ?? e}`));
       this.gateway.emitStatus(rideId, "OFFERED");
       this.gateway.emitRideRemoved(rideId, "offered");
       return this.withoutPickupCode(ride);
@@ -592,13 +584,16 @@ export class RidesService {
       const full = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
       return this.visibleRideToUser(full, clientId);
     }
-    if (ride.status !== "OFFERED") throw new BadRequestException("Cette proposition n'est plus disponible");
-    if (!ride.offerExpiresAt || ride.offerExpiresAt < new Date()) throw new BadRequestException("La proposition a expiré");
+    if (ride.status !== "OFFERED") throw this.offerEnded("Cette proposition n'est plus disponible");
+    // Marge de confirmation : on absorbe la latence réseau après la fin du compte à rebours
+    const cutoff = new Date(Date.now() - this.offerGraceMs());
+    if (!ride.offerExpiresAt || ride.offerExpiresAt < cutoff) throw this.offerEnded("La proposition a expiré");
     const { count } = await this.prisma.ride.updateMany({
-      where: { id: rideId, clientId, status: "OFFERED", offerExpiresAt: { gt: new Date() } },
-      data: { status: "MATCHED", matchedAt: new Date(), offeredAt: null, offerExpiresAt: null },
+      where: { id: rideId, clientId, status: "OFFERED", offerExpiresAt: { gt: cutoff } },
+      data: { status: "MATCHED", matchedAt: new Date(), offeredAt: null, offerExpiresAt: null, offerSeenAt: null },
     });
-    if (count === 0) throw new BadRequestException("La proposition a expiré ou n'est plus disponible");
+    if (count === 0) throw this.offerEnded("La proposition a expiré ou n'est plus disponible");
+    this.gateway.emitOfferEnded(clientId, rideId, "approved");
     const updated = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
     this.gateway.invalidateRideLocationContext(rideId);
     if (ride.driverId) {
@@ -618,7 +613,7 @@ export class RidesService {
     const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
     if (!ride) throw new NotFoundException("Course introuvable");
     if (ride.clientId !== clientId) throw new ForbiddenException();
-    if (ride.status !== "OFFERED") throw new BadRequestException("Aucune proposition à refuser");
+    if (ride.status !== "OFFERED") throw this.offerEnded("Aucune proposition à refuser");
     return this.revertOfferToPending(ride, ride.driverId, "declined");
   }
 
@@ -628,7 +623,7 @@ export class RidesService {
     if (!ride) throw new NotFoundException("Course introuvable");
     if (ride.driverId !== driverId) throw new ForbiddenException("Cette proposition ne vous est pas attribuée");
     if (ride.status === "MATCHED") throw new BadRequestException("La course est déjà confirmée. Utilise l'annulation normale.");
-    if (ride.status !== "OFFERED") throw new BadRequestException("Aucune proposition à retirer");
+    if (ride.status !== "OFFERED") throw this.offerEnded("Aucune proposition à retirer");
     return this.revertOfferToPending(ride, driverId, "withdrawn");
   }
 
@@ -643,9 +638,17 @@ export class RidesService {
 
     const { count } = await this.prisma.ride.updateMany({
       where: { id: ride.id, status: "OFFERED" },
-      data: { status: "PENDING", driverId: null, offeredAt: null, offerExpiresAt: null, declinedDriverIds: newDeclined },
+      data: { status: "PENDING", driverId: null, offeredAt: null, offerExpiresAt: null, offerSeenAt: null, declinedDriverIds: newDeclined },
     });
     if (count === 0) return { rideId: ride.id, status: "PENDING" };
+
+    // Ferme la popup du client et retire la notification qui serait restée dans sa barre (sauf s'il vient de refuser lui-même)
+    this.gateway.emitOfferEnded(ride.clientId, ride.id, reason);
+    if (reason !== "declined") {
+      void this.notifications
+        .pushSilent?.(ride.clientId, { event: "ride-offer-ended", rideId: ride.id, outcome: reason }, { channelId: "ride-offers" })
+        ?.catch?.(() => null);
+    }
 
     if (driverId && reason === "declined") {
       await this.notifications.push(driverId, "Le client a choisi un autre Zem.", "", "ride",
@@ -689,14 +692,14 @@ export class RidesService {
       select: { id: true, clientId: true, driverId: true, status: true, declinedDriverIds: true, offerExpiresAt: true },
     });
     if (!ride || ride.status !== "OFFERED") return false;
-    if (!ride.offerExpiresAt || ride.offerExpiresAt > new Date()) return false;
+    if (!ride.offerExpiresAt || ride.offerExpiresAt > new Date(Date.now() - this.offerGraceMs())) return false;
     await this.revertOfferToPending(ride, ride.driverId, "expired");
     return true;
   }
 
   async expireAllPendingOffers(): Promise<void> {
     const expired = await this.prisma.ride.findMany({
-      where: { status: "OFFERED", offerExpiresAt: { lt: new Date() } },
+      where: { status: "OFFERED", offerExpiresAt: { lt: new Date(Date.now() - this.offerGraceMs()) } },
       select: { id: true, clientId: true, driverId: true, status: true, declinedDriverIds: true, offerExpiresAt: true },
     });
     await Promise.all(
@@ -706,6 +709,117 @@ export class RidesService {
         })
       )
     );
+  }
+
+  /** Marge (ms) laissée au client après la fin du compte à rebours. */
+  private offerGraceMs(): number {
+    const seconds = this.pricing.rideSettings?.()?.offerApprovalGraceSeconds;
+    return (typeof seconds === "number" ? seconds : 5) * 1000;
+  }
+
+  /** Proposition terminée : code stable que le mobile traduit (RIDE_OFFER_ENDED). */
+  private offerEnded(message: string) {
+    return new BadRequestException({ code: "RIDE_OFFER_ENDED", message });
+  }
+
+  /**
+   * Contenu de la popup du client : profil public du Zem + délai, avec l'heure du serveur pour que le compte à
+   * rebours ne dépende pas de l'horloge du téléphone. Même contenu pour l'événement `ride:offered` et pour
+   * `GET /rides/offers/pending`. Jamais de téléphone, d'identifiant ni de nom complet du Zem.
+   */
+  private async loadOfferPayload(rideId: string) {
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: rideId },
+      select: {
+        clientId: true, driverId: true, status: true, price: true, originLabel: true, destLabel: true,
+        originLat: true, originLng: true, offerExpiresAt: true, driverLat: true, driverLng: true,
+      },
+    });
+    if (!ride || ride.status !== "OFFERED" || !ride.driverId || !ride.offerExpiresAt) return null;
+    const driver = await this.prisma.user.findUnique({
+      where: { id: ride.driverId },
+      select: {
+        fullName: true, firstName: true, lastName: true, createdAt: true,
+        provider: {
+          select: {
+            fullName: true, city: true, zones: true, bio: true, experienceYears: true,
+            vehicleType: true, vehicleModel: true, plateNumber: true, status: true,
+            kycScore: true, rating: true, ratingCount: true, jobsCompleted: true, agencyName: true,
+          },
+        },
+      },
+    });
+    if (!driver) return null;
+    const { offer, ...profile } = this.buildPublicDriverProfile(driver, ride) as ReturnType<RidesService["buildPublicDriverProfile"]> & {
+      offer?: { distanceKm: number | null; etaMinutes: number | null };
+    };
+    const now = new Date();
+    return {
+      clientId: ride.clientId,
+      payload: {
+        rideId,
+        expiresAt: ride.offerExpiresAt.toISOString(),
+        serverNow: now.toISOString(),
+        expiresInSeconds: Math.max(0, Math.round((ride.offerExpiresAt.getTime() - now.getTime()) / 1000)),
+        price: ride.price,
+        originLabel: ride.originLabel ?? null,
+        destLabel: ride.destLabel ?? null,
+        driver: profile,
+        offer: { distanceKm: offer?.distanceKm ?? null, etaMinutes: offer?.etaMinutes ?? null },
+      },
+    };
+  }
+
+  /** Prévient le client qu'un Zem a accepté : événement temps réel + notification poussée dédiée. */
+  private async announceOffer(rideId: string) {
+    const loaded = await this.loadOfferPayload(rideId);
+    if (!loaded) return;
+    const { clientId, payload } = loaded;
+    this.gateway.emitOffered(clientId, payload);
+    const user = await this.prisma.user.findUnique({ where: { id: clientId }, select: { language: true } }).catch(() => null);
+    const text = offerPushText(user?.language, payload.expiresInSeconds);
+    await this.notifications.push(clientId, text.title, text.body, "ride", {
+      sendPush: true,
+      // Canal Android dédié (son et vibration forts) et durée de vie = délai de la proposition :
+      // une alerte périmée n'est jamais livrée.
+      channelId: "ride-offers",
+      ttlSeconds: payload.expiresInSeconds,
+      // Pas de profil complet dans la notification (taille et écran verrouillé) : le mobile le relit
+      data: { event: "ride-offered", rideId, expiresAt: payload.expiresAt, serverNow: payload.serverNow },
+      titleKey: "NOTIFICATION_RIDE_OFFERED",
+      bodyKey: "NOTIFICATION_RIDE_OFFERED_BODY",
+      params: { s: payload.expiresInSeconds },
+    });
+  }
+
+  /** Propositions de Zem en attente de la décision du client (rattrapage de la popup). */
+  async pendingOffers(clientId: string) {
+    const cutoff = new Date(Date.now() - this.offerGraceMs());
+    const rides = await this.prisma.ride.findMany({
+      where: { clientId, status: "OFFERED", offerExpiresAt: { gt: cutoff } },
+      select: { id: true },
+    });
+    const loaded = await Promise.all(rides.map((r) => this.loadOfferPayload(r.id)));
+    return { offers: loaded.flatMap((entry) => (entry ? [entry.payload] : [])) };
+  }
+
+  /** Le client a ouvert la popup : le Zem peut afficher « Le client regarde ton profil ». Idempotent. */
+  async offerSeen(rideId: string, clientId: string) {
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: rideId },
+      select: { clientId: true, driverId: true, status: true, offerSeenAt: true },
+    });
+    if (!ride) throw new NotFoundException("Course introuvable");
+    if (ride.clientId !== clientId) throw new ForbiddenException();
+    if (ride.status !== "OFFERED") throw this.offerEnded("La proposition est terminée");
+    if (ride.offerSeenAt) return { seenAt: ride.offerSeenAt.toISOString() };
+    const seenAt = new Date();
+    const { count } = await this.prisma.ride.updateMany({
+      where: { id: rideId, clientId, status: "OFFERED", offerSeenAt: null },
+      data: { offerSeenAt: seenAt },
+    });
+    if (count === 1 && ride.driverId) this.gateway.emitOfferSeen(ride.driverId, rideId, seenAt.toISOString());
+    return { seenAt: seenAt.toISOString() };
   }
 
   async driverProfile(rideId: string, clientId: string) {
@@ -1406,6 +1520,7 @@ export class RidesService {
           },
         });
     this.gateway.clearRideLocations(rideId);
+    if (isClient && ride.status === "OFFERED") this.gateway.emitOfferEnded(ride.clientId, rideId, "cancelled");
 
     if (isClient) {
       if (ride.driverId) {

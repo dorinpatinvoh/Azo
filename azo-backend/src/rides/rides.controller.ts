@@ -125,6 +125,14 @@ export class RidesController {
     return this.rides.history(user.userId);
   }
 
+  // GET /rides/offers/pending — propositions de Zem en attente de ma décision (rattrapage de la popup).
+  // Déclaré AVANT @Get(":id") pour ne pas être pris pour un identifiant de course.
+  @Get("offers/pending")
+  @Roles(Role.CLIENT)
+  pendingOffers(@CurrentUser() user) {
+    return this.rides.pendingOffers(user.userId);
+  }
+
   // GET /rides/pending/summary?lat=…&lng=…&radiusKm=10  — compteur radar (DOIT être avant /pending)
   @Get("pending/summary")
   @Roles(Role.DRIVER)
@@ -177,6 +185,13 @@ export class RidesController {
   @Roles(Role.CLIENT)
   approveDriver(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.approveDriver(id, user.userId);
+  }
+
+  /** Le client a ouvert la popup : le Zem le voit (« Le client regarde ton profil »). Idempotent. */
+  @Post(":id/offer-seen")
+  @Roles(Role.CLIENT)
+  offerSeen(@Param("id") id: string, @CurrentUser() user) {
+    return this.rides.offerSeen(id, user.userId);
   }
 
   /** Client refuse la proposition du Zem → PENDING */

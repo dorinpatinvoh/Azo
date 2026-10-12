@@ -80,7 +80,8 @@
     "destinationToleranceMeters": 150,
     "routeCacheSeconds": 5,
     "offerExpirySeconds": 45,
-    "requireClientApproval": true
+    "requireClientApproval": true,
+    "offerApprovalGraceSeconds": 5
   },
 
   "agencyLevels": {
