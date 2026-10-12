@@ -4,6 +4,8 @@ import { WalletController } from "./wallet.controller";
 import { FedaPayService } from "./fedapay.service";
 import { PricingModule } from "../pricing/pricing.module";
 
+export { WalletService } from "./wallet.service";
+
 @Module({
   imports: [PricingModule],
   controllers: [WalletController],
