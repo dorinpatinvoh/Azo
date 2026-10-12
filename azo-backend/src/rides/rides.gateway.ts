@@ -747,6 +747,12 @@ export class RidesGateway implements OnGatewayConnection {
     this.server?.to(`user:${clientId}`).emit("ride:offer-ended", { rideId, outcome, at: new Date().toISOString() });
   }
 
+  /** Le client a choisi ce Zem : il passe à la carte sans avoir rejoint la room de la course. */
+  emitOfferApproved(driverId: string, rideId: string) {
+    this.server?.to(`user:${driverId}`).emit("ride:offer-approved", { rideId, at: new Date().toISOString() });
+    this.server?.to(`user:${driverId}`).emit("ride:status", { rideId, status: "MATCHED" });
+  }
+
   /** Le client a ouvert la popup : le Zem peut afficher « Le client regarde ton profil ». */
   emitOfferSeen(driverId: string, rideId: string, at: string) {
     this.server?.to(`user:${driverId}`).emit("ride:offer-seen", { rideId, at });

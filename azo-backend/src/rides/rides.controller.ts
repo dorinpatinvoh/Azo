@@ -133,6 +133,13 @@ export class RidesController {
     return this.rides.pendingOffers(user.userId);
   }
 
+  // GET /rides/offers/current — ma proposition en cours + la dernière terminée (reprise après redémarrage du Zem).
+  @Get("offers/current")
+  @Roles(Role.DRIVER)
+  currentOffer(@CurrentUser() user) {
+    return this.rides.currentOffer(user.userId);
+  }
+
   // GET /rides/pending/summary?lat=…&lng=…&radiusKm=10  — compteur radar (DOIT être avant /pending)
   @Get("pending/summary")
   @Roles(Role.DRIVER)

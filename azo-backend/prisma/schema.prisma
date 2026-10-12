@@ -303,6 +303,7 @@ model Ride {
   offerExpiresAt      DateTime?   // offeredAt + rides.offerExpirySeconds
   offerSeenAt         DateTime?   // quand le client a ouvert la popup de la proposition (null = pas encore vu)
   declinedDriverIds   String[]    @default([]) // Zem exclus de cette demande (refusés, sans réponse, retirés)
+  offers              RideOffer[]
   matchedAt           DateTime?   // quand le client a confirmé (OFFERED → MATCHED)
   completedAt         DateTime?   // quand la course est passée à COMPLETED
   trackPoints                 RideTrackPoint[]
@@ -571,4 +572,20 @@ model RideTip {
 
   @@index([driverId, createdAt])
   @@index([clientId, createdAt])
+}
+
+/// Historique des propositions de Zem (mode confirmation) : permet au Zem de savoir comment sa proposition s'est terminée
+/// même après avoir été détaché de la course (DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md).
+model RideOffer {
+  id        String    @id @default(uuid())
+  rideId    String
+  ride      Ride      @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  driverId  String
+  status    String    // OFFERED | APPROVED | DECLINED | EXPIRED | WITHDRAWN | CANCELLED
+  offeredAt DateTime  @default(now())
+  expiresAt DateTime
+  endedAt   DateTime?
+
+  @@index([driverId, status])
+  @@index([rideId, driverId])
 }

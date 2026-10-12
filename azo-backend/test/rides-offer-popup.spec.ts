@@ -56,6 +56,7 @@ function makeService(initial: Partial<State> = {}, opts: { pushNever?: boolean }
     createdAt: new Date(),
     client: { fullName: "Kossi Adjovi", phone: "+22901000000", firstName: "Kossi", lastName: "Adjovi" },
   });
+  const offers: any[] = [];
   const prisma = {
     ride: {
       findUnique: jest.fn().mockImplementation(() => Promise.resolve(rideRow())),
@@ -74,6 +75,23 @@ function makeService(initial: Partial<State> = {}, opts: { pushNever?: boolean }
         if ("offerExpiresAt" in data) state.offerExpiresAt = data.offerExpiresAt;
         if ("offerSeenAt" in data) state.offerSeenAt = data.offerSeenAt;
         return Promise.resolve({ count: 1 });
+      }),
+    },
+    rideOffer: {
+      create: jest.fn().mockImplementation(({ data }) => {
+        offers.push({ ...data, endedAt: null });
+        return Promise.resolve(data);
+      }),
+      updateMany: jest.fn().mockImplementation(({ where, data }) => {
+        const open = offers.filter((o) => o.rideId === where.rideId && o.driverId === where.driverId && o.status === where.status);
+        open.forEach((o) => Object.assign(o, data));
+        return Promise.resolve({ count: open.length });
+      }),
+      findFirst: jest.fn().mockImplementation(({ where }) => {
+        const found = offers
+          .filter((o) => o.driverId === where.driverId && (!where.rideId || o.rideId === where.rideId) && o.status !== "OFFERED" && o.endedAt)
+          .sort((a, b) => b.endedAt.getTime() - a.endedAt.getTime())[0];
+        return Promise.resolve(found ?? null);
       }),
     },
     user: {
@@ -124,10 +142,11 @@ function makeService(initial: Partial<State> = {}, opts: { pushNever?: boolean }
     emitOffered: jest.fn(),
     emitOfferEnded: jest.fn(),
     emitOfferSeen: jest.fn(),
+    emitOfferApproved: jest.fn(),
     clearRideLocations: jest.fn(),
   };
   const service = new RidesService(prisma as any, {} as any, notifications as any, pricing as any, gateway as any);
-  return { service, prisma, notifications, gateway, state };
+  return { service, prisma, notifications, gateway, state, offers };
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -359,5 +378,94 @@ describe("offerPushText", () => {
   it("retombe sur le français pour une langue inconnue ou absente", () => {
     expect(offerPushText("xx", 10).title).toBe("Un Zem a accepté ta course");
     expect(offerPushText(null, 10).title).toBe("Un Zem a accepté ta course");
+  });
+});
+
+describe("fin de proposition : le Zem est informé (DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md)", () => {
+  const offered = () => ({ status: "OFFERED", driverId, offerExpiresAt: new Date(Date.now() + 30_000) });
+
+  it("accept crée la trace de la proposition", async () => {
+    const { service, offers } = makeService();
+    await service.accept(rideId, driverId);
+    expect(offers).toHaveLength(1);
+    expect(offers[0]).toMatchObject({ rideId, driverId, status: "OFFERED" });
+  });
+
+  it("le client refuse : le Zem lit offerOutcome=declined (jamais 403) et reçoit ride:offer-ended", async () => {
+    const { service, gateway } = makeService();
+    await service.accept(rideId, driverId);
+    await service.declineDriver(rideId, clientId);
+    expect(gateway.emitOfferEnded).toHaveBeenCalledWith(driverId, rideId, "declined");
+    const view: any = await service.findOne(rideId, driverId);
+    expect(view).toMatchObject({ id: rideId, status: "PENDING", driverId: null, offerOutcome: "declined" });
+    expect(view.offerEndedAt).toEqual(expect.any(String));
+  });
+
+  it("la vue restreinte ne contient ni position, ni téléphone, ni nom complet du client", async () => {
+    const { service } = makeService();
+    await service.accept(rideId, driverId);
+    await service.declineDriver(rideId, clientId);
+    const serialized = JSON.stringify(await service.findOne(rideId, driverId));
+    for (const secret of ["clientLat", "phone", "Adjovi", "+2290", "originLat"]) expect(serialized).not.toContain(secret);
+  });
+
+  it("expiration : offerOutcome=expired + notification push au Zem", async () => {
+    const { service, notifications, gateway, state } = makeService();
+    await service.accept(rideId, driverId);
+    await flush();
+    state.offerExpiresAt = new Date(Date.now() - 10_000); // au-delà de la marge de 5 s
+    notifications.push.mockClear();
+    await service.findOne(rideId, driverId);
+    expect(gateway.emitOfferEnded).toHaveBeenCalledWith(driverId, rideId, "expired");
+    expect(notifications.push).toHaveBeenCalledWith(
+      driverId, expect.any(String), expect.any(String), "ride",
+      expect.objectContaining({ sendPush: true, data: { event: "ride-offer-expired", rideId } })
+    );
+    expect(await service.findOne(rideId, driverId)).toMatchObject({ offerOutcome: "expired" });
+  });
+
+  it("retrait par le Zem : offerOutcome=withdrawn", async () => {
+    const { service, gateway } = makeService();
+    await service.accept(rideId, driverId);
+    await service.withdrawOffer(rideId, driverId);
+    expect(gateway.emitOfferEnded).toHaveBeenCalledWith(driverId, rideId, "withdrawn");
+    expect(await service.findOne(rideId, driverId)).toMatchObject({ offerOutcome: "withdrawn" });
+  });
+
+  it("le client choisit ce Zem : ride:offer-approved vers le Zem, sans room de course", async () => {
+    const { service, gateway, offers } = makeService();
+    await service.accept(rideId, driverId);
+    await service.approveDriver(rideId, clientId);
+    expect(gateway.emitOfferApproved).toHaveBeenCalledWith(driverId, rideId);
+    expect(offers[0].status).toBe("APPROVED");
+  });
+
+  it("un Zem sans aucune proposition sur cette course reçoit 403", async () => {
+    const { service } = makeService(offered());
+    await expect(service.findOne(rideId, "intrus")).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("GET /rides/offers/current : proposition en cours puis dernière terminée", async () => {
+    const { service, prisma } = makeService();
+    await service.accept(rideId, driverId);
+    (prisma.ride.findFirst as jest.Mock).mockResolvedValueOnce({
+      id: rideId, price: 1200, vehicleType: "ZEM_ELECTRIC", originLabel: "A", destLabel: "B",
+      offerExpiresAt: new Date(Date.now() + 30_000), offerSeenAt: null,
+    });
+    const during: any = await service.currentOffer(driverId);
+    expect(during.offer).toMatchObject({ rideId, status: "OFFERED" });
+    expect(during.lastEnded).toBeNull();
+    await service.declineDriver(rideId, clientId);
+    const after: any = await service.currentOffer(driverId);
+    expect(after.offer).toBeNull();
+    expect(after.lastEnded).toMatchObject({ rideId, outcome: "declined" });
+  });
+
+  it("annulation du client pendant OFFERED : offerOutcome=cancelled", async () => {
+    const { service, gateway, prisma } = makeService();
+    await service.accept(rideId, driverId);
+    (prisma.ride as any).update = jest.fn().mockResolvedValue({ id: rideId, status: "CANCELLED" });
+    await service.cancel(rideId, clientId).catch(() => undefined);
+    expect(gateway.emitOfferEnded).toHaveBeenCalledWith(driverId, rideId, "cancelled");
   });
 });
