@@ -441,7 +441,7 @@ export class RidesService {
       include: {
         client: { select: { fullName: true, firstName: true, lastName: true } },
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
     });
 
     const { rides: radar, expired } = buildRadar(rides, {

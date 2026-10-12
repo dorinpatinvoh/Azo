@@ -17,7 +17,7 @@ Trois règles décident de ce qu'un chauffeur voit dans son radar :
    reçoit aucune demande de transport).
 2. **Sa position** — quand l'application transmet la position du chauffeur
    (`GET /rides/pending?lat=…&lng=…`), les demandes situées **au-delà du rayon de recherche**
-   sont écartées, et les autres sont classées **de la plus proche à la plus lointaine**.
+   sont écartées ; la distance est calculée pour l'affichage, et les demandes restent classées **de la plus récente à la plus ancienne**.
 3. **Le temps** — une demande sans chauffeur **expire** au bout du délai configuré : elle
    disparaît du radar et est **annulée automatiquement**, sans aucun débit client.
 
@@ -44,7 +44,7 @@ notifications) et s'appliquent **sans redéploiement de code** : il suffit de mo
 `tarification.json` puis de resynchroniser l'application (`npm run sync:tarification`).
 
 Sans position connue (GPS refusé, téléphone sans GPS), le radar reste utilisable : aucune
-demande n'est écartée et le classement se fait **du plus ancien au plus récent**.
+demande n'est écartée et le classement se fait **du plus récent au plus ancien**.
 
 ## 3. Ce que reçoit l'application
 

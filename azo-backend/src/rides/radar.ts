@@ -8,13 +8,14 @@
  *      (voir `RidesService`) ;
  *   2. **lesquelles sont proches du chauffeur ?** quand l'application transmet sa position
  *      (`GET /rides/pending?lat=…&lng=…`), les demandes au-delà du rayon configuré
- *      (`searchRadiusKm`, 0 = pas de limite) sont écartées, et les autres sont classées de
- *      la plus proche à la plus lointaine ;
+ *      (`searchRadiusKm`, 0 = pas de limite) sont écartées, et la distance de chaque demande
+ *      est calculée pour l'affichage (elle ne sert pas au classement) ;
  *   3. **depuis / pendant combien de temps ?** chaque demande porte son âge et le temps
  *      restant avant expiration, affichés tels quels dans l'application.
  *
- * Sans position (GPS refusé, téléphone sans GPS), le radar reste utilisable : aucune
- * demande n'est écartée et le classement se fait du plus ancien au plus récent.
+ * Le classement est toujours le même : de la demande la plus récente à la plus ancienne,
+ * avec ou sans position. Sans position (GPS refusé, téléphone sans GPS), le radar reste
+ * utilisable : aucune demande n'est écartée et `distanceKm` vaut `null`.
  */
 
 export type RadarSettings = {
@@ -135,11 +136,8 @@ export function buildRadar<T extends RadarableRide>(
     });
   }
 
-  const createdAsc = (a: RadarRide<T>, b: RadarRide<T>) => toMs(a.createdAt) - toMs(b.createdAt);
-  fresh.sort((a, b) => {
-    if (a.distanceKm == null || b.distanceKm == null) return createdAsc(a, b);
-    return a.distanceKm === b.distanceKm ? createdAsc(a, b) : a.distanceKm - b.distanceKm;
-  });
+  const createdDesc = (a: RadarRide<T>, b: RadarRide<T>) => toMs(b.createdAt) - toMs(a.createdAt);
+  fresh.sort(createdDesc);
 
   return { rides: fresh, expired };
 }
