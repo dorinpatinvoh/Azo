@@ -1,5 +1,7 @@
 import { registerRootComponent } from 'expo';
 
+// Doit rester le premier import applicatif : voir theme/fontPatch.ts
+import './theme/fontPatch';
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

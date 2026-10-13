@@ -173,8 +173,8 @@ const DEFAULT_AGENCY_PLANS: {
   maxAccounts: number;
   commissionRate: number;
 }[] = [
-  { plan: "PRO", label: "Agence Pro", fee: 100000, maxAccounts: 25, commissionRate: 0.03 },
-  { plan: "SILVER", label: "Agence Silver", fee: 215500, maxAccounts: 50, commissionRate: 0.025 },
+  { plan: "PRO", label: "Agence Pro", fee: 100000, maxAccounts: 10, commissionRate: 0.03 },
+  { plan: "SILVER", label: "Agence Silver", fee: 215500, maxAccounts: 25, commissionRate: 0.025 },
   { plan: "OR", label: "Agence Or", fee: 450500, maxAccounts: 100, commissionRate: 0.02 },
   { plan: "DIAMANT", label: "Agence Diamant", fee: 600500, maxAccounts: 1000, commissionRate: 0.01 },
 ];

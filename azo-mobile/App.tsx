@@ -11,8 +11,17 @@ import { useFonts as useInter, Inter_400Regular } from "@expo-google-fonts/inter
 import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
-import SplashScreen from "./screens/SplashScreen";
-import OtpLoginScreen from "./screens/OtpLoginScreen";
+import SplashScreen, { ONBOARDING_SEEN_KEY } from "./screens/SplashScreen";
+import AssistOfferScreen from "./screens/AssistOfferScreen";
+import LanguageScreen from "./screens/LanguageScreen";
+import PersonalInfoScreen from "./screens/PersonalInfoScreen";
+import HelpScreen from "./screens/HelpScreen";
+import MessagesScreen from "./screens/MessagesScreen";
+import { clearAvatar } from "./utils/avatar";
+import { useOfferWatcher } from "./hooks/useOfferWatcher";
+import OfferPopup from "./components/OfferPopup";
+import { I18nProvider, isVoiceOfferAnswered, loadI18n, markVoiceOfferAnswered, tr, useI18n } from "./i18n";
+import OtpLoginScreen, { REGISTRATION_PENDING_KEY } from "./screens/OtpLoginScreen";
 import HomeScreen from "./screens/HomeScreen";
 import RideBookingScreen from "./screens/RideBookingScreen";
 import LiveTrackingScreen from "./screens/LiveTrackingScreen";
@@ -39,13 +48,16 @@ import {
   ProviderType,
   setApiUrl,
   setToken,
+  userApi,
 } from "./services/api";
 import {
   registerForPushNotifications,
   setupNotificationHandler,
+  subscribeNotificationReceived,
   subscribeNotificationResponse,
 } from "./services/pushNotifications";
 import { colors, radius, spacing } from "./theme/colors";
+import { FONT } from "./theme/fontNormalize";
 
 // Initialisation sûre (ne s'exécute pas sur Expo Go Android)
 setupNotificationHandler();
@@ -97,10 +109,10 @@ class RootErrorBoundary extends React.Component<
     if (this.state.hasError) {
       return (
         <View style={styles.loadingContainer}>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: colors.onSurface, marginBottom: 8 }}>
+          <Text style={{ fontSize: 18, fontFamily: FONT.bold, color: colors.onSurface, marginBottom: 8 }}>
             Oups, un affichage a été interrompu
           </Text>
-          <Text style={{ fontSize: 13, color: colors.onSurfaceVariant, textAlign: "center", paddingHorizontal: 24, marginBottom: 16 }}>
+          <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: colors.onSurfaceVariant, textAlign: "center", paddingHorizontal: 24, marginBottom: 16 }}>
             {this.state.errorText}
           </Text>
           <Pressable
@@ -115,7 +127,7 @@ class RootErrorBoundary extends React.Component<
               borderRadius: radius.full,
             }}
           >
-            <Text style={{ color: "#fff", fontWeight: "700" }}>Revenir à l'accueil</Text>
+            <Text style={{ color: "#fff", fontFamily: FONT.bold }}>Revenir à l'accueil</Text>
           </Pressable>
         </View>
       );
@@ -124,7 +136,8 @@ class RootErrorBoundary extends React.Component<
   }
 }
 
-export default function App() {
+function AppInner() {
+  const { setVoiceAssist, lang } = useI18n();
   const [route, setRoute] = useState<Route>("splash");
   const [rideId, setRideId] = useState<string | undefined>();
   const [rideLabel, setRideLabel] = useState<string | undefined>();
@@ -132,6 +145,19 @@ export default function App() {
   const [isAuthRestoring, setIsAuthRestoring] = useState<boolean>(true);
   const [forceReady, setForceReady] = useState<boolean>(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  // Langue de l'application → serveur (notifications et libellés traduits). Sans effet si la route est absente.
+  useEffect(() => {
+    if (!sessionToken) return;
+    userApi.setLanguage(lang).catch(() => undefined);
+  }, [lang, sessionToken]);
+
+  // Popup « un Zem a accepté ta course » : par-dessus n'importe quel écran du client
+  // Écran d'où le portefeuille a été ouvert (l'agence y revient, pas à l'accueil client)
+  const [walletBack, setWalletBack] = useState<Route>("home");
+  const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "rental"];
+  const offerWatcher = useOfferWatcher(!!sessionToken && clientRoutes.includes(route), route === "ride-tracking");
+  // Session ouverte mais inscription (nom, prénom, sexe, NPI) pas terminée : on rouvre le formulaire.
+  const [resumeRegistration, setResumeRegistration] = useState(false);
   const pushTokenRef = useRef<string | null>(null);
   const pendingRideNotificationRef = useRef<string | null>(null);
   const handledNotificationRef = useRef<string | null>(null);
@@ -152,6 +178,15 @@ export default function App() {
     setRoute(r);
   }, []);
 
+  // « Commencer » ou « Passer » : on retient que l'onboarding a été vu, puis connexion.
+  const finishOnboarding = useCallback(() => {
+    SecureStore.setItemAsync(ONBOARDING_SEEN_KEY, "1").catch(() => {
+      // Stockage indisponible : l'onboarding se réaffichera à la prochaine ouverture, sans gravité.
+    });
+    // La question « aide vocale ? » n'est posée qu'une fois ; ensuite on va droit à la connexion.
+    goTo(isVoiceOfferAnswered() ? "otp" : "assist-offer");
+  }, [goTo]);
+
   const handleRideNotification = useCallback(
     (notification: any) => {
       const notificationId = notification?.request?.identifier;
@@ -166,9 +201,10 @@ export default function App() {
       }
       setRideId(notifiedRideId);
       setRideLabel(undefined);
+      offerWatcher.watch(notifiedRideId);
       goTo("ride-tracking");
     },
-    [goTo, sessionToken]
+    [goTo, sessionToken, offerWatcher.watch]
   );
 
   useEffect(() => {
@@ -185,6 +221,13 @@ export default function App() {
     });
     return () => { active = false; };
   }, [sessionToken]);
+
+  useEffect(() => {
+    return subscribeNotificationReceived((notification: any) => {
+      const data = notification?.request?.content?.data;
+      if (data?.event === "ride-offered" && typeof data.rideId === "string") offerWatcher.watch(data.rideId);
+    });
+  }, [offerWatcher.watch]);
 
   useEffect(() => {
     const unsubscribe = subscribeNotificationResponse(handleRideNotification);
@@ -226,7 +269,7 @@ export default function App() {
           goTo("marketplace");
           break;
         default:
-          Alert.alert("Bientôt disponible", "Ce service arrive prochainement.");
+          Alert.alert(tr("app.soon.title"), tr("app.soon.text"));
       }
     },
     [goTo]
@@ -247,6 +290,9 @@ export default function App() {
       await SecureStore.deleteItemAsync("userToken");
       await SecureStore.deleteItemAsync("providerStatus");
       await SecureStore.deleteItemAsync("providerType");
+      await SecureStore.deleteItemAsync(REGISTRATION_PENDING_KEY);
+      await clearAvatar();
+      setResumeRegistration(false);
     } catch (error) {
       console.warn("Erreur lors de la suppression des jetons SecureStore :", error);
     } finally {
@@ -259,6 +305,7 @@ export default function App() {
 
     async function restoreSession() {
       try {
+        await loadI18n();
         const customUrl = await SecureStore.getItemAsync("customApiUrl");
         if (customUrl) setApiUrl(customUrl);
         const savedRole = await SecureStore.getItemAsync("userRole");
@@ -268,12 +315,20 @@ export default function App() {
 
         if (savedRole) {
           if (savedToken) setSessionToken(savedToken);
+          if (savedToken && (await SecureStore.getItemAsync(REGISTRATION_PENDING_KEY))) {
+            setResumeRegistration(true);
+            setRoute("otp");
+            return;
+          }
           const role = savedRole.toUpperCase().trim();
           const savedProviderStatus = await SecureStore.getItemAsync("providerStatus");
           const savedProviderType = await SecureStore.getItemAsync("providerType");
           setRoute(routeFor(role, savedProviderStatus, savedProviderType));
         } else {
-          setRoute("splash");
+          // Pas de session : l'onboarding n'est montré qu'à la toute première ouverture de
+          // l'application. Ensuite (déconnexion, session expirée) on va directement à la connexion.
+          const onboardingSeen = await SecureStore.getItemAsync(ONBOARDING_SEEN_KEY);
+          setRoute(onboardingSeen ? "otp" : "splash");
         }
       } catch (error) {
         console.warn("Erreur lors de la récupération de la session :", error);
@@ -309,11 +364,37 @@ export default function App() {
       <RootErrorBoundary onReset={() => goTo("splash")}>
         <StatusBar style="dark" />
 
-        {route === "splash" && <SplashScreen onStart={() => goTo("otp")} />}
+        {route === "splash" && <SplashScreen onStart={finishOnboarding} />}
+
+        {route === "assist-offer" && (
+          <AssistOfferScreen
+            onYes={() => {
+              setVoiceAssist(true);
+              goTo("language");
+            }}
+            onNo={() => {
+              setVoiceAssist(false);
+              markVoiceOfferAnswered();
+              goTo("otp");
+            }}
+          />
+        )}
+
+        {route === "language" && (
+          <LanguageScreen
+            onContinue={() => {
+              markVoiceOfferAnswered();
+              goTo("otp");
+            }}
+            onBack={() => goTo("assist-offer")}
+          />
+        )}
 
         {route === "otp" && (
           <OtpLoginScreen
+            resumeRegistration={resumeRegistration}
             onVerified={(role?: string | null, provider?: ProviderRef | null) => {
+              setResumeRegistration(false);
               setSessionToken(getToken());
               goTo(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null));
             }}
@@ -334,6 +415,7 @@ export default function App() {
             onBack={() => goTo("home")}
             onRecharge={() => goTo("wallet")}
             onConfirmed={(id, label) => {
+              offerWatcher.watch(id);
               setRideId(id);
               setRideLabel(label);
               goTo("ride-tracking");
@@ -351,9 +433,9 @@ export default function App() {
         )}
         {route === "ride-tracking" && !rideId && (
           <View style={styles.loadingContainer}>
-            <Text>Aucune course à suivre.</Text>
+            <Text style={{ fontFamily: FONT.regular }}>Aucune course à suivre.</Text>
             <Pressable onPress={() => goTo("home")} style={{ marginTop: spacing.md }}>
-              <Text style={{ color: colors.primary, fontWeight: "700" }}>Retour à l'accueil</Text>
+              <Text style={{ color: colors.primary, fontFamily: FONT.bold }}>Retour à l'accueil</Text>
             </Pressable>
           </View>
         )}
@@ -370,7 +452,15 @@ export default function App() {
           <VehicleRentalScreen onBack={() => goTo("home")} onReserve={() => goTo("home")} />
         )}
 
-        {route === "wallet" && <WalletScreen onBack={() => goTo("home")} />}
+        {route === "wallet" && (
+          <WalletScreen
+            onBack={() => {
+              const back = walletBack;
+              setWalletBack("home");
+              goTo(back);
+            }}
+          />
+        )}
 
         {route === "courses" && (
           <CoursesScreen
@@ -389,8 +479,18 @@ export default function App() {
             onNavigateTab={goTo}
             onOpenNotifications={() => goTo("notifications")}
             onOpenProvider={() => goTo("provider-status")}
+            onOpenInfo={() => goTo("profile-info")}
+            onOpenHelp={() => goTo("help")}
             onLogout={handleLogout}
           />
+        )}
+
+        {route === "profile-info" && <PersonalInfoScreen onBack={() => goTo("profile")} />}
+
+        {route === "help" && <HelpScreen onBack={() => goTo("profile")} />}
+
+        {route === "messages" && (
+          <MessagesScreen onNavigateTab={goTo} />
         )}
 
         {route === "provider-onboarding" && (
@@ -441,6 +541,10 @@ export default function App() {
           <AgencyDashboardScreen
             onBack={handleLogout}
             onOpenDossier={() => goTo("provider-status")}
+            onOpenWallet={() => {
+              setWalletBack("agency-dashboard");
+              goTo("wallet");
+            }}
           />
         )}
 
@@ -458,8 +562,45 @@ export default function App() {
         {route === "notifications" && <NotificationsScreen onBack={() => goTo("home")} />}
 
         {route === "menu" && <DevMenuScreen onSelect={(id) => goTo(id)} />}
+
+        {offerWatcher.offer && (
+          <OfferPopup
+            ride={offerWatcher.offer}
+            onClose={offerWatcher.dismiss}
+            onChanged={(next) => {
+              offerWatcher.dismiss();
+              // Zem choisi : on suit la course ; refusé : la recherche continue, on reste où on est
+              if (next.status !== "PENDING" && next.status !== "OFFERED" && next.status !== "CANCELLED") {
+                setRideId(next.id);
+                setRideLabel(undefined);
+                goTo("ride-tracking");
+              }
+            }}
+          />
+        )}
       </RootErrorBoundary>
     </SafeAreaProvider>
+  );
+}
+
+export default function App() {
+  const [i18nReady, setI18nReady] = useState(false);
+  useEffect(() => {
+    // Lecture de la langue et de l'aide vocale enregistrées sur le téléphone (rapide).
+    loadI18n().finally(() => setI18nReady(true));
+  }, []);
+
+  if (!i18nReady) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+  return (
+    <I18nProvider>
+      <AppInner />
+    </I18nProvider>
   );
 }
 

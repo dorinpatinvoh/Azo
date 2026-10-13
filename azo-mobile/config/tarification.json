@@ -38,19 +38,19 @@
     },
     "ZEM_ELECTRIC": {
       "family": "ZEM",
-      "base": 100,
+      "base": 120,
       "brackets": [
         {
           "upToKm": 15,
-          "perKm": 70
-        },
-        {
-          "upToKm": 25,
           "perKm": 60
         },
         {
-          "upToKm": null,
+          "upToKm": 24,
           "perKm": 50
+        },
+        {
+          "upToKm": null,
+          "perKm": 45
         }
       ]
     },
@@ -102,21 +102,31 @@
   "radar": {
     "strictVehicleMatch": true,
     "searchRadiusKm": 8,
+    "nearbyRadiusKm": 10,
+    "maxRadiusKm": 15,
     "pendingExpiryMinutes": 20,
     "driverNotificationMax": 30
+  },
+  "rides": {
+    "stopRequestExpiryMinutes": 2,
+    "destinationToleranceMeters": 150,
+    "routeCacheSeconds": 5,
+    "offerExpirySeconds": 45,
+    "requireClientApproval": true,
+    "offerApprovalGraceSeconds": 5
   },
   "agencyLevels": {
     "PRO": {
       "activationFee": 100000,
       "commissionPct": 3,
       "withdrawalFeePct": 1,
-      "maxAccounts": 25
+      "maxAccounts": 10
     },
     "SILVER": {
       "activationFee": 215500,
       "commissionPct": 2.5,
       "withdrawalFeePct": 0.75,
-      "maxAccounts": 50
+      "maxAccounts": 25
     },
     "OR": {
       "activationFee": 450500,
@@ -181,6 +191,22 @@
     "_aDefinir": [
       "commissionPct — règle à définir : aucun tarif de livraison n'est validé pour le moment. Cette valeur est provisoire (reprise de l'existant) et ne doit pas être présentée comme une règle métier."
     ]
+  },
+  "tips": {
+    "presets": [
+      100,
+      200,
+      500,
+      1000
+    ],
+    "minAmount": 50,
+    "maxAmount": 10000,
+    "windowHours": 24,
+    "maxPerHourPerClient": 5
+  },
+  "chat": {
+    "retentionMonths": 12,
+    "minutesAfterRide": 0
   },
   "aDefinir": [
     {

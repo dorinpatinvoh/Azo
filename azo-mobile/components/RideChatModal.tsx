@@ -17,6 +17,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { API_URL, RideChatMessage, getToken, ridesApi } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
+import { useI18n, type MessageKey } from "../i18n";
 
 type Props = {
   visible: boolean;
@@ -29,19 +30,9 @@ type Props = {
   onClose: () => void;
 };
 
-const QUICK_CLIENT = [
-  "👋 Je sors tout de suite",
-  "🏠 Je suis devant le portail",
-  "📍 Je t'attends au carrefour",
-  "👍 Merci, à tout de suite",
-];
-
-const QUICK_PROVIDER = [
-  "🛵 J'arrive dans 2 min",
-  "📍 Je suis au point de repère",
-  "📦 Quel est le point exact ?",
-  "✅ Je suis arrivé",
-];
+// Messages rapides (textes dans i18n/*.ts) : envoyés dans la langue de l'expéditeur
+const QUICK_CLIENT: MessageKey[] = ["chat.q.c1", "chat.q.c2", "chat.q.c3", "chat.q.c4"];
+const QUICK_PROVIDER: MessageKey[] = ["chat.q.p1", "chat.q.p2", "chat.q.p3", "chat.q.p4"];
 
 export default function RideChatModal({
   visible,
@@ -53,6 +44,7 @@ export default function RideChatModal({
   locked = false,
   onClose,
 }: Props) {
+  const { t, locale } = useI18n();
   const [messages, setMessages] = useState<RideChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -93,6 +85,14 @@ export default function RideChatModal({
     };
   }, [visible, rideId, loadMessages]);
 
+  // Ouvrir la discussion marque les messages reçus comme lus (sans effet tant que le serveur n'a pas la route)
+  const markedRef = useRef(0);
+  useEffect(() => {
+    if (!visible || !rideId || messages.length === markedRef.current) return;
+    markedRef.current = messages.length;
+    ridesApi.markRead(rideId).catch(() => undefined);
+  }, [visible, rideId, messages.length]);
+
   async function sendText(rawText: string) {
     const text = rawText.trim();
     if (!text || sending || locked) return;
@@ -103,7 +103,7 @@ export default function RideChatModal({
         text,
         senderRole: myRole,
         senderName:
-          myName || (myRole === "PROVIDER" ? "Prestataire AZƆ̀" : "Client AZƆ̀"),
+          myName || (myRole === "PROVIDER" ? t("chat.peer.provider") : t("chat.peer.client")),
       });
       setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]));
     } catch {
@@ -113,7 +113,7 @@ export default function RideChatModal({
         rideId,
         senderId: "me",
         senderRole: myRole,
-        senderName: myName || (myRole === "PROVIDER" ? "Prestataire AZƆ̀" : "Client AZƆ̀"),
+        senderName: myName || (myRole === "PROVIDER" ? t("chat.peer.provider") : t("chat.peer.client")),
         text,
         createdAt: new Date().toISOString(),
       };
@@ -132,7 +132,7 @@ export default function RideChatModal({
   const quickReplies = myRole === "PROVIDER" ? QUICK_PROVIDER : QUICK_CLIENT;
   const displayPeerName = maskPersonName(
     peerName,
-    myRole === "CLIENT" ? "Prestataire AZƆ̀" : "Client AZƆ̀"
+    myRole === "CLIENT" ? t("chat.peer.provider") : t("chat.peer.client")
   );
   const displayMaskedPhone = maskBeninPhone(peerPhone);
 
@@ -151,10 +151,10 @@ export default function RideChatModal({
             <View style={{ flex: 1 }}>
               <Text style={styles.peerTitle}>{displayPeerName}</Text>
               <Text style={styles.peerSub}>
-                Numéro masqué : {displayMaskedPhone} • Chat sécurisé AZƆ̀
+                {t("chat.sub", { phone: displayMaskedPhone })}
               </Text>
             </View>
-            <Pressable style={styles.closeBtn} onPress={onClose} accessibilityLabel="Fermer">
+            <Pressable style={styles.closeBtn} onPress={onClose} accessibilityLabel={t("common.close")}>
               <MaterialIcons name="close" size={20} color={colors.onSurface} />
             </Pressable>
           </View>
@@ -162,9 +162,7 @@ export default function RideChatModal({
           {/* Bandeau de confidentialité */}
           <View style={styles.privacyBanner}>
             <MaterialIcons name="lock" size={14} color={colors.primary} />
-            <Text style={styles.privacyText}>
-              Vos numéros personnels sont protégés et la discussion se ferme automatiquement à la fin de la mission.
-            </Text>
+            <Text style={styles.privacyText}>{t("chat.privacy")}</Text>
           </View>
 
           {/* Liste des messages */}
@@ -177,10 +175,8 @@ export default function RideChatModal({
             {messages.length === 0 ? (
               <View style={styles.emptyBox}>
                 <MaterialIcons name="chat-bubble-outline" size={28} color={colors.outline} />
-                <Text style={styles.emptyTitle}>Aucun message pour l'instant</Text>
-                <Text style={styles.emptySub}>
-                  Utilise un message rapide en 1 clic ci-dessous pour préciser ton point de repère.
-                </Text>
+                <Text style={styles.emptyTitle}>{t("chat.empty.title")}</Text>
+                <Text style={styles.emptySub}>{t("chat.empty.sub")}</Text>
               </View>
             ) : (
               messages.map((m) => {
@@ -194,8 +190,8 @@ export default function RideChatModal({
                       <Text style={[styles.bubbleText, mine && { color: "#fff" }]}>{m.text}</Text>
                     </View>
                     <Text style={styles.bubbleTime}>
-                      {mine ? "Moi" : displayPeerName} •{" "}
-                      {new Date(m.createdAt).toLocaleTimeString("fr-FR", {
+                      {mine ? t("chat.me") : displayPeerName} •{" "}
+                      {new Date(m.createdAt).toLocaleTimeString(locale, {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
@@ -216,8 +212,8 @@ export default function RideChatModal({
                 keyboardShouldPersistTaps="handled"
               >
                 {quickReplies.map((q) => (
-                  <Pressable key={q} style={styles.quickChip} onPress={() => sendText(q)}>
-                    <Text style={styles.quickChipText}>{q}</Text>
+                  <Pressable key={q} style={styles.quickChip} onPress={() => sendText(t(q))}>
+                    <Text style={styles.quickChipText}>{t(q)}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -228,7 +224,7 @@ export default function RideChatModal({
                   style={styles.input}
                   value={input}
                   onChangeText={setInput}
-                  placeholder="Écrire un message sécurisé…"
+                  placeholder={t("chat.placeholder")}
                   placeholderTextColor={colors.outline}
                   returnKeyType="send"
                   onSubmitEditing={() => sendText(input)}
@@ -249,9 +245,7 @@ export default function RideChatModal({
           ) : (
             <View style={styles.lockedBar}>
               <MaterialIcons name="lock-clock" size={16} color={colors.onSurfaceVariant} />
-              <Text style={styles.lockedText}>
-                Course terminée : la discussion est désormais verrouillée pour votre sécurité.
-              </Text>
+              <Text style={styles.lockedText}>{t("chat.locked")}</Text>
             </View>
           )}
         </View>

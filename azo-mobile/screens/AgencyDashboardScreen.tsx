@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +28,7 @@ import {
   tarification,
   type AgencyLevel,
 } from "../services/tarification";
+import { useI18n } from "../i18n";
 import {
   cleanBeninDigits,
   formatBeninPhoneDisplay,
@@ -38,11 +39,11 @@ import {
 type Props = {
   onBack: () => void;
   onOpenDossier?: () => void;
+  /** Ouvre le portefeuille de l'agence (recharge FedaPay) : il alimente les recharges des chauffeurs et l'activation. */
+  onOpenWallet?: () => void;
 };
 
 type RosterFilter = "ALL" | "EN_COURSE" | "DISPONIBLE";
-
-const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
 
 // Grille officielle AZƆ̀ : lue depuis la configuration tarifaire partagée
 // (aucun montant codé en dur). Les niveaux ne concernent QUE les agences.
@@ -50,15 +51,17 @@ const OFFICIAL_AGENCY_GRID = (Object.keys(tarification().agencyLevels) as Agency
   const rules = agencyLevelPricing(plan);
   return {
     plan,
-    name: `AGENCE ${plan}`,
     fee: rules.activationFee,
     maxAccounts: rules.maxAccounts,
-    commission: `${String(rules.commissionPct).replace(".", ",")} %`,
+    commissionPct: rules.commissionPct,
     withdrawalFeePct: rules.withdrawalFeePct,
   };
 });
 
-export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) {
+export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWallet }: Props) {
+  const { t, locale } = useI18n();
+  const fcfa = (n: number) => `${n.toLocaleString(locale)} F`;
+  const num = (n: number, opts?: Intl.NumberFormatOptions) => n.toLocaleString(locale, opts);
   const [data, setData] = useState<AgencyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +73,14 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
   const [phoneInput, setPhoneInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [detachingId, setDetachingId] = useState<string | null>(null);
+
+  // Modale « compte du chauffeur » : l'agence recharge ou retire de l'argent sur le compte d'un de ses chauffeurs
+  const [xferMember, setXferMember] = useState<AgencyRosterMember | null>(null);
+  const [xferMode, setXferMode] = useState<"fund" | "withdraw">("fund");
+  const [xferAmount, setXferAmount] = useState("");
+  const [xferBusy, setXferBusy] = useState(false);
+  // Une clé par ouverture de la modale : un nouvel appui après une coupure réseau ne double pas l'opération
+  const xferKey = useRef("");
 
   const load = useCallback(async () => {
     try {
@@ -100,10 +111,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
 
   async function handleAttachDriver() {
     if (!phoneValid) {
-      Alert.alert(
-        "Numéro à 10 chiffres requis",
-        "Entre le numéro béninois à 10 chiffres commençant par 01 (ex. 01 XX XX XX XX) d'un conducteur ou coursier au dossier validé."
-      );
+      Alert.alert(t("ag.phoneRequired.title"), t("ag.phoneRequired.body"));
       return;
     }
     setAdding(true);
@@ -113,13 +121,50 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
       setPhoneInput("");
       await load();
       Alert.alert(
-        "Membre rattaché ✅",
-        `${res.driver.fullName || formatBeninPhoneDisplay(res.driver.phone)} fait maintenant partie de ta flotte.`
+        t("ag.attached.title"),
+        t("ag.attached.body", { name: res.driver.fullName || formatBeninPhoneDisplay(res.driver.phone) })
       );
     } catch (e) {
-      Alert.alert("Rattachement impossible", errorMessage(e));
+      Alert.alert(t("ag.attachFailed"), errorMessage(e));
     } finally {
       setAdding(false);
+    }
+  }
+
+  function openTransfer(member: AgencyRosterMember) {
+    xferKey.current = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    setXferMember(member);
+    setXferMode("fund");
+    setXferAmount("");
+  }
+
+  const xferValue = Number(xferAmount.replace(/\D/g, ""));
+
+  async function handleTransfer() {
+    if (!xferMember) return;
+    if (!Number.isInteger(xferValue) || xferValue < 1) {
+      Alert.alert(t("ag.xfer.failed"), t("ag.xfer.amountInvalid"));
+      return;
+    }
+    setXferBusy(true);
+    try {
+      const call = xferMode === "fund" ? agenciesApi.fundDriver : agenciesApi.withdrawFromDriver;
+      const res = await call(xferMember.id, xferValue, xferKey.current);
+      const name = xferMember.fullName || formatBeninPhoneDisplay(xferMember.phone);
+      setXferMember(null);
+      await load();
+      Alert.alert(
+        t(xferMode === "fund" ? "ag.xfer.doneFund.title" : "ag.xfer.doneWithdraw.title"),
+        t(xferMode === "fund" ? "ag.xfer.doneFund.body" : "ag.xfer.doneWithdraw.body", {
+          name,
+          amount: fcfa(res.amount),
+          balance: fcfa(res.agencyBalance),
+        })
+      );
+    } catch (e) {
+      Alert.alert(t("ag.xfer.failed"), errorMessage(e));
+    } finally {
+      setXferBusy(false);
     }
   }
 
@@ -129,26 +174,27 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
   function confirmActivation() {
     if (!data) return;
     Alert.alert(
-      "Activer mon agence",
-      `Régler ${fcfa(data.agency.activationFee)} une seule fois (frais d'activation ${data.agency.planLabel}) ?\n\n` +
-        "Le montant est débité de ton portefeuille AZƆ̀ Pay. Tant que l'activation n'est pas réglée, " +
-        "l'agence ne peut ni gérer de comptes ni opérer.",
+      t("ag.activate.title"),
+      t("ag.activate.body", { fee: fcfa(data.agency.activationFee), plan: data.agency.planLabel }),
       [
-        { text: "Annuler", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Payer et activer",
+          text: t("ag.activate.confirm"),
           onPress: async () => {
             setActivating(true);
             try {
               const res = await agenciesApi.activate();
               await load();
               Alert.alert(
-                "Agence activée ✅",
-                `${res.plan} — frais d'activation réglés (${fcfa(res.activationFee)}). ` +
-                  `${agencyLevelPricing(res.plan).maxAccounts.toLocaleString("fr-FR")} comptes autorisés.`
+                t("ag.activated.title"),
+                t("ag.activated.body", {
+                  plan: res.plan,
+                  fee: fcfa(res.activationFee),
+                  accounts: num(agencyLevelPricing(res.plan).maxAccounts),
+                })
               );
             } catch (e) {
-              Alert.alert("Activation impossible", errorMessage(e));
+              Alert.alert(t("ag.activateFailed"), errorMessage(e));
             } finally {
               setActivating(false);
             }
@@ -161,12 +207,12 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
   function confirmDetach(member: AgencyRosterMember) {
     const label = member.fullName || formatBeninPhoneDisplay(member.phone);
     Alert.alert(
-      "Retirer de la flotte",
-      `Veux-tu retirer ${label} de ton agence ? Il redeviendra conducteur indépendant.`,
+      t("ag.detach.title"),
+      t("ag.detach.body", { name: label }),
       [
-        { text: "Annuler", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Retirer",
+          text: t("ag.detach.confirm"),
           style: "destructive",
           onPress: async () => {
             setDetachingId(member.id);
@@ -174,7 +220,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
               await agenciesApi.detachDriver(member.id);
               await load();
             } catch (e) {
-              Alert.alert("Erreur", errorMessage(e));
+              Alert.alert(t("common.error"), errorMessage(e));
             } finally {
               setDetachingId(null);
             }
@@ -185,10 +231,10 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
   }
 
   function confirmLogout() {
-    Alert.alert("Quitter l'espace agence", "Que souhaites-tu faire ?", [
-      { text: "Annuler", style: "cancel" },
-      ...(onOpenDossier ? [{ text: "Mon dossier KYC", onPress: onOpenDossier }] : []),
-      { text: "Se déconnecter", style: "destructive", onPress: onBack },
+    Alert.alert(t("ag.logout.title"), t("ag.logout.body"), [
+      { text: t("common.cancel"), style: "cancel" },
+      ...(onOpenDossier ? [{ text: t("ag.logout.dossier"), onPress: onOpenDossier }] : []),
+      { text: t("ag.logout.confirm"), style: "destructive", onPress: onBack },
     ]);
   }
 
@@ -206,25 +252,33 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <Pressable onPress={confirmLogout} style={styles.iconButton} accessibilityLabel="Menu ou déconnexion">
+        <Pressable onPress={confirmLogout} style={styles.iconButton} accessibilityLabel={t("ag.menuLabel")}>
           <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            Mon agence
+            {t("ag.title")}
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>
-            {data ? `Formule ${data.agency.planLabel} · commission ${(data.agency.commissionRate * 100).toLocaleString("fr-FR")}%` : "Gestion de flotte AZƆ̀"}
+            {data
+              ? t("ag.planLine", { plan: data.agency.planLabel, pct: num(data.agency.commissionRate * 100) })
+              : t("ag.subtitleFleet")}
           </Text>
         </View>
+        {onOpenWallet ? (
+          <Pressable style={styles.kycBtn} onPress={onOpenWallet}>
+            <MaterialIcons name="account-balance-wallet" size={15} color={colors.primary} />
+            <Text style={styles.kycBtnText}>{t("ag.wallet")}</Text>
+          </Pressable>
+        ) : null}
         {onOpenDossier ? (
           <Pressable style={styles.kycBtn} onPress={onOpenDossier}>
             <MaterialIcons name="verified-user" size={15} color={colors.primary} />
-            <Text style={styles.kycBtnText}>Dossier</Text>
+            <Text style={styles.kycBtnText}>{t("ag.dossier")}</Text>
           </Pressable>
         ) : (
           <View style={styles.b2bBadge}>
-            <Text style={styles.b2bText}>PRO FLOTTE</Text>
+            <Text style={styles.b2bText}>{t("ag.proBadge")}</Text>
           </View>
         )}
       </View>
@@ -234,15 +288,19 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
         <View style={styles.activationBanner}>
           <MaterialIcons name="lock-clock" size={18} color={colors.error} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.activationTitle}>Agence non activée</Text>
+            <Text style={styles.activationTitle}>{t("ag.notActivated")}</Text>
             <Text style={styles.activationText}>
-              Règle {fcfa(data.agency.activationFee)} une seule fois (frais d'activation {data.agency.planLabel})
-              pour gérer des comptes et opérer. Formule : commission {data.commissionPct} % · retrait{" "}
-              {data.withdrawalFeePct} % · {agencyLevelPricing(data.agency.plan).maxAccounts.toLocaleString("fr-FR")} comptes.
+              {t("ag.notActivatedBody", {
+                fee: fcfa(data.agency.activationFee),
+                plan: data.agency.planLabel,
+                commission: data.commissionPct,
+                withdrawal: data.withdrawalFeePct,
+                accounts: num(agencyLevelPricing(data.agency.plan).maxAccounts),
+              })}
             </Text>
           </View>
           <Pressable style={styles.activationBtn} onPress={confirmActivation} disabled={activating}>
-            <Text style={styles.activationBtnText}>{activating ? "…" : "Activer"}</Text>
+            <Text style={styles.activationBtnText}>{activating ? "…" : t("ag.activate")}</Text>
           </Pressable>
         </View>
       )}
@@ -250,7 +308,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.muted}>Chargement de ta flotte…</Text>
+          <Text style={styles.muted}>{t("ag.loading")}</Text>
         </View>
       ) : (
         <ScrollView
@@ -261,12 +319,15 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
             <View style={styles.errorCard}>
               <MaterialIcons name="error-outline" size={20} color={colors.error} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.errorTitle}>Impossible de charger l'agence</Text>
+                <Text style={styles.errorTitle}>{t("ag.loadError")}</Text>
                 <Text style={styles.errorText}>{error}</Text>
               </View>
+              <Pressable style={styles.smallPrimaryBtn} onPress={onRefresh}>
+                <Text style={styles.smallPrimaryBtnText}>{t("common.retry")}</Text>
+              </Pressable>
               {onOpenDossier ? (
                 <Pressable style={styles.smallPrimaryBtn} onPress={onOpenDossier}>
-                  <Text style={styles.smallPrimaryBtnText}>Mon dossier</Text>
+                  <Text style={styles.smallPrimaryBtnText}>{t("ag.myDossier")}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -285,8 +346,10 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                       {data.agency.name}
                     </Text>
                     <Text style={styles.agencyMeta}>
-                      Formule {data.agency.planLabel} • Commission{" "}
-                      {(data.agency.commissionRate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })}%
+                      {t("ag.metaLine", {
+                        plan: data.agency.planLabel,
+                        pct: num(data.agency.commissionRate * 100, { maximumFractionDigits: 2 }),
+                      })}
                     </Text>
                   </View>
                   <View style={styles.planPill}>
@@ -296,14 +359,23 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
 
                 <View style={styles.capacitySection}>
                   <View style={styles.capacityHeader}>
-                    <Text style={styles.capacityLabel}>Capacité de la flotte</Text>
+                    <Text style={styles.capacityLabel}>{t("ag.capacity")}</Text>
                     <Text style={styles.capacityValue}>
-                      {data.seatsUsed} / {data.seatsTotal} comptes ({Math.round(capacityRatio * 100)}%)
+                      {t("ag.capacityValue", {
+                        used: data.seatsUsed,
+                        total: data.seatsTotal,
+                        pct: Math.round(capacityRatio * 100),
+                      })}
                     </Text>
                   </View>
                   <View style={styles.progressTrack}>
                     <View style={[styles.progressFill, { width: `${Math.round(capacityRatio * 100)}%` }]} />
                   </View>
+                  {typeof data.walletBalance === "number" ? (
+                    <Text style={[styles.capacityLabel, { marginTop: spacing.xs }]}>
+                      {t("ag.walletBalance", { amount: fcfa(data.walletBalance) })}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
 
@@ -314,8 +386,8 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                   <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                     {fcfa(data.netRevenue)}
                   </Text>
-                  <Text style={styles.statLabel}>CA Net Flotte</Text>
-                  <Text style={styles.statDelta}>Brut : {fcfa(data.grossRevenue)}</Text>
+                  <Text style={styles.statLabel}>{t("ag.stat.net")}</Text>
+                  <Text style={styles.statDelta}>{t("ag.stat.gross", { amount: fcfa(data.grossRevenue) })}</Text>
                 </View>
 
                 <View style={styles.statCard}>
@@ -323,8 +395,8 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                   <Text style={styles.statValue} numberOfLines={1}>
                     {data.drivers} / {data.seatsTotal}
                   </Text>
-                  <Text style={styles.statLabel}>Membres actifs</Text>
-                  <Text style={styles.statDelta}>{data.activeRides} en course actuellement</Text>
+                  <Text style={styles.statLabel}>{t("ag.stat.members")}</Text>
+                  <Text style={styles.statDelta}>{t("ag.stat.activeNow", { n: data.activeRides })}</Text>
                 </View>
 
                 <View style={styles.statCard}>
@@ -332,8 +404,8 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                   <Text style={styles.statValue} numberOfLines={1}>
                     {data.completedRides}
                   </Text>
-                  <Text style={styles.statLabel}>Courses terminées</Text>
-                  <Text style={styles.statDelta}>Commissions : {fcfa(data.commissionsPaid)}</Text>
+                  <Text style={styles.statLabel}>{t("ag.stat.rides")}</Text>
+                  <Text style={styles.statDelta}>{t("ag.stat.commissions", { amount: fcfa(data.commissionsPaid) })}</Text>
                 </View>
 
                 <View style={styles.statCard}>
@@ -341,9 +413,9 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                   <Text style={styles.statValue} numberOfLines={1}>
                     {data.averageRating != null ? data.averageRating.toFixed(2) : "—"}
                   </Text>
-                  <Text style={styles.statLabel}>Note moyenne</Text>
+                  <Text style={styles.statLabel}>{t("ag.stat.rating")}</Text>
                   <Text style={styles.statDelta}>
-                    {data.averageRating != null ? "Qualité flotte" : "Aucune note"}
+                    {data.averageRating != null ? t("ag.stat.quality") : t("ag.stat.noRating")}
                   </Text>
                 </View>
               </View>
@@ -351,12 +423,12 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
               {/* En-tête Équipe + bouton d'ajout */}
               <View style={styles.sectionHeaderRow}>
                 <View>
-                  <Text style={styles.sectionTitle}>Flotte ({data.roster.length})</Text>
-                  <Text style={styles.sectionSub}>Zem, conducteurs & coursiers rattachés</Text>
+                  <Text style={styles.sectionTitle}>{t("ag.fleet", { n: data.roster.length })}</Text>
+                  <Text style={styles.sectionSub}>{t("ag.fleetSub")}</Text>
                 </View>
                 <Pressable style={styles.addBtn} onPress={() => setAddVisible(true)}>
                   <MaterialIcons name="person-add-alt-1" size={17} color="#fff" />
-                  <Text style={styles.addBtnText}>Ajouter</Text>
+                  <Text style={styles.addBtnText}>{t("ag.add")}</Text>
                 </Pressable>
               </View>
 
@@ -364,9 +436,9 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
               <View style={styles.filterRow}>
                 {(
                   [
-                    ["ALL", `Tous (${data.roster.length})`],
-                    ["EN_COURSE", `En mission (${data.roster.filter((m) => m.state === "EN_COURSE").length})`],
-                    ["DISPONIBLE", `Disponibles (${data.roster.filter((m) => m.state === "DISPONIBLE").length})`],
+                    ["ALL", t("ag.filter.all", { n: data.roster.length })],
+                    ["EN_COURSE", t("ag.filter.busy", { n: data.roster.filter((m) => m.state === "EN_COURSE").length })],
+                    ["DISPONIBLE", t("ag.filter.free", { n: data.roster.filter((m) => m.state === "DISPONIBLE").length })],
                   ] as const
                 ).map(([id, label]) => {
                   const active = rosterFilter === id;
@@ -387,11 +459,8 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
               {filteredRoster.length === 0 ? (
                 <View style={styles.emptyCard}>
                   <MaterialIcons name="groups" size={34} color={colors.outline} />
-                  <Text style={styles.emptyTitle}>Aucun membre dans cette vue</Text>
-                  <Text style={styles.muted}>
-                    Ajoute un conducteur ou un coursier dont le dossier prestataire a été validé par AZƆ̀
-                    à l'aide de son numéro à 10 chiffres (01…).
-                  </Text>
+                  <Text style={styles.emptyTitle}>{t("ag.empty.title")}</Text>
+                  <Text style={styles.muted}>{t("ag.empty.body")}</Text>
                 </View>
               ) : (
                 <View style={{ gap: spacing.sm }}>
@@ -409,9 +478,14 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                             {displayName}
                           </Text>
                           <Text style={styles.driverMeta} numberOfLines={1}>
-                            {formatBeninPhoneDisplay(d.phone)} · {d.jobsCompleted} course(s)
+                            {t("ag.row.rides", { phone: formatBeninPhoneDisplay(d.phone), n: d.jobsCompleted })}
                             {d.rating > 0 ? ` · ★ ${d.rating.toFixed(1)}` : ""}
                           </Text>
+                          {typeof d.balance === "number" ? (
+                            <Text style={styles.driverMeta} numberOfLines={1}>
+                              {t("ag.balance", { amount: fcfa(d.balance) })}
+                            </Text>
+                          ) : null}
                         </View>
                         <View
                           style={[
@@ -425,13 +499,20 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                               { color: busyCourse ? colors.primary : colors.onSurfaceVariant },
                             ]}
                           >
-                            {busyCourse ? "En mission" : "Disponible"}
+                            {busyCourse ? t("ag.state.busy") : t("ag.state.free")}
                           </Text>
                         </View>
                         <Pressable
                           style={styles.smallIconBtn}
+                          onPress={() => openTransfer(d)}
+                          accessibilityLabel={t("ag.xfer.manage")}
+                        >
+                          <MaterialIcons name="account-balance-wallet" size={18} color={colors.primary} />
+                        </Pressable>
+                        <Pressable
+                          style={styles.smallIconBtn}
                           onPress={() => Linking.openURL(`tel:${d.phone}`)}
-                          accessibilityLabel="Appeler"
+                          accessibilityLabel={t("ag.call")}
                         >
                           <MaterialIcons name="phone" size={18} color={colors.primary} />
                         </Pressable>
@@ -439,7 +520,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                           style={[styles.smallIconBtn, { backgroundColor: colors.errorContainer }]}
                           disabled={detachingId === d.id}
                           onPress={() => confirmDetach(d)}
-                          accessibilityLabel="Retirer de la flotte"
+                          accessibilityLabel={t("ag.detachLabel")}
                         >
                           {detachingId === d.id ? (
                             <ActivityIndicator size="small" color={colors.error} />
@@ -455,7 +536,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
 
               {/* Grille officielle AZƆ̀ */}
               <Text style={[styles.sectionTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>
-                Grille officielle AZƆ̀
+                {t("ag.grid")}
               </Text>
               <View style={{ gap: spacing.sm }}>
                 {OFFICIAL_AGENCY_GRID.map((tier) => {
@@ -489,14 +570,13 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                         />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.driverName}>{tier.name}</Text>
+                        <Text style={styles.driverName}>{t("ag.tierName", { plan: tier.plan })}</Text>
                         <Text style={styles.driverMeta}>
-                          Activation unique : {tier.fee.toLocaleString("fr-FR")} FCFA · Jusqu'à{" "}
-                          {tier.maxAccounts.toLocaleString("fr-FR")} comptes
+                          {t("ag.tierMeta", { fee: num(tier.fee), accounts: num(tier.maxAccounts) })}
                         </Text>
                       </View>
                       <View style={styles.planPill}>
-                        <Text style={styles.planPillText}>Comm. {tier.commission}</Text>
+                        <Text style={styles.planPillText}>{t("ag.tierComm", { pct: `${num(tier.commissionPct)} %` })}</Text>
                       </View>
                     </View>
                   );
@@ -511,11 +591,8 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
       <Modal visible={addVisible} transparent animationType="fade" onRequestClose={() => setAddVisible(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Rattacher un membre à la flotte</Text>
-            <Text style={styles.modalSub}>
-              Saisis le numéro béninois à 10 chiffres (01…) d'un conducteur Zem, voiture ou coursier dont
-              le dossier a été approuvé par AZƆ̀.
-            </Text>
+            <Text style={styles.modalTitle}>{t("ag.modal.title")}</Text>
+            <Text style={styles.modalSub}>{t("ag.modal.sub")}</Text>
 
             <View style={[styles.phoneRow, phoneValid && styles.phoneRowValid]}>
               <View style={styles.flagBadge}>
@@ -547,7 +624,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                   setPhoneInput("");
                 }}
               >
-                <Text style={styles.modalCancelText}>Annuler</Text>
+                <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
               </Pressable>
               <Pressable
                 style={[styles.modalConfirm, (!phoneValid || adding) && { opacity: 0.6 }]}
@@ -557,10 +634,79 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier }: Props) 
                 {adding ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.modalConfirmText}>Rattacher</Text>
+                  <Text style={styles.modalConfirmText}>{t("ag.modal.attach")}</Text>
                 )}
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modale « compte du chauffeur » : recharger ou retirer de l'argent */}
+      <Modal visible={!!xferMember} transparent animationType="fade" onRequestClose={() => setXferMember(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            {xferMember ? (
+              <>
+                <Text style={styles.modalTitle}>
+                  {t("ag.xfer.title", { name: xferMember.fullName || formatBeninPhoneDisplay(xferMember.phone) })}
+                </Text>
+                <Text style={styles.modalSub}>
+                  {typeof xferMember.balance === "number" ? t("ag.xfer.driverBalance", { amount: fcfa(xferMember.balance) }) : ""}
+                  {typeof xferMember.balance === "number" && typeof data?.walletBalance === "number" ? "\n" : ""}
+                  {typeof data?.walletBalance === "number" ? t("ag.walletBalance", { amount: fcfa(data.walletBalance) }) : ""}
+                </Text>
+
+                <View style={styles.filterRow}>
+                  {(["fund", "withdraw"] as const).map((mode) => {
+                    const active = xferMode === mode;
+                    return (
+                      <Pressable
+                        key={mode}
+                        style={[styles.filterChip, active && styles.filterChipActive]}
+                        onPress={() => setXferMode(mode)}
+                      >
+                        <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                          {t(mode === "fund" ? "ag.xfer.fund" : "ag.xfer.withdraw")}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.phoneRow}>
+                  <TextInput
+                    style={styles.phoneInput}
+                    value={xferAmount}
+                    onChangeText={(v) => setXferAmount(v.replace(/\D/g, "").slice(0, 7))}
+                    placeholder={t("ag.xfer.amount")}
+                    placeholderTextColor={colors.outline}
+                    keyboardType="number-pad"
+                    maxLength={7}
+                  />
+                </View>
+                <Text style={styles.modalSub}>{t(xferMode === "fund" ? "ag.xfer.hint.fund" : "ag.xfer.hint.withdraw")}</Text>
+
+                <View style={styles.modalActions}>
+                  <Pressable style={styles.modalCancel} onPress={() => setXferMember(null)}>
+                    <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.modalConfirm, (xferValue < 1 || xferBusy) && { opacity: 0.6 }]}
+                    disabled={xferValue < 1 || xferBusy}
+                    onPress={handleTransfer}
+                  >
+                    {xferBusy ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.modalConfirmText}>
+                        {t(xferMode === "fund" ? "ag.xfer.confirmFund" : "ag.xfer.confirmWithdraw", { amount: fcfa(xferValue || 0) })}
+                      </Text>
+                    )}
+                  </Pressable>
+                </View>
+              </>
+            ) : null}
           </View>
         </View>
       </Modal>

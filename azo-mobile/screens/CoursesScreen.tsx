@@ -6,17 +6,18 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { ridesApi, Ride } from "../services/api";
 import ClientTabBar, { ClientTab } from "../components/ClientTabBar";
+import { useI18n, type MessageKey } from "../i18n";
 import {
   fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL, STATUS_INFO, ACTIVE_STATUSES, DEMO_RIDES,
 } from "../utils/rideDisplay";
 
 type Filter = "ALL" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "ALL", label: "Toutes" },
-  { id: "ACTIVE", label: "En cours" },
-  { id: "COMPLETED", label: "Terminées" },
-  { id: "CANCELLED", label: "Annulées" },
+const FILTERS: { id: Filter; labelKey: MessageKey }[] = [
+  { id: "ALL", labelKey: "courses.f.all" },
+  { id: "ACTIVE", labelKey: "courses.f.active" },
+  { id: "COMPLETED", labelKey: "courses.f.done" },
+  { id: "CANCELLED", labelKey: "courses.f.cancelled" },
 ];
 
 type Props = {
@@ -26,6 +27,7 @@ type Props = {
 };
 
 export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRide }: Props) {
+  const { t } = useI18n();
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -69,9 +71,12 @@ export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRid
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Mes courses</Text>
+        <Text style={styles.title}>{t("courses.title")}</Text>
         <Text style={styles.subtitle}>
-          {rides.length} course{rides.length > 1 ? "s" : ""} · {fcfa(totalSpent)} dépensés
+          {t("courses.summary", {
+            count: t(rides.length > 1 ? "courses.count.many" : "courses.count.one", { n: rides.length }),
+            spent: fcfa(totalSpent),
+          })}
         </Text>
       </View>
 
@@ -80,7 +85,7 @@ export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRid
           const active = f.id === filter;
           return (
             <Pressable key={f.id} onPress={() => setFilter(f.id)} style={[styles.chip, active && styles.chipActive]}>
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{t(f.labelKey)}</Text>
             </Pressable>
           );
         })}
@@ -94,7 +99,7 @@ export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRid
         {offline && (
           <View style={styles.offlineBanner}>
             <MaterialIcons name="cloud-off" size={16} color={colors.tertiary} />
-            <Text style={styles.offlineText}>Serveur injoignable · données de démonstration</Text>
+            <Text style={styles.offlineText}>{t("courses.offline")}</Text>
           </View>
         )}
 
@@ -103,13 +108,13 @@ export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRid
         {!loading && filtered.length === 0 && (
           <View style={styles.empty}>
             <MaterialIcons name="receipt-long" size={48} color={colors.outlineVariant} />
-            <Text style={styles.emptyTitle}>Aucune course</Text>
+            <Text style={styles.emptyTitle}>{t("courses.empty.title")}</Text>
             <Text style={styles.emptyText}>
-              {filter === "ALL" ? "Vous n'avez pas encore commandé de course." : "Aucune course dans cette catégorie."}
+              {filter === "ALL" ? t("courses.empty.all") : t("courses.empty.cat")}
             </Text>
             {filter === "ALL" && (
               <Pressable style={styles.emptyBtn} onPress={onRequestRide}>
-                <Text style={styles.emptyBtnText}>Commander une course</Text>
+                <Text style={styles.emptyBtnText}>{t("courses.empty.order")}</Text>
               </Pressable>
             )}
           </View>
@@ -147,7 +152,7 @@ export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRid
                       ))}
                     </View>
                   ) : isActive ? (
-                    <Text style={styles.follow}>Suivre →</Text>
+                    <Text style={styles.follow}>{t("courses.follow")}</Text>
                   ) : null}
                 </View>
               </Pressable>

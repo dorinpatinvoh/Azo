@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
+import { FONT } from "../theme/fontNormalize";
 import PrimaryButton from "../components/PrimaryButton";
 import { Delivery, deliveryApi, errorMessage } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
@@ -165,11 +166,11 @@ export default function DeliveryScreen({ onBack }: Props) {
                   </View>
 
                   <Text style={styles.activeRoute} numberOfLines={1}>
-                    <Text style={{ fontWeight: "700" }}>De : </Text>
+                    <Text style={{ fontFamily: FONT.bold }}>De : </Text>
                     {d.pickupAddress}
                   </Text>
                   <Text style={styles.activeRoute} numberOfLines={1}>
-                    <Text style={{ fontWeight: "700" }}>Vers : </Text>
+                    <Text style={{ fontFamily: FONT.bold }}>Vers : </Text>
                     {d.dropAddress}
                   </Text>
 

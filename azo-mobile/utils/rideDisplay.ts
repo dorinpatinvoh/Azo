@@ -1,17 +1,20 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors } from "../theme/colors";
 import { Ride, RideStatus, VehicleType } from "../services/api";
+import { getLanguage, languageInfo, tr, type MessageKey } from "../i18n";
 
-export const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
+// Langue courante de l'application (choisie à l'accueil ou dans le profil)
+const numLocale = () => languageInfo(getLanguage()).locale;
+
+export const fcfa = (n: number) => `${n.toLocaleString(numLocale())} F`;
 
 // Libellés courts d'un véhicule : les deux Zem (motos-taxis) puis les trois voitures.
-export const VEHICLE_LABEL: Record<VehicleType, string> = {
-  ZEM_ESSENCE: "Zem à essence",
-  ZEM_ELECTRIC: "Zem électrique",
-  GAZELLE: "Gazelle · Voiture",
-  KOALA: "Koala · Voiture climatisée",
-  LEOPARD: "Léopard · Berline premium climatisée",
-};
+// Lus à chaque accès (accesseurs) : ils suivent la langue choisie sans changer les appels existants.
+export const VEHICLE_LABEL = {} as Record<VehicleType, string>;
+(["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"] as VehicleType[]).forEach((v) => {
+  const key = (v.startsWith("ZEM_") ? `veh.${v}.label` : `live.vehicle.${v}`) as MessageKey;
+  Object.defineProperty(VEHICLE_LABEL, v, { enumerable: true, get: () => tr(key) });
+});
 
 export const VEHICLE_ICON: Record<VehicleType, keyof typeof MaterialIcons.glyphMap> = {
   ZEM_ESSENCE: "two-wheeler",
@@ -21,16 +24,22 @@ export const VEHICLE_ICON: Record<VehicleType, keyof typeof MaterialIcons.glyphM
   LEOPARD: "local-taxi",
 };
 
+const statusInfo = (status: RideStatus, color: string, bg: string) => ({
+  get label() { return tr(`rd.status.${status}` as MessageKey); },
+  color,
+  bg,
+});
 export const STATUS_INFO: Record<RideStatus, { label: string; color: string; bg: string }> = {
-  PENDING: { label: "Recherche d'un conducteur…", color: colors.tertiary, bg: colors.tertiaryFixed },
-  MATCHED: { label: "Conducteur en route", color: colors.primary, bg: colors.primaryFixed },
-  ARRIVED: { label: "Conducteur arrivé", color: colors.primary, bg: colors.primaryFixed },
-  IN_PROGRESS: { label: "Course en cours", color: colors.secondary, bg: colors.secondaryFixed },
-  COMPLETED: { label: "Terminée", color: colors.onSurfaceVariant, bg: colors.surfaceContainer },
-  CANCELLED: { label: "Annulée", color: colors.error, bg: colors.errorContainer },
+  PENDING: statusInfo("PENDING", colors.tertiary, colors.tertiaryFixed),
+  OFFERED: statusInfo("OFFERED", colors.tertiary, colors.tertiaryFixed),
+  MATCHED: statusInfo("MATCHED", colors.primary, colors.primaryFixed),
+  ARRIVED: statusInfo("ARRIVED", colors.primary, colors.primaryFixed),
+  IN_PROGRESS: statusInfo("IN_PROGRESS", colors.secondary, colors.secondaryFixed),
+  COMPLETED: statusInfo("COMPLETED", colors.onSurfaceVariant, colors.surfaceContainer),
+  CANCELLED: statusInfo("CANCELLED", colors.error, colors.errorContainer),
 };
 
-export const ACTIVE_STATUSES: RideStatus[] = ["PENDING", "MATCHED", "ARRIVED", "IN_PROGRESS"];
+export const ACTIVE_STATUSES: RideStatus[] = ["PENDING", "OFFERED", "MATCHED", "ARRIVED", "IN_PROGRESS"];
 
 export function relativeDay(iso: string) {
   const d = new Date(iso);
@@ -39,10 +48,11 @@ export function relativeDay(iso: string) {
     (new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime() -
       new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000
   );
-  const hour = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  if (diff === 0) return `Aujourd'hui, ${hour}`;
-  if (diff === 1) return `Hier, ${hour}`;
-  return `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}, ${hour}`;
+  const locale = numLocale();
+  const hour = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  if (diff === 0) return tr("rd.today", { hour });
+  if (diff === 1) return tr("rd.yesterday", { hour });
+  return `${d.toLocaleDateString(locale, { day: "numeric", month: "short" })}, ${hour}`;
 }
 
 // --- Données de démonstration (serveur injoignable) -------------------------

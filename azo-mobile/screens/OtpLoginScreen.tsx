@@ -19,10 +19,14 @@ import * as SecureStore from "expo-secure-store";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
+import { useI18n, type MessageKey } from "../i18n";
+import { speak, stopSpeaking } from "../i18n/voice";
 import {
+  ApiError,
   DEFAULT_API_URL,
   ProviderRef,
   authApi,
+  needsRegistration,
   errorMessage,
   getApiUrl,
   setApiUrl,
@@ -35,21 +39,87 @@ import {
   isValidBeninPhone,
   toBeninE164,
 } from "../utils/phone";
+import {
+  GENDER_OPTIONS,
+  NPI_LENGTH,
+  type Gender,
+  cleanNpi,
+  formatNpi,
+  isValidName,
+  isValidNpi,
+  normalizeName,
+  registrationError,
+} from "../utils/registration";
 
-type Step = "phone" | "code" | "name";
+type Step = "phone" | "code" | "register";
 
 type Props = {
   onVerified: (role: string, provider?: ProviderRef | null) => void;
   onBack: () => void;
+  /** Application rouverte alors que l'inscription n'était pas terminée (session déjà ouverte). */
+  resumeRegistration?: boolean;
 };
+
+// Tant que l'inscription n'est pas terminée, ce drapeau ramène à son écran à la réouverture
+// de l'application (la session est déjà ouverte : sans lui on arriverait sur l'accueil).
+export const REGISTRATION_PENDING_KEY = "registrationPending";
 
 const SMS_BANNER_DURATION_SEC = 5;
 
-export default function OtpLoginScreen({ onVerified, onBack }: Props) {
-  const [step, setStep] = useState<Step>("phone");
+export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration = false }: Props) {
+  const [step, setStep] = useState<Step>(resumeRegistration ? "register" : "phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState(["", "", "", ""]);
-  const [fullName, setFullName] = useState("");
+  // Inscription (après l'OTP) : nom, prénom, sexe et NPI
+  const [lastName, setLastName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [gender, setGender] = useState<Gender | null>(null);
+  const [npi, setNpi] = useState("");
+  const { t, lang, voiceAssist } = useI18n();
+  // Pause : coupe la voix pour cette inscription sans changer le réglage du profil
+  const [paused, setPaused] = useState(false);
+  const talk = voiceAssist && !paused;
+
+  // Aide vocale : à chaque étape, la voix explique ce qu'il faut faire. Les alertes sont aussi
+  // lues à voix haute : une personne qui lit difficilement entend ce qui ne va pas.
+  const spokenDone = useRef(false);
+  const stepKey: MessageKey =
+    step === "phone" ? "voice.step.phone" : step === "code" ? "voice.step.code" : "voice.step.register";
+  useEffect(() => {
+    if (!talk) return;
+    // Court délai : on laisse l'écran (et le clavier) s'installer avant de parler
+    const timer = setTimeout(() => speak(t(stepKey), lang), 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, talk, lang]);
+  // La voix se tait quand on quitte l'écran, sauf le message de fin d'inscription
+  useEffect(() => () => { if (!spokenDone.current) stopSpeaking(); }, []);
+  function notify(title: string, message: string) {
+    Alert.alert(title, message);
+    if (talk) speak(`${title}. ${message}`, lang);
+  }
+
+  const firstNameRef = useRef<TextInput | null>(null);
+  const npiRef = useRef<TextInput | null>(null);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const npiBlockRef = useRef<View | null>(null);
+
+  // Le clavier recouvre le bas de l'écran : à la saisie du NPI on fait remonter le champ pour que
+  // ce qu'on tape reste visible. `measureLayout` donne la position du bloc dans le contenu défilant.
+  const scrollToNpi = () => {
+    const scroll = scrollRef.current;
+    const block = npiBlockRef.current;
+    const inner = scroll?.getInnerViewNode?.();
+    if (!scroll || !block || !inner) {
+      scroll?.scrollToEnd({ animated: true });
+      return;
+    }
+    block.measureLayout(
+      inner,
+      (_x, y) => scroll.scrollTo({ y: Math.max(0, y - spacing.lg), animated: true }),
+      () => scroll.scrollToEnd({ animated: true })
+    );
+  };
   const [sending, setSending] = useState(false);
   const inputsRef = useRef<Array<TextInput | null>>([]);
 
@@ -101,10 +171,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
 
   async function handleSendCode() {
     if (!isPhoneValid) {
-      Alert.alert(
-        "Numéro à 10 chiffres requis",
-        "Entre les 10 chiffres commençant par 01 (ex. 01 XX XX XX XX)."
-      );
+      notify(t("auth.alert.phoneTitle"), t("auth.alert.phoneBody"));
       return;
     }
     setSending(true);
@@ -118,7 +185,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
       }
       setTimeout(() => inputsRef.current[0]?.focus(), 150);
     } catch (e) {
-      Alert.alert("Envoi impossible", errorMessage(e));
+      notify(t("auth.alert.sendFailed"), errorMessage(e));
     } finally {
       setSending(false);
     }
@@ -147,37 +214,62 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
         await SecureStore.deleteItemAsync("providerType");
       }
 
-      if (role === "CLIENT" && !response.user.fullName?.trim()) {
-        setFullName("");
-        setStep("name");
+      // Nouveau compte (ou compte sans inscription terminée) : formulaire obligatoire.
+      if (needsRegistration(response.user)) {
+        await SecureStore.setItemAsync(REGISTRATION_PENDING_KEY, "1");
+        setStep("register");
         return;
       }
+      await SecureStore.deleteItemAsync(REGISTRATION_PENDING_KEY);
 
       onVerified(role, provider);
     } catch (e) {
-      Alert.alert("Connexion impossible", errorMessage(e));
+      notify(t("auth.alert.loginFailed"), errorMessage(e));
     } finally {
       setSending(false);
     }
   }
 
-  async function handleSaveName() {
-    const name = fullName.trim();
-    if (!name) {
-      Alert.alert("Nom requis", "Entre le pseudo ou le nom que le chauffeur pourra voir.");
+  const problem = registrationError({ lastName, firstName, gender, npi });
+  const registrationProblem = problem ? t(problem.key, problem.vars) : null;
+
+  async function handleRegister() {
+    if (registrationProblem || !gender) {
+      notify(t("auth.alert.incompleteTitle"), registrationProblem ?? t("auth.alert.fillAll"));
       return;
     }
 
     setSending(true);
     try {
-      const updatedUser = await userApi.update(name);
-      if (!updatedUser.fullName?.trim()) {
-        Alert.alert("Enregistrement incomplet", "Le serveur n'a pas confirmé l'enregistrement de ton nom. Réessaie.");
+      const updated = await userApi.register({
+        lastName: normalizeName(lastName),
+        firstName: normalizeName(firstName),
+        gender,
+        npi: cleanNpi(npi),
+      });
+      // Le serveur doit confirmer l'enregistrement : sinon (serveur pas à jour) on ne laisse
+      // pas l'utilisateur entrer comme si tout était sauvegardé.
+      if (updated.profileComplete !== true) {
+        notify(t("auth.alert.notConfirmedTitle"), t("auth.alert.notConfirmedBody"));
         return;
       }
+      await SecureStore.deleteItemAsync(REGISTRATION_PENDING_KEY);
+      // Message de fin : il doit être prononcé jusqu'au bout même si l'écran change aussitôt
+      spokenDone.current = true;
+      if (talk) speak(t("voice.done"), lang);
       onVerified("CLIENT", null);
     } catch (e) {
-      Alert.alert("Enregistrement impossible", errorMessage(e));
+      if (e instanceof ApiError && e.status === 404) {
+        notify(t("auth.alert.outdatedTitle"), t("auth.alert.outdatedBody"));
+      } else if (e instanceof ApiError && e.status >= 500) {
+        // Panne du serveur : rien n'a été enregistré. On ne montre pas « Internal server error »,
+        // et on garde les champs saisis pour réessayer sans tout retaper.
+        notify(t("auth.alert.downTitle"), t("auth.alert.downBody"));
+      } else if (e instanceof ApiError && e.status === 409) {
+        notify(t("auth.alert.npiUsedTitle"), t("auth.alert.npiUsedBody"));
+      } else {
+        notify(t("auth.alert.registerFailed"), errorMessage(e));
+      }
     } finally {
       setSending(false);
     }
@@ -233,26 +325,26 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
             </View>
             <View style={{ flex: 1 }}>
               <View style={styles.smsTopRow}>
-                <Text style={styles.smsSender}>SMS · AZƆ̀ Bénin</Text>
+                <Text style={styles.smsSender}>{t("auth.sms.sender")}</Text>
                 <View style={styles.smsTimerPill}>
                   <Text style={styles.smsTimerText}>{bannerSecondsLeft}s</Text>
                 </View>
               </View>
               <Text style={styles.smsBody}>
-                Code de vérification AZƆ̀ :{" "}
+                {t("auth.sms.body")}{" "}
                 <Text style={styles.smsCodeHighlight}>{simulatedOtp}</Text>
               </Text>
-              <Text style={styles.smsTapHint}>Touche pour remplir automatiquement</Text>
+              <Text style={styles.smsTapHint}>{t("auth.sms.tap")}</Text>
             </View>
           </Pressable>
         </Animated.View>
       ) : null}
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
+      {/* « padding » aussi sur Android : sans cela le clavier recouvre les champs du bas (NPI).
+          Les applications Expo récentes n'ajustent plus la fenêtre toutes seules. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -262,25 +354,52 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
             <Pressable
               onPress={step === "phone" ? onBack : step === "code" ? () => setStep("phone") : undefined}
               style={styles.iconButton}
-              accessibilityLabel={step === "name" ? "Étape obligatoire" : "Retour"}
-              disabled={step === "name"}
+              accessibilityLabel={step === "register" ? t("auth.mandatoryStep") : t("common.back")}
+              disabled={step === "register"}
             >
               <MaterialIcons
-                name={step === "name" ? "lock" : "arrow-back"}
+                name={step === "register" ? "lock" : "arrow-back"}
                 size={20}
-                color={step === "name" ? colors.outline : colors.onSurface}
+                color={step === "register" ? colors.outline : colors.onSurface}
               />
             </Pressable>
-            <Pressable
-              onPress={() => {
-                setServerUrlDraft(getApiUrl());
-                setServerModalOpen(true);
-              }}
-              style={styles.iconButton}
-              accessibilityLabel="Paramètres serveur"
-            >
-              <MaterialIcons name="tune" size={19} color={colors.onSurfaceVariant} />
-            </Pressable>
+            <View style={{ flexDirection: "row", gap: spacing.sm }}>
+              {voiceAssist && (
+                <>
+                  {talk && (
+                    <Pressable
+                      onPress={() => speak(t(stepKey), lang)}
+                      style={styles.iconButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("voice.replay")}
+                    >
+                      <MaterialIcons name="volume-up" size={20} color={colors.primary} />
+                    </Pressable>
+                  )}
+                  <Pressable
+                    onPress={() => {
+                      if (talk) stopSpeaking();
+                      setPaused(talk);
+                    }}
+                    style={styles.iconButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={talk ? t("voice.pause") : t("voice.resume")}
+                  >
+                    <MaterialIcons name={talk ? "pause" : "play-arrow"} size={22} color={colors.primary} />
+                  </Pressable>
+                </>
+              )}
+              <Pressable
+                onPress={() => {
+                  setServerUrlDraft(getApiUrl());
+                  setServerModalOpen(true);
+                }}
+                style={styles.iconButton}
+                accessibilityLabel="Paramètres serveur"
+              >
+                <MaterialIcons name="tune" size={19} color={colors.onSurfaceVariant} />
+              </Pressable>
+            </View>
           </View>
 
           {/* Titre aéré (sans le sous-titre sur l'étape téléphone) */}
@@ -294,19 +413,15 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
               <Text style={styles.brand}>AZƆ̀</Text>
             </Pressable>
             <Text style={styles.headline}>
-              {step === "phone"
-                ? "Bienvenue sur AZƆ̀"
-                : step === "code"
-                  ? "Vérifie ton téléphone"
-                  : "Bienvenue ! Comment on t'appelle ?"}
+              {step === "phone" ? t("auth.phone.title") : step === "code" ? t("auth.code.title") : t("auth.register.title")}
             </Text>
             {step === "code" ? (
               <Text style={styles.subtitle}>
-                Code à 4 chiffres envoyé au +229 {phone || "01 •• •• •• ••"}
+                {t("auth.code.subtitle", { phone: phone || "01 •• •• •• ••" })}
               </Text>
-            ) : step === "name" ? (
+            ) : step === "register" ? (
               <Text style={styles.subtitle}>
-                Choisis un pseudo ou un nom que ton chauffeur pourra voir.
+                {t("auth.register.subtitle")}
               </Text>
             ) : null}
           </View>
@@ -314,7 +429,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
           {step === "phone" ? (
             <View style={styles.card}>
               <View style={styles.labelRow}>
-                <Text style={styles.label}>Numéro de mobile (10 chiffres)</Text>
+                <Text style={styles.label}>{t("auth.phone.label")}</Text>
                 <Text style={styles.digitCount}>
                   {digits.length}/{BENIN_PHONE_LENGTH}
                 </Text>
@@ -344,7 +459,7 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
               </View>
 
               <View style={styles.operatorsRow}>
-                <Text style={styles.operatorsLabel}>Réseaux certifiés :</Text>
+                <Text style={styles.operatorsLabel}>{t("auth.phone.operators")}</Text>
                 <View style={{ flexDirection: "row", gap: 6 }}>
                   <OperatorPill label="MTN" bg={colors.tertiaryFixed} fg={colors.onTertiaryFixed} />
                   <OperatorPill label="Moov" bg={colors.secondaryFixed} fg={colors.onSecondaryFixed} />
@@ -370,37 +485,106 @@ export default function OtpLoginScreen({ onVerified, onBack }: Props) {
             </View>
           ) : (
             <View style={styles.card}>
-              <Text style={styles.label}>Pseudo / Nom complet</Text>
+              <Text style={styles.label}>{t("auth.field.lastName")}</Text>
               <TextInput
-                style={styles.nameInput}
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="Ex. Kossi ou Kossi Adjovi"
+                style={[styles.nameInput, !!lastName && !isValidName(lastName) && styles.inputInvalid]}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder={t("auth.placeholder.lastName")}
                 placeholderTextColor={colors.outline}
                 autoCapitalize="words"
                 autoCorrect={false}
                 autoFocus
-                maxLength={60}
-                returnKeyType="done"
-                onSubmitEditing={handleSaveName}
+                maxLength={50}
+                returnKeyType="next"
+                onSubmitEditing={() => firstNameRef.current?.focus()}
+                accessibilityLabel={t("auth.field.lastName")}
               />
-              <Text style={styles.nameHint}>Tu pourras le modifier plus tard dans ton profil.</Text>
+
+              <Text style={[styles.label, styles.fieldGap]}>{t("auth.field.firstName")}</Text>
+              <TextInput
+                ref={firstNameRef}
+                style={[styles.nameInput, !!firstName && !isValidName(firstName) && styles.inputInvalid]}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder={t("auth.placeholder.firstName")}
+                placeholderTextColor={colors.outline}
+                autoCapitalize="words"
+                autoCorrect={false}
+                maxLength={50}
+                returnKeyType="next"
+                onSubmitEditing={() => npiRef.current?.focus()}
+                accessibilityLabel={t("auth.field.firstName")}
+              />
+
+              <Text style={[styles.label, styles.fieldGap]}>{t("auth.field.gender")}</Text>
+              <View style={styles.genderRow}>
+                {GENDER_OPTIONS.map((option) => {
+                  const selected = gender === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      style={[styles.genderChip, selected && styles.genderChipActive]}
+                      onPress={() => setGender(option.value)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={t(option.labelKey)}
+                    >
+                      <MaterialIcons
+                        name={option.icon}
+                        size={20}
+                        color={selected ? colors.primary : colors.onSurfaceVariant}
+                      />
+                      <Text style={[styles.genderText, selected && styles.genderTextActive]}>{t(option.labelKey)}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* `collapsable={false}` : Android ne doit pas supprimer cette vue, sinon sa position
+                  n'est pas mesurable pour la faire remonter au-dessus du clavier */}
+              <View ref={npiBlockRef} collapsable={false}>
+                <View style={[styles.labelRow, styles.fieldGap]}>
+                  <Text style={styles.label}>{t("auth.field.npi")}</Text>
+                  <Text style={styles.digitCount}>
+                    {cleanNpi(npi).length}/{NPI_LENGTH}
+                  </Text>
+                </View>
+                <TextInput
+                  ref={npiRef}
+                  style={[styles.nameInput, isValidNpi(npi) && styles.inputValid]}
+                  value={formatNpi(npi)}
+                  onChangeText={(value) => setNpi(cleanNpi(value))}
+                  // Le clavier met un instant à s'ouvrir : on attend avant de faire remonter le champ
+                  onFocus={() => setTimeout(scrollToNpi, 300)}
+                  placeholder="1234 5678 90"
+                  placeholderTextColor={colors.outline}
+                  keyboardType="number-pad"
+                  maxLength={NPI_LENGTH + 2}
+                  returnKeyType="done"
+                  onSubmitEditing={handleRegister}
+                  accessibilityLabel="NPI"
+                />
+              </View>
+              <Text style={styles.nameHint}>
+                {t("auth.npi.hint")}
+              </Text>
             </View>
           )}
 
           <View style={{ flex: 1, minHeight: spacing.xl }} />
 
           <PrimaryButton
-            label={step === "phone" ? "Recevoir mon code" : step === "code" ? "Vérifier et continuer" : "Continuer"}
-            onPress={step === "phone" ? handleSendCode : step === "code" ? handleVerify : handleSaveName}
+            label={step === "phone" ? t("auth.phone.send") : step === "code" ? t("auth.code.verify") : t("auth.register.submit")}
+            onPress={step === "phone" ? handleSendCode : step === "code" ? handleVerify : handleRegister}
             loading={sending}
-            disabled={step === "phone" ? !isPhoneValid : step === "code" ? code.join("").length < 4 : !fullName.trim()}
+            disabled={step === "phone" ? !isPhoneValid : step === "code" ? code.join("").length < 4 : !!registrationProblem}
             icon={step === "phone" ? "sms" : step === "code" ? "check" : "arrow-forward"}
           />
 
           {step === "code" && (
             <Pressable style={styles.resend} onPress={handleSendCode}>
-              <Text style={styles.resendText}>Renvoyer le code (5s)</Text>
+              <Text style={styles.resendText}>{t("auth.code.resend")}</Text>
             </Pressable>
           )}
         </ScrollView>
@@ -673,6 +857,25 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   nameHint: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: spacing.sm },
+  fieldGap: { marginTop: spacing.md },
+  inputInvalid: { borderColor: colors.error },
+  inputValid: { borderColor: colors.primary, backgroundColor: colors.surfaceContainerLowest },
+  genderRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
+  genderChip: {
+    flex: 1,
+    height: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceContainerLow,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+  },
+  genderChipActive: { borderColor: colors.primary, backgroundColor: colors.surfaceContainerLowest },
+  genderText: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  genderTextActive: { color: colors.primary, fontWeight: "700" },
   adminQuickBtn: {
     flexDirection: "row",
     alignItems: "center",

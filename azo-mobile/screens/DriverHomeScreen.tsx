@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, TextInput, StyleSheet, Pressable, ScrollView, Switch,
-  ActivityIndicator, RefreshControl, Alert, Linking,
+  ActivityIndicator, RefreshControl, Alert, Linking, useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -10,12 +10,19 @@ import { io, Socket } from "socket.io-client";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import {
-  API_URL, Ride, VehicleType, errorMessage, getToken, placesApi, providersApi, ridesApi, walletApi,
+  API_URL, Ride, VehicleType, errorMessage, getToken, paidAmount, placesApi, providersApi, ridesApi, walletApi,
 } from "../services/api";
 import { fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
 import { tarification } from "../services/tarification";
 import { distanceKm, fmtKm } from "../utils/geo";
 import RideChatModal from "../components/RideChatModal";
+import OSMMapView, { type OSMMarker } from "../components/OSMMapView";
+import RideStopPanel from "../components/RideStopPanel";
+import { getRideRoute, getTripRoute } from "../services/routing";
+import NearbyClientsMap, { clientLabel } from "../components/NearbyClientsMap";
+import DriverOfferWaiting from "../components/DriverOfferWaiting";
+import { nearbyRadiusKm } from "../config/radar";
+import { ApiError } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 
 type Props = { onLogout: () => void; onOpenDossier?: () => void };
@@ -23,6 +30,7 @@ type LatLng = { latitude: number; longitude: number };
 type GpsStatus = "idle" | "ok" | "denied" | "error";
 
 const POLL_MS = 8000;
+const NO_LINE: { latitude: number; longitude: number }[] = [];
 const OFFLINE_MSG = "Serveur injoignable — vérifie que le backend tourne et que l'IP dans .env est la bonne.";
 
 const isToday = (iso: string) => {
@@ -31,16 +39,58 @@ const isToday = (iso: string) => {
   return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 };
 
+// Issues de proposition déjà annoncées au Zem (évite de répéter l'alerte à chaque réouverture).
+const announcedEndings = new Set<string>();
+
 export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState<Ride[]>([]);
   const [history, setHistory] = useState<Ride[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
+  // Le Zem a accepté : le client regarde son profil avant de le choisir (statut OFFERED)
+  const [offered, setOffered] = useState<Ride | null>(null);
+  // Trajet « course » (client -> destination), tracé en pointillés tant que le client n'est pas monté
+  const [tripRoute, setTripRoute] = useState<{ rideId: string; coordinates: LatLng[] } | null>(null);
+  // Nombre de clients disponibles donné par le serveur (sinon on compte les demandes reçues)
+  const [summary, setSummary] = useState<{ count: number; nearestKm: number | null } | null>(null);
+  const [summaryTick, setSummaryTick] = useState(0);
   // Véhicule déclaré dans le dossier prestataire : le radar ne présente que les
   // demandes correspondantes (Zem essence ≠ Zem électrique ; Gazelle ≠ Koala ≠ Léopard).
   const [myVehicle, setMyVehicle] = useState<VehicleType | null>(null);
   const [position, setPosition] = useState<LatLng | null>(null);
+  // Cap du GPS (degrés) : fait pivoter la flèche de mon curseur sur ma carte.
+  const [heading, setHeading] = useState<number | undefined>();
+  // Position du client, reçue en direct tant qu'il rejoint le point de départ.
+  const [clientPos, setClientPos] = useState<(LatLng & { heading?: number }) | null>(null);
+  const lastClientAtRef = useRef(0);
+  // Vitesse et précision du dernier point GPS, envoyées avec chaque position.
+  const fixRef = useRef<{ speed?: number; accuracy?: number }>({});
+
+  // Position du client reçue par socket (`client:location`) ou dans l'accusé de `ride:join`
+  // (dernière position conservée par le serveur : le client apparaît tout de suite). Une
+  // position plus ancienne que celle déjà affichée est ignorée.
+  const applyClientLocation = useCallback((p?: { lat?: number; lng?: number; heading?: number; speed?: number; at?: number } | null) => {
+    if (typeof p?.lat !== "number" || typeof p?.lng !== "number" || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return;
+    const at = typeof p.at === "number" ? p.at : Date.now();
+    if (at < lastClientAtRef.current) return;
+    lastClientAtRef.current = at;
+    // Cap affiché seulement si le client avance : à l’arrêt le cap GPS n’est pas fiable.
+    const moving = typeof p.speed !== "number" || p.speed >= 1;
+    const heading = moving && typeof p.heading === "number" && Number.isFinite(p.heading) ? p.heading : undefined;
+    setClientPos({ latitude: p.lat, longitude: p.lng, ...(heading !== undefined ? { heading } : {}) });
+  }, []);
+
+  const joinRide = useCallback(
+    (socket: Socket, rideId: string) => {
+      socket.emit("ride:join", { rideId }, (res?: { joined?: string | null; clientLocation?: { lat: number; lng: number; at?: number } | null }) => {
+        if (res?.joined) applyClientLocation(res.clientLocation);
+      });
+    },
+    [applyClientLocation]
+  );
+  // Itinéraire routier vers l'étape en cours (client, puis destination).
+  const [driveRoute, setDriveRoute] = useState<{ rideId: string; status: string; coordinates: LatLng[] } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>("idle");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,6 +102,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const [pinInput, setPinInput] = useState("");
   const [dropCodeInput, setDropCodeInput] = useState("");
   const [dropCodeEntryOpen, setDropCodeEntryOpen] = useState(false);
+  // Carte agrandie : sur une moto on veut voir loin, 240 px est trop petit.
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const { height: windowHeight } = useWindowDimensions();
 
   const socketRef = useRef<Socket | null>(null);
   const pendingDestinationRequestsRef = useRef(new Set<string>());
@@ -61,6 +114,8 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   // rafraîchissement périodique chaque fois que le GPS bouge (toutes les ~10 s).
   const positionRef = useRef<LatLng | null>(null);
   positionRef.current = position;
+  const headingRef = useRef<number | undefined>(undefined);
+  headingRef.current = heading;
 
   /* ---------- Compte : portefeuille + historique + course en cours ---------- */
   const loadAccount = useCallback(async () => {
@@ -70,6 +125,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
       setActiveRide((current) =>
         current ?? historyRes.value.find((r) => r.status === "MATCHED" || r.status === "ARRIVED" || r.status === "IN_PROGRESS") ?? null
       );
+      setOffered((current) => current ?? historyRes.value.find((r) => r.status === "OFFERED") ?? null);
       setOffline(false);
     } else {
       setOffline(true);
@@ -80,6 +136,25 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   useEffect(() => {
     loadAccount().finally(() => setLoading(false));
   }, [loadAccount]);
+
+  // Reprise après redémarrage : proposition encore en cours, ou issue de la dernière (le Zem n'est plus rattaché à la course).
+  useEffect(() => {
+    let cancelled = false;
+    ridesApi
+      .currentOffer()
+      .then(async ({ offer, lastEnded }) => {
+        if (cancelled) return;
+        if (offer) {
+          const ride = await ridesApi.get(offer.rideId);
+          if (!cancelled && ride.status === "OFFERED") setOffered((current) => current ?? ride);
+        } else if (lastEnded && !announcedEndings.has(lastEnded.rideId)) {
+          announcedEndings.add(lastEnded.rideId);
+          if (lastEnded.outcome !== "approved") endOfferRef.current(lastEnded.rideId, lastEnded.outcome);
+        }
+      })
+      .catch(() => undefined); // route absente (ancien serveur) ou réseau : le reste du flux couvre ces cas
+    return () => { cancelled = true; };
+  }, []);
 
   /* Véhicule du dossier prestataire (pour expliquer le filtrage du radar) */
   useEffect(() => {
@@ -103,15 +178,34 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
 
   /* ---------- Courses en attente (Zém Radar) ----------
    * La position du chauffeur est transmise au serveur : il écarte les demandes hors du
-   * rayon de recherche (`radar.searchRadiusKm` de la configuration) et les classe de la
-   * plus proche à la plus lointaine. Sans GPS, le radar reste utilisable.
+   * rayon de recherche (`radar.searchRadiusKm` de la configuration) et les classent de la demande la plus
+   * récente à la plus ancienne. Sans GPS, le radar reste utilisable.
    */
   const loadPending = useCallback(async () => {
-    const rides = await ridesApi.pending(positionRef.current ?? undefined);
+    const rides = await ridesApi.pending(positionRef.current ?? undefined, nearbyRadiusKm());
     setPending(rides);
     setOffline(false);
     return rides;
   }, []);
+
+  // La proposition est terminée sans que le client ait choisi ce Zem : on libère l'écran et on explique.
+  const endOfferRef = useRef<(id: string, outcome?: string | null) => void>(() => undefined);
+  const endOffer = useCallback(
+    (id: string, outcome?: string | null) => {
+      setOffered((current) => (current && current.id === id ? null : current));
+      const message =
+        outcome === "declined" ? "Le client a choisi un autre Zem."
+        : outcome === "withdrawn" ? "Tu as retiré ta proposition."
+        : outcome === "cancelled" ? "Le client a annulé sa demande."
+        : outcome === "expired" ? "Le client n'a pas répondu à temps."
+        : "Le client a choisi un autre Zem ou n'a pas répondu à temps.";
+      Alert.alert("Proposition terminée", message + " Tu peux accepter une autre demande.");
+      loadPending().catch(() => undefined);
+    },
+    [loadPending]
+  );
+  endOfferRef.current = endOffer;
+
 
   useEffect(() => {
     if (!online || activeRide) return;
@@ -128,6 +222,28 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     const timer = setInterval(tick, POLL_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [online, activeRide, loadPending]);
+
+  /* ---------- Nombre de clients disponibles (résumé du serveur, repli : comptage local) ---------- */
+  const summaryKey = position ? `${position.latitude.toFixed(2)},${position.longitude.toFixed(2)}` : null;
+  useEffect(() => {
+    if (!online || activeRide || offered || !positionRef.current) {
+      setSummary(null);
+      return;
+    }
+    let cancelled = false;
+    const load = () => {
+      const here = positionRef.current;
+      if (!here) return;
+      ridesApi
+        .pendingSummary(here, nearbyRadiusKm())
+        .then((value) => { if (!cancelled) setSummary({ count: value.count, nearestKm: value.nearestKm }); })
+        // Route absente (serveur pas encore à jour) : on compte les demandes reçues
+        .catch(() => { if (!cancelled) setSummary(null); });
+    };
+    load();
+    const timer = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [online, activeRide, offered, summaryKey, summaryTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- Socket temps réel (position du chauffeur -> client) ---------- */
   useEffect(() => {
@@ -147,15 +263,123 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     socket.on("connect", () => {
       const p = positionRef.current;
       const r = activeRideRef.current;
-      if (p && r) socket.emit("driver:location", { rideId: r.id, lat: p.latitude, lng: p.longitude });
+      // Sans `ride:join`, le Zem ne reçoit rien de la room de la course (position du client).
+      if (r) joinRide(socket, r.id);
+      if (p && r) socket.emit("driver:location", { rideId: r.id, lat: p.latitude, lng: p.longitude, ts: Date.now() });
     });
+    socket.on("client:location", (p: { lat?: number; lng?: number; heading?: number; speed?: number; at?: number }) => applyClientLocation(p));
     // Une nouvelle demande vient d'être publiée : on rafraîchit le radar tout de suite
     // au lieu d'attendre le prochain cycle (8 s).
     socket.on("ride:new", () => {
       loadPending().catch(() => undefined);
+      setSummaryTick((n) => n + 1);
+    });
+    // Une demande a quitté le radar (prise par un autre Zem, annulée, expirée) : son point disparaît.
+    // Fin de la proposition du Zem / choix du client (voir DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md)
+    // Le client a ouvert la popup : l'écran d'attente du Zem le dit
+    socket.on("ride:offer-seen", (p: { rideId?: string; at?: string }) => {
+      if (!p?.rideId) return;
+      setOffered((prev) => (prev && prev.id === p.rideId ? { ...prev, offerSeenAt: p.at ?? new Date().toISOString() } : prev));
+    });
+    socket.on("ride:offer-ended", (p: { rideId?: string; outcome?: string }) => {
+      if (p?.rideId) endOffer(p.rideId, p.outcome ?? null);
+    });
+    socket.on("ride:offer-approved", async (p: { rideId?: string }) => {
+      if (!p?.rideId) return;
+      try {
+        const fresh = await ridesApi.get(p.rideId);
+        setOffered(null);
+        setActiveRide(fresh);
+      } catch {
+        // la relecture toutes les 3 s prendra le relais
+      }
+    });
+    socket.on("ride:removed", () => {
+      loadPending().catch(() => undefined);
+      setSummaryTick((n) => n + 1);
+    });
+    // Course partielle : distance parcourue en direct et demande d'arrêt du client.
+    socket.on("ride:progress", (p: { rideId?: string; traveledMeters?: number; currentPrice?: number }) => {
+      if (p?.rideId !== activeRideRef.current?.id || typeof p.traveledMeters !== "number") return;
+      setActiveRide((r) => (r ? { ...r, traveledMeters: p.traveledMeters, currentPrice: p.currentPrice ?? r.currentPrice } : r));
+    });
+    socket.on("ride:stop", (p: { rideId?: string; stopRequest?: Ride["stopRequest"] }) => {
+      if (p?.rideId !== activeRideRef.current?.id) return;
+      setActiveRide((r) => (r ? { ...r, stopRequest: p.stopRequest ?? null } : r));
     });
     return () => { socket.disconnect(); socketRef.current = null; };
-  }, [online]);
+  }, [online, endOffer]);
+
+  // Pendant la course, on relit son état toutes les 3 s : le client peut avoir demandé ou
+  // accepté l'arrêt, ce qui termine la course sans action du Zem. Filet si le socket tombe.
+  useEffect(() => {
+    if (!online || activeRide?.status !== "IN_PROGRESS") return;
+    const id = activeRide.id;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const fresh = await ridesApi.get(id);
+        if (cancelled) return;
+        if (fresh.status === "COMPLETED" || fresh.status === "CANCELLED") {
+          setActiveRide(null);
+          await loadAccount();
+          Alert.alert(
+            fresh.status === "COMPLETED" ? "Course terminée" : "Course annulée",
+            fresh.status === "COMPLETED"
+              ? "Le paiement a été effectué sur ton portefeuille AZƆ̀ Pay."
+              : "Cette course a été annulée."
+          );
+          return;
+        }
+        setActiveRide((prev) => (prev && prev.id === id ? { ...prev, ...fresh } : prev));
+      } catch {
+        // Réseau coupé : on réessaie au prochain cycle.
+      }
+    };
+    const timer = setInterval(tick, 3000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [online, activeRide?.id, activeRide?.status, loadAccount]);
+
+  // Filet de sécurité : le délai est dépassé depuis 12 s et le serveur n'a toujours rien changé (serveur
+  // en retard, coupure) — on libère l'écran au lieu de rester bloqué sur « 0 s ».
+  useEffect(() => {
+    if (!offered?.offerExpiresAt) return;
+    const ends = Date.parse(offered.offerExpiresAt);
+    if (Number.isNaN(ends)) return;
+    const id = offered.id;
+    const timer = setTimeout(() => endOffer(id, "expired"), Math.max(0, ends - Date.now()) + 12000);
+    return () => clearTimeout(timer);
+  }, [offered?.id, offered?.offerExpiresAt, endOffer]);
+
+  // Proposition envoyée : on relit la course toutes les 3 s jusqu'à la décision du client.
+  useEffect(() => {
+    if (!offered) return;
+    const id = offered.id;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const fresh = await ridesApi.get(id);
+        if (cancelled) return;
+        if (fresh.status === "OFFERED") {
+          setOffered((prev) => (prev && prev.id === id ? { ...prev, ...fresh } : prev));
+          return;
+        }
+        if (fresh.status === "MATCHED" || fresh.status === "ARRIVED" || fresh.status === "IN_PROGRESS") {
+          setOffered(null);
+          setActiveRide(fresh);
+        } else {
+          endOffer(id, fresh.offerOutcome ?? (fresh.status === "CANCELLED" ? "cancelled" : null));
+        }
+      } catch (e) {
+        // Le serveur répond 403/404 au Zem dont la proposition est terminée (il n'est plus rattaché à la
+        // course) : ce n'est PAS une coupure réseau. Avant, ce cas était ignoré et l'écran restait figé.
+        if (!cancelled && e instanceof ApiError && (e.status === 403 || e.status === 404)) endOffer(id, null);
+        // Autre erreur (réseau coupé) : on réessaie au prochain cycle.
+      }
+    };
+    const timer = setInterval(tick, 3000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [offered?.id, endOffer]);
 
   const emitPosition = useCallback((coords: LatLng, heading?: number | null) => {
     const ride = activeRideRef.current;
@@ -165,6 +389,10 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
         rideId: ride.id,
         lat: coords.latitude,
         lng: coords.longitude,
+        // Horodatage d'émission : permet d'ignorer une position arrivée en retard.
+        ts: Date.now(),
+        ...(typeof fixRef.current.speed === "number" ? { speed: fixRef.current.speed } : {}),
+        ...(typeof fixRef.current.accuracy === "number" ? { accuracy: Math.round(fixRef.current.accuracy) } : {}),
         // Cap (degrés) : fait pivoter la flèche du curseur côté client, comme Google Maps.
         ...(typeof heading === "number" && Number.isFinite(heading) && heading >= 0 && heading < 360
           ? { heading }
@@ -189,12 +417,21 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
         setGpsStatus("ok");
         sub = await Location.watchPositionAsync(
           hasActiveRide
-            ? { accuracy: Location.Accuracy.High, distanceInterval: 5, timeInterval: 2500 }
+            ? { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 2, timeInterval: 1000 }
             : { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 10000 },
           (pos) => {
             const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+            const h = pos.coords.heading;
+            const s = pos.coords.speed;
+            // Vitesse GPS négative = inconnue. En dessous de ~1 m/s (arrêt, demi-tour) le cap
+            // GPS n'est pas fiable : on le masque plutôt que d'afficher une flèche qui tourne.
+            const speed = typeof s === "number" && Number.isFinite(s) && s >= 0 ? s : undefined;
+            const reliableHeading =
+              typeof h === "number" && Number.isFinite(h) && h >= 0 && h < 360 && (speed === undefined || speed >= 1);
+            fixRef.current = { speed, accuracy: pos.coords.accuracy ?? undefined };
             setPosition(coords);
-            emitPosition(coords, pos.coords.heading);
+            setHeading(reliableHeading ? h : undefined);
+            emitPosition(coords, reliableHeading ? h : undefined);
           }
         );
         if (cancelled) sub.remove();
@@ -206,6 +443,128 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
 
     return () => { cancelled = true; sub?.remove(); };
   }, [online, hasActiveRide, emitPosition]);
+
+  // Le GPS n'émet que si le Zem a bougé d'au moins 5 m : à l'arrêt (il attend le client,
+  // feu rouge), plus rien ne partait et le client ne voyait aucune position. Pendant une
+  // course on renvoie donc la dernière position connue toutes les 2 s.
+  useEffect(() => {
+    if (!online || !activeRide?.id) return;
+    const timer = setInterval(() => {
+      const p = positionRef.current;
+      if (p) emitPosition(p, headingRef.current);
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [online, activeRide?.id, emitPosition]);
+
+  // Nouvelle course : on oublie la position du client de la précédente et on rejoint la room
+  // de la nouvelle (le socket est déjà connecté quand la course est acceptée).
+  useEffect(() => {
+    lastClientAtRef.current = 0;
+    // Le serveur renvoie la dernière position du client dans la course (MATCHED / ARRIVED) : le point
+    // reste visible après un redémarrage de l'application, sans attendre le prochain envoi du client.
+    setClientPos(
+      activeRide &&
+        (activeRide.status === "MATCHED" || activeRide.status === "ARRIVED") &&
+        typeof activeRide.clientLat === "number" &&
+        typeof activeRide.clientLng === "number"
+        ? { latitude: activeRide.clientLat, longitude: activeRide.clientLng }
+        : null
+    );
+    const socket = socketRef.current;
+    if (activeRide?.id && socket?.connected) joinRide(socket, activeRide.id);
+  }, [activeRide?.id, joinRide]);
+
+  /* ---------- Carte du Zem : son déplacement, le client, la destination ---------- */
+  // Étape en cours : vers le client tant qu'il n'est pas monté, puis vers la destination.
+  const routeTarget = useMemo<LatLng | null>(() => {
+    if (!activeRide) return null;
+    if (activeRide.status === "MATCHED") return { latitude: activeRide.originLat, longitude: activeRide.originLng };
+    if (activeRide.status === "IN_PROGRESS") return { latitude: activeRide.destLat, longitude: activeRide.destLng };
+    return null;
+  }, [activeRide?.id, activeRide?.status, activeRide?.originLat, activeRide?.originLng, activeRide?.destLat, activeRide?.destLng]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clé arrondie à ~100 m : l'itinéraire public (OSRM) n'est recalculé qu'après un vrai
+  // déplacement, pas à chaque point GPS.
+  const routeKey = position ? `${position.latitude.toFixed(3)},${position.longitude.toFixed(3)}` : null;
+  useEffect(() => {
+    const ride = activeRideRef.current;
+    const from = positionRef.current;
+    if (!ride || !routeTarget || !from) {
+      setDriveRoute(null);
+      return;
+    }
+    const controller = new AbortController();
+    let active = true;
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timer = setTimeout(() => {
+      getRideRoute(ride.id, from, routeTarget, controller.signal)
+        .then((route) => { if (active) setDriveRoute({ rideId: ride.id, status: ride.status, coordinates: route.coordinates }); })
+        .catch(() => { /* on garde le tracé précédent : OSRM public peut être indisponible */ })
+        .finally(() => clearTimeout(timeout));
+    }, 500);
+    return () => { active = false; clearTimeout(timer); clearTimeout(timeout); controller.abort(); };
+  }, [routeKey, routeTarget?.latitude, routeTarget?.longitude, activeRide?.id, activeRide?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // La carte montre TOUJOURS trois choses : ma position, le client (sa position en direct, sinon le
+  // point de départ demandé, étiqueté à son nom) et l'arrivée.
+  const mapMarkers = useMemo<OSMMarker[]>(() => {
+    if (!activeRide) return [];
+    const who = clientLabel(activeRide);
+    const beforePickup = activeRide.status === "MATCHED" || activeRide.status === "ARRIVED";
+    const liveClient = !!clientPos && beforePickup;
+    const list: OSMMarker[] = [
+      {
+        id: "origin",
+        coordinate: { latitude: activeRide.originLat, longitude: activeRide.originLng },
+        title: beforePickup && !liveClient ? `${who} · Départ` : "Départ",
+        color: "green",
+      },
+      { id: "destination", coordinate: { latitude: activeRide.destLat, longitude: activeRide.destLng }, title: "Arrivée", color: "red" },
+    ];
+    // Le client n'est montré en direct que tant qu'il rejoint le point de départ : une fois sur la
+    // moto, sa position est celle du Zem.
+    if (liveClient && clientPos) {
+      list.push({ id: "client", coordinate: clientPos, title: who, color: "orange", heading: clientPos.heading });
+    }
+    if (position) list.push({ id: "driver", coordinate: position, title: "Moi", color: "blue", heading });
+    return list;
+  }, [activeRide?.id, activeRide?.status, activeRide?.originLat, activeRide?.originLng, activeRide?.destLat, activeRide?.destLng, activeRide?.client?.displayName, activeRide?.client?.fullName, position, heading, clientPos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Le tracé n'est montré que s'il correspond à la course et à l'étape en cours.
+  const mapPolyline = useMemo<LatLng[]>(
+    () =>
+      driveRoute && activeRide && driveRoute.rideId === activeRide.id && driveRoute.status === activeRide.status
+        ? driveRoute.coordinates
+        : [],
+    [driveRoute, activeRide?.id, activeRide?.status] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // Suite du trajet (client -> destination) en pointillés, tant que le client n'est pas monté.
+  useEffect(() => {
+    const ride = activeRideRef.current;
+    if (!ride || (ride.status !== "MATCHED" && ride.status !== "ARRIVED")) {
+      setTripRoute(null);
+      return;
+    }
+    const controller = new AbortController();
+    let active = true;
+    getTripRoute(
+      ride.id,
+      { latitude: ride.originLat, longitude: ride.originLng },
+      { latitude: ride.destLat, longitude: ride.destLng },
+      controller.signal
+    )
+      .then((route) => { if (active) setTripRoute({ rideId: ride.id, coordinates: route.coordinates }); })
+      .catch(() => { /* pas de tracé en pointillés : les points restent visibles */ });
+    return () => { active = false; controller.abort(); };
+  }, [activeRide?.id, activeRide?.status]);
+  const tripPolyline = useMemo<LatLng[]>(
+    () =>
+      tripRoute && activeRide && tripRoute.rideId === activeRide.id && (activeRide.status === "MATCHED" || activeRide.status === "ARRIVED")
+        ? tripRoute.coordinates
+        : NO_LINE,
+    [tripRoute, activeRide?.id, activeRide?.status] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // La position bouge aussi quand le socket vient de se connecter : on renvoie la dernière.
   useEffect(() => {
@@ -261,17 +620,20 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
             ? distanceKm(position, { latitude: r.originLat, longitude: r.originLng })
             : null,
     }));
-    return withDistance.sort((a, b) => (a.km ?? 999) - (b.km ?? 999));
+    // L'ordre est celui du serveur : de la demande la plus récente à la plus ancienne
+    return withDistance.filter((item) => item.km === null || item.km <= nearbyRadiusKm());
   }, [pending, position]);
 
   // Rayon de recherche en vigueur (configuration partagée avec le serveur).
-  const searchRadiusKm: number = tarification().radar?.searchRadiusKm ?? 0;
+  const searchRadiusKm: number = nearbyRadiusKm();
   const expiryMinutes: number = tarification().radar?.pendingExpiryMinutes ?? 0;
+  // Nombre de clients disponibles : celui du serveur, sinon les demandes reçues dans le rayon
+  const nearbyCount = summary?.count ?? requests.length;
 
   const stats = useMemo(() => {
     const done = history.filter((r) => r.status === "COMPLETED");
     const today = done.filter((r) => isToday(r.createdAt));
-    const gainsToday = today.reduce((sum, r) => sum + (r.price - (r.commission ?? 0)), 0);
+    const gainsToday = today.reduce((sum, r) => sum + (paidAmount(r) - (r.commission ?? 0)), 0);
     const rated = done.filter((r) => typeof r.rating === "number");
     const rating = rated.length
       ? rated.reduce((sum, r) => sum + (r.rating ?? 0), 0) / rated.length
@@ -283,7 +645,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
   const recent = useMemo(() => history.slice(0, 4), [history]);
 
   async function handleToggleOnline(value: boolean) {
-    if (!value && activeRide) {
+    if (!value && (activeRide || offered)) {
       Alert.alert("Course en cours", "Termine ou annule ta course avant de passer hors ligne.");
       return;
     }
@@ -301,11 +663,27 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     setBusy(true);
     try {
       const accepted = await ridesApi.accept(ride.id);
-      setActiveRide(accepted);
       setPending((list) => list.filter((r) => r.id !== ride.id));
+      // Le serveur demande la confirmation du client (OFFERED) ; sinon la course démarre tout de suite.
+      if (accepted.status === "OFFERED") setOffered(accepted);
+      else setActiveRide(accepted);
     } catch (e) {
       Alert.alert("Impossible d'accepter", errorMessage(e));
       loadPending().catch(() => undefined); // elle est peut-être déjà prise par un autre
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleWithdrawOffer() {
+    if (!offered) return;
+    setBusy(true);
+    try {
+      await ridesApi.withdrawOffer(offered.id);
+      setOffered(null);
+      loadPending().catch(() => undefined);
+    } catch (e) {
+      Alert.alert("Annulation impossible", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -378,6 +756,12 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
     }
   }
 
+  // Arrêt accepté par le client : plus besoin d'« Arrivé à destination », on demande directement le code.
+  const stopAccepted = activeRide?.status === "IN_PROGRESS" && activeRide.stopRequest?.accepted === true;
+  useEffect(() => {
+    if (stopAccepted) setDropCodeEntryOpen(true);
+  }, [stopAccepted]);
+
   function handleComplete() {
     if (!activeRide) return;
     const cleanPin = dropCodeInput.replace(/\D/g, "");
@@ -385,7 +769,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
       Alert.alert("Code d'arrivée requis", "Demande au client son code d'arrivée à 4 chiffres pour terminer la course.");
       return;
     }
-    const gain = activeRide.price;
+    const gain = stopAccepted && typeof activeRide.stopRequest?.price === "number" ? activeRide.stopRequest.price : activeRide.price;
     Alert.alert(
       "Confirmer l'arrivée à destination ?",
       `Le paiement de ${fcfa(gain)} sera effectué après validation du code.`,
@@ -400,7 +784,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
               setActiveRide(null);
               setDropCodeInput("");
               await loadAccount();
-              const net = done.price - (done.commission ?? 0);
+              const net = paidAmount(done) - (done.commission ?? 0);
               Alert.alert("Course terminée 🎉", `+${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`);
             } catch (e) {
               Alert.alert("Impossible de terminer", errorMessage(e));
@@ -554,16 +938,49 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
               {VEHICLE_LABEL[activeRide.vehicleType]} · #{activeRide.id.slice(0, 6)}
             </Text>
 
+            <View style={[styles.liveMap, mapExpanded && { height: Math.round(windowHeight * 0.62) }]}>
+              <OSMMapView
+                center={position ?? { latitude: activeRide.originLat, longitude: activeRide.originLng }}
+                markers={mapMarkers}
+                polyline={mapPolyline}
+                secondaryPolyline={tripPolyline}
+                // La caméra garde TOUT visible : moi, le client, le départ et l'arrivée avant la prise en
+                // charge ; moi et l'arrivée pendant la course (elle ne se recadre que si un point approche du bord).
+                fitMarkerIds={
+                  activeRide.status === "MATCHED" || activeRide.status === "ARRIVED"
+                    ? ["driver", "client", "origin", "destination"]
+                    : ["driver", "destination"]
+                }
+              />
+              {!position && (
+                <View style={styles.liveMapHint}>
+                  <Text style={styles.liveMapHintText}>
+                    {gpsStatus === "denied" ? "Active la localisation pour voir ta position" : "Recherche de ta position GPS…"}
+                  </Text>
+                </View>
+              )}
+              <Pressable
+                style={styles.liveMapExpand}
+                onPress={() => setMapExpanded((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel={mapExpanded ? "Réduire la carte" : "Agrandir la carte"}
+              >
+                <MaterialIcons name={mapExpanded ? "fullscreen-exit" : "fullscreen"} size={22} color={colors.primary} />
+              </Pressable>
+            </View>
+
+            <RideStopPanel ride={activeRide} role="DRIVER" onChanged={setActiveRide} />
+
             <View style={styles.routeRow}>
               <MaterialIcons name="trip-origin" size={16} color={colors.primary} />
               <Text style={styles.routeText} numberOfLines={1}>
-                {ridePlaces.origin ?? `${activeRide.originLat.toFixed(4)}, ${activeRide.originLng.toFixed(4)}`}
+                {activeRide.originLabel ?? ridePlaces.origin ?? `${activeRide.originLat.toFixed(4)}, ${activeRide.originLng.toFixed(4)}`}
               </Text>
             </View>
             <View style={styles.routeRow}>
               <MaterialIcons name="place" size={16} color={colors.secondary} />
               <Text style={styles.routeText} numberOfLines={1}>
-                {ridePlaces.destination ?? `${activeRide.destLat.toFixed(4)}, ${activeRide.destLng.toFixed(4)}`}
+                {activeRide.destLabel ?? ridePlaces.destination ?? `${activeRide.destLat.toFixed(4)}, ${activeRide.destLng.toFixed(4)}`}
               </Text>
             </View>
 
@@ -574,7 +991,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.clientName}>
-                    {maskPersonName(activeRide.client?.fullName, "Client AZƆ̀")}
+                    {clientLabel(activeRide)}
                   </Text>
                   <Text style={styles.clientMeta}>
                     {maskBeninPhone(activeRide.client?.phone)} · AZƆ̀ Pay
@@ -620,7 +1037,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
             {activeRide.status === "IN_PROGRESS" && dropCodeEntryOpen && (
               <View style={styles.pinBox}>
                 <Text style={styles.pinLabel}>
-                  À destination, demande le code d’arrivée à 4 chiffres au client
+                  {stopAccepted
+                    ? "Arrêt accepté : demande son code d’arrivée à 4 chiffres au client"
+                    : "À destination, demande le code d’arrivée à 4 chiffres au client"}
                 </Text>
                 <TextInput
                   style={styles.pinInput}
@@ -708,13 +1127,26 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
           <Text style={styles.withdrawText}>Retrait Express MoMo</Text>
         </Pressable>
 
+        {/* --- Proposition envoyée : le client regarde ton profil avant de te choisir --- */}
+        {!activeRide && offered && <DriverOfferWaiting ride={offered} busy={busy} onWithdraw={handleWithdrawOffer} position={position} heading={heading} />}
+
         {/* --- Demandes proches --- */}
-        {!activeRide && (
+        {!activeRide && !offered && (
           <>
+            {online && (
+              <NearbyClientsMap
+                position={position}
+                heading={heading}
+                requests={requests}
+                count={nearbyCount}
+                radiusKm={nearbyRadiusKm()}
+                gpsHint={gpsStatus === "denied" ? "Active la localisation pour voir ta position" : "Recherche de ta position GPS…"}
+              />
+            )}
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Demandes proches</Text>
-              {online && pending.length > 0 && (
-                <Text style={styles.sectionBadge}>{pending.length}</Text>
+              {online && nearbyCount > 0 && (
+                <Text style={styles.sectionBadge}>{nearbyCount}</Text>
               )}
             </View>
             {myVehicle && (
@@ -752,10 +1184,10 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
                         {VEHICLE_LABEL[ride.vehicleType]} · {fcfa(ride.price)}
                       </Text>
                       <Text style={styles.requestClient} numberOfLines={1}>
-                        Client : {maskPersonName(ride.client?.fullName, "Client AZƆ̀")}
+                        Client : {clientLabel(ride)}
                       </Text>
                       <Text style={styles.requestDestination} numberOfLines={2}>
-                        Destination : {pendingDestinations[ride.id] ?? `${ride.destLat.toFixed(4)}, ${ride.destLng.toFixed(4)}`}
+                        Destination : {ride.destLabel ?? pendingDestinations[ride.id] ?? `${ride.destLat.toFixed(4)}, ${ride.destLng.toFixed(4)}`}
                       </Text>
                       <Text style={styles.requestMeta}>
                         {km !== null ? `${fmtKm(km)} de toi · ` : ""}
@@ -795,7 +1227,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
                   <Text style={styles.tripMeta}>{r.status === "COMPLETED" ? "Payée" : r.status === "CANCELLED" ? "Annulée" : "En cours"}</Text>
                 </View>
                 <Text style={[styles.tripAmount, r.status !== "COMPLETED" && { color: colors.onSurfaceVariant }]}>
-                  {r.status === "COMPLETED" ? `+${fcfa(r.price - (r.commission ?? 0))}` : "—"}
+                  {r.status === "COMPLETED" ? `+${fcfa(paidAmount(r) - (r.commission ?? 0))}` : "—"}
                 </Text>
               </View>
             ))}
@@ -844,6 +1276,10 @@ const styles = StyleSheet.create({
   warningText: { ...typography.labelSm, color: colors.error, flex: 1 },
   offlineBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.tertiaryFixed, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.md },
   offlineText: { ...typography.labelSm, color: colors.onTertiaryFixed, flex: 1 },
+  liveMap: { height: 240, borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.surfaceContainer, marginVertical: spacing.sm },
+  liveMapExpand: { position: "absolute", left: 8, top: 8, width: 38, height: 38, borderRadius: 19, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", elevation: 4 },
+  liveMapHint: { position: "absolute", left: 8, right: 8, bottom: 8, backgroundColor: "rgba(255,255,255,0.92)", borderRadius: radius.sm, paddingVertical: 6, paddingHorizontal: 10 },
+  liveMapHintText: { ...typography.labelSm, color: colors.onSurfaceVariant, textAlign: "center" },
   activeCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1.5, borderColor: colors.primary, gap: 6 },
   activeHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   activeTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },

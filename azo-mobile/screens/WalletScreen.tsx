@@ -1,36 +1,33 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { walletApi, WalletTransaction } from "../services/api";
+import { useI18n, type MessageKey } from "../i18n";
 
-const ACTIONS = [
-  { id: "recharge", label: "Recharger", icon: "add-circle" as const },
-  { id: "transfer", label: "Transférer", icon: "send" as const },
-  { id: "history", label: "Historique", icon: "receipt-long" as const },
-  { id: "security", label: "Sécurité", icon: "fingerprint" as const },
+const ACTIONS: { id: string; labelKey: MessageKey; icon: keyof typeof MaterialIcons.glyphMap }[] = [
+  { id: "recharge", labelKey: "wallet.act.recharge", icon: "add-circle" },
+  { id: "transfer", labelKey: "wallet.act.transfer", icon: "send" },
+  { id: "history", labelKey: "wallet.act.history", icon: "receipt-long" },
+  { id: "security", labelKey: "wallet.act.security", icon: "fingerprint" },
 ];
 
-const PAYMENT_METHODS = [
-  { id: "momo", label: "MTN Mobile Money", meta: "+229 01 •• •• •• ••", tag: "Par défaut", icon: "MTN" },
-  { id: "celtiis", label: "Celtiis Cash Bénin", meta: "+229 01 •• •• •• ••", tag: "Secondaire", icon: "CLTS" },
-  { id: "moov", label: "Moov Money Bénin", meta: "+229 01 •• •• •• ••", tag: undefined, icon: "MOOV" },
-  { id: "visa", label: "Carte Visa UBA Bénin", meta: "•••• •••• •••• 8902 · Exp 09/28", tag: undefined, icon: "VISA" },
-];
-
-const ACTIVITY = [
-  { id: "demo-1", label: "Course Zem Express — Haie Vive → Ganhi", meta: "Aujourd'hui, 10:42 · Romaric Soglo", amount: "-700 F", positive: false, icon: "two-wheeler" as const },
-  { id: "demo-2", label: "Rechargement MTN MoMo", meta: "Hier, 16:30 · Réf. MM-891042", amount: "+25 000 F", positive: true, icon: "arrow-downward" as const },
-  { id: "demo-3", label: "Coursier Personnel — Pharmacie Camp Guézo → Fidjrossè", meta: "Hier, 09:15 · Fifamè Arnaud Zinsou", amount: "-1 500 F", positive: false, icon: "local-shipping" as const },
-  { id: "demo-4", label: "Voiture Confort — Aéroport Cotonou → Novotel", meta: "Il y a 2 jours · Ulrich Houngbédji", amount: "-2 500 F", positive: false, icon: "directions-car" as const },
+// Moyens de paiement acceptés (aucun numéro ni carte inventés : le serveur ne liste pas encore les comptes liés)
+const PAYMENT_METHODS: { id: string; label: string; metaKey: MessageKey; icon: string }[] = [
+  { id: "momo", label: "MTN Mobile Money", metaKey: "wallet.pm.mobile", icon: "MTN" },
+  { id: "celtiis", label: "Celtiis Cash Bénin", metaKey: "wallet.pm.mobile", icon: "CLTS" },
+  { id: "moov", label: "Moov Money Bénin", metaKey: "wallet.pm.mobile", icon: "MOOV" },
+  { id: "visa", label: "Visa", metaKey: "wallet.pm.card", icon: "VISA" },
 ];
 
 type Props = { onBack: () => void };
 
 export default function WalletScreen({ onBack }: Props) {
+  const { t, locale } = useI18n();
+  const [loadFailed, setLoadFailed] = useState(false);
   // Solde réel depuis le backend (nécessite d'être connecté via l'écran OTP)
   const [balance, setBalance] = useState<number | null>(null);
   const [cashback, setCashback] = useState(0);
@@ -39,13 +36,14 @@ export default function WalletScreen({ onBack }: Props) {
   // Recharge le solde ET l'historique depuis le backend
   async function load() {
     try {
-      const [w, t] = await Promise.all([walletApi.get(), walletApi.transactions()]);
+      const [w, list] = await Promise.all([walletApi.get(), walletApi.transactions()]);
       setBalance(w.balance);
       setCashback(w.cashback);
-      setTx(t);
+      setTx(list);
+      setLoadFailed(false);
     } catch {
-      setBalance(48500);
-      setCashback(1250);
+      // Serveur injoignable : pas de solde inventé (48 500 F s'affichait avant), « — FCFA » et un message
+      setLoadFailed(true);
     }
   }
 
@@ -55,56 +53,55 @@ export default function WalletScreen({ onBack }: Props) {
 
   // Recharge simulée de 5 000 FCFA (le vrai paiement FedaPay viendra plus tard)
   function handleRecharge() {
-    Alert.alert("Recharger", "Ajouter 5 000 FCFA à ton portefeuille (simulation, sans vrai paiement) ?", [
-      { text: "Annuler", style: "cancel" },
+    Alert.alert(t("wallet.rechargeTitle"), t("wallet.rechargeBody"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Recharger",
+        text: t("wallet.rechargeTitle"),
         onPress: async () => {
           try {
-            await walletApi.recharge(5000, "MTN_MOMO");
+            // Le serveur renvoie l'adresse de paiement FedaPay : le crédit arrive après le paiement
+            const { url } = await walletApi.recharge(5000, "MTN_MOMO");
+            if (url) await Linking.openURL(url);
             await load();
           } catch (e: any) {
-            Alert.alert("Erreur", e.message);
+            Alert.alert(t("common.error"), e.message);
           }
         },
       },
     ]);
   }
 
-  // Transforme les transactions du backend au format d'affichage
-  // Sécurisé avec (tx || []) pour éviter le crash si tx n'est pas encore un tableau
-  const activity =
-    tx && tx.length > 0
-      ? tx.map((t) => ({
-          id: t.id,
-          label: t.label,
-          meta: `${new Date(t.createdAt).toLocaleString("fr-FR")}${t.meta ? " · " + t.meta : ""}`,
-          amount: `${t.type === "CREDIT" ? "+" : "-"}${t.amount.toLocaleString("fr-FR")} F`,
-          positive: t.type === "CREDIT",
-          icon: (t.type === "CREDIT" ? "arrow-downward" : "arrow-upward") as keyof typeof MaterialIcons.glyphMap,
-        }))
-      : ACTIVITY;
+  // Transforme les transactions du backend au format d'affichage (aucune ligne de démonstration)
+  const activity = (tx ?? []).map((item) => ({
+    id: item.id,
+    label: item.label,
+    meta: `${new Date(item.createdAt).toLocaleString(locale)}${item.meta ? " · " + item.meta : ""}`,
+    amount: `${item.type === "CREDIT" ? "+" : "-"}${item.amount.toLocaleString(locale)} F`,
+    positive: item.type === "CREDIT",
+    icon: (item.type === "CREDIT" ? "arrow-downward" : "arrow-upward") as keyof typeof MaterialIcons.glyphMap,
+  }));
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.iconButton}>
+        <Pressable onPress={onBack} style={styles.iconButton} accessibilityLabel={t("common.back")}>
           <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />
         </Pressable>
-        <Text style={styles.headerTitle}>Portefeuille</Text>
+        <Text style={styles.headerTitle}>{t("wallet.title")}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <LinearGradient colors={colors.gradientCta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Solde disponible · AZƆ̀ Pay</Text>
+          <Text style={styles.balanceLabel}>{t("wallet.balance")}</Text>
           <Text style={styles.balanceValue}>
-            {balance === null ? "— FCFA" : `${balance.toLocaleString("fr-FR")} FCFA`}
+            {balance === null ? "— FCFA" : `${balance.toLocaleString(locale)} FCFA`}
           </Text>
           <View style={styles.cashbackRow}>
             <MaterialIcons name="stars" size={16} color="#fff" />
-            <Text style={styles.cashbackText}>Cashback : +{cashback} F</Text>
+            <Text style={styles.cashbackText}>{t("wallet.cashback", { amount: cashback })}</Text>
           </View>
+          {loadFailed && <Text style={styles.cashbackText}>{t("wallet.loadError")}</Text>}
         </LinearGradient>
 
         <View style={styles.actionsRow}>
@@ -113,14 +110,14 @@ export default function WalletScreen({ onBack }: Props) {
               <View style={styles.actionIcon}>
                 <MaterialIcons name={a.icon} size={22} color={colors.primary} />
               </View>
-              <Text style={styles.actionLabel}>{a.label}</Text>
+              <Text style={styles.actionLabel}>{t(a.labelKey)}</Text>
             </Pressable>
           ))}
         </View>
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Moyens de paiement</Text>
-          <Text style={styles.sectionAction}>Gérer</Text>
+          <Text style={styles.sectionTitle}>{t("wallet.methods")}</Text>
+          <Text style={styles.sectionAction}>{t("wallet.manage")}</Text>
         </View>
         <View style={{ gap: spacing.sm }}>
           {PAYMENT_METHODS.map((m) => (
@@ -130,28 +127,23 @@ export default function WalletScreen({ onBack }: Props) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.paymentLabel}>{m.label}</Text>
-                <Text style={styles.paymentMeta}>{m.meta}</Text>
+                <Text style={styles.paymentMeta}>{t(m.metaKey)}</Text>
               </View>
-              {m.tag && (
-                <View style={styles.tagPill}>
-                  <Text style={styles.tagText}>{m.tag}</Text>
-                </View>
-              )}
             </View>
           ))}
           <Pressable style={styles.addCardRow}>
             <MaterialIcons name="add-card" size={20} color={colors.primary} />
-            <Text style={styles.addCardText}>Lier un nouveau compte ou carte</Text>
+            <Text style={styles.addCardText}>{t("wallet.link")}</Text>
           </Pressable>
         </View>
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Activité récente</Text>
-          <Text style={styles.sectionAction}>Tout voir</Text>
+          <Text style={styles.sectionTitle}>{t("wallet.activity")}</Text>
+          <Text style={styles.sectionAction}>{t("wallet.seeAll")}</Text>
         </View>
         <View style={{ gap: spacing.sm }}>
           {activity.length === 0 && (
-            <Text style={styles.activityMeta}>Aucune transaction pour le moment.</Text>
+            <Text style={styles.activityMeta}>{t("wallet.noTx")}</Text>
           )}
           {activity.map((a) => (
             <View key={a.id} style={styles.activityRow}>

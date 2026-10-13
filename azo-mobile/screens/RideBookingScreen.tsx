@@ -1,24 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, TextInput, StyleSheet, Pressable, ScrollView,
-  ActivityIndicator, Linking, Keyboard,
+  ActivityIndicator, Linking, Keyboard, Alert,
   Platform,
 } from "react-native";
 // Supprime l'ancien import de MapView, UrlTile, Marker
+import * as SecureStore from "expo-secure-store";
 import OSMMapView, { type LatLng } from "../components/OSMMapView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { Estimate, Place, VehicleType, errorMessage, placesApi, rideApi, ridesApi, walletApi } from "../services/api";
+import { Estimate, Place, VehicleType, errorCode, errorMessage, placesApi, rideApi, ridesApi, walletApi } from "../services/api";
 import {
   CAR_VEHICLES,
   ZEM_VEHICLES,
   refreshTarification,
+  ridePrice,
   tarification,
 } from "../services/tarification";
 import { useCurrentLocation } from "../hooks/useCurrentLocation";
 import { getDrivingRoute, type DrivingRoute } from "../services/routing";
+import { getLanguage, languageInfo, tr, useI18n, type MessageKey } from "../i18n";
 
 type Props = {
   service: "transport" | "zem";
@@ -33,16 +36,15 @@ type Target = "origin" | "destination";
  *   * ZEM_ESSENCE / ZEM_ELECTRIC → les motos-taxis (Zem), choisis à l'étape 1 ;
  *   * GAZELLE / KOALA / LEOPARD  → les voitures proposées pour une course.
  */
-const VEHICLES: Record<
-  VehicleType,
-  { label: string; short: string; icon: keyof typeof MaterialIcons.glyphMap }
-> = {
-  ZEM_ESSENCE: { label: "Zem à essence", short: "Moto-taxi thermique, partout en ville", icon: "two-wheeler" },
-  ZEM_ELECTRIC: { label: "Zem électrique", short: "Moto-taxi électrique, silencieux", icon: "electric-moped" },
-  GAZELLE: { label: "Gazelle", short: "Voiture d'entrée de gamme", icon: "directions-car" },
-  KOALA: { label: "Koala · climatisé", short: "Voiture climatisée", icon: "directions-car" },
-  LEOPARD: { label: "Léopard · premium climatisé", short: "Berline haut de gamme climatisée", icon: "local-taxi" },
+const VEHICLES: Record<VehicleType, { icon: keyof typeof MaterialIcons.glyphMap }> = {
+  ZEM_ESSENCE: { icon: "two-wheeler" },
+  ZEM_ELECTRIC: { icon: "electric-moped" },
+  GAZELLE: { icon: "directions-car" },
+  KOALA: { icon: "directions-car" },
+  LEOPARD: { icon: "local-taxi" },
 };
+const vLabel = (v: VehicleType) => tr(`veh.${v}.label` as MessageKey);
+const vShort = (v: VehicleType) => tr(`veh.${v}.short` as MessageKey);
 const POPULAR_PLACES: Place[] = [
   { id: "etoile", title: "Place de l'Étoile Rouge", subtitle: "Cotonou Centre", latitude: 6.3725, longitude: 2.4061 },
   { id: "dantokpa", title: "Marché Dantokpa", subtitle: "St Michel, Cotonou", latitude: 6.3728, longitude: 2.4339 },
@@ -52,71 +54,148 @@ const POPULAR_PLACES: Place[] = [
   { id: "calavi", title: "Carrefour IITA Calavi", subtitle: "Abomey-Calavi", latitude: 6.4225, longitude: 2.3397 },
 ];
 const ERROR_COLOR = "#B3261B";
-const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} FCFA`;
 
-/**
- * Tarif d'un véhicule (Zem ou voiture), construit depuis la configuration partagée
- * (`config/tarification.json`, synchronisée avec le backend) : aucune valeur en dur.
- */
-function vehicleTariffLine(vehicle: VehicleType): string {
-  const zem = tarification().vehicles[vehicle];
-  const paliers = zem.brackets
-    .map((b, i) => {
-      const precedent = i === 0 ? 0 : (zem.brackets[i - 1].upToKm ?? 0);
-      const de = precedent === 0 ? 0 : precedent + 1;
-      return b.upToKm === null
-        ? `${fcfa(b.perKm)}/km au-delà`
-        : `${fcfa(b.perKm)}/km (${de}–${b.upToKm} km)`;
-    })
-    .join(" · ");
-  const remise = zem.baseDiscount
-    ? ` · −${zem.baseDiscount.pct} % de base après ${zem.baseDiscount.aboveKm} km`
-    : "";
-  return `${fcfa(zem.base)} de base · ${paliers}${remise}`;
-}
+// Adresses enregistrées (domicile, travail) : gardées sur le téléphone, aucun serveur
+const SAVED_PLACES_KEY = "savedPlaces";
+type SavedKey = "home" | "work";
+type SavedPlaces = Partial<Record<SavedKey, Place>>;
+const SAVED_KEYS: SavedKey[] = ["home", "work"];
+const numLocale = () => languageInfo(getLanguage()).locale;
+const fcfa = (n: number) => `${n.toLocaleString(numLocale())} FCFA`;
 
 /**
  * Note commune aux deux Zem, construite depuis la configuration partagée (jamais en dur) :
  * si les paliers kilométriques sont identiques, seule la base les sépare.
  */
 function zemCommonNote(): string {
-  const essence = tarification().vehicles.ZEM_ESSENCE;
-  const electrique = tarification().vehicles.ZEM_ELECTRIC;
-  const ecartsKm = essence.brackets.map((b, i) => b.perKm - (electrique.brackets[i]?.perKm ?? b.perKm));
-  const memeTarifKm = ecartsKm.every((e) => e === 0);
-  const ecartBase = essence.base - electrique.base;
-  if (memeTarifKm && ecartBase > 0) {
-    return (
-      `Même tarif au kilomètre pour les deux types : seule la base change — ` +
-      `${fcfa(electrique.base)} en électrique, ${fcfa(ecartBase)} de moins qu'à essence ` +
-      `(${fcfa(essence.base)}).`
-    );
+  // Comparaison sur une distance de référence, calculée avec le même barème que la facturation :
+  // elle reste juste quand le barème change (base ET paliers), au lieu d'une phrase écrite à la main.
+  const essence = ridePrice(ZEM_REFERENCE_KM, "ZEM_ESSENCE");
+  const electrique = ridePrice(ZEM_REFERENCE_KM, "ZEM_ELECTRIC");
+  const km = ZEM_REFERENCE_KM;
+  if (electrique < essence) {
+    return tr("ride.zem.noteSave", {
+      km, essence: fcfa(essence), electric: fcfa(electrique), saving: fcfa(essence - electrique),
+    });
   }
-  if (memeTarifKm) {
-    return `Mêmes tarifs pour les deux types de Zem : ${fcfa(essence.base)} de base.`;
+  if (electrique > essence) {
+    return tr("ride.zem.noteMore", { km, essence: fcfa(essence), electric: fcfa(electrique) });
   }
-  const ecartUniforme = ecartsKm.every((e) => e === ecartsKm[0]);
-  return ecartUniforme && ecartsKm[0] > 0
-    ? `Même base pour les deux : seul le prix au kilomètre change — l'électrique coûte ${fcfa(ecartsKm[0])} de moins par km.`
-    : `Le prix au kilomètre change d'un type à l'autre.`;
+  return tr("ride.zem.noteSame", { price: fcfa(essence), km });
+}
+
+/** Distance de référence des exemples de prix (aucune donnée de course n'est encore connue). */
+const ZEM_REFERENCE_KM = 10;
+const EXAMPLE_KM = 5;
+
+/** Paliers d'un véhicule sous forme de cellules « distance → prix au km ». */
+function tariffCells(vehicle: VehicleType): { label: string; perKm: number }[] {
+  const pricing = tarification().vehicles[vehicle];
+  return pricing.brackets.map((b, i) => {
+    const from = i === 0 ? 0 : (pricing.brackets[i - 1].upToKm ?? 0) + 1;
+    return { label: b.upToKm === null ? tr("ride.tier.open", { from }) : `${from}–${b.upToKm} km`, perKm: b.perKm };
+  });
+}
+
+type OfferBadge = { icon: keyof typeof MaterialIcons.glyphMap; label: string };
+
+/** Nom court : le reste (climatisé, gamme…) est dit par les badges de la carte. */
+const shortName = (vehicle: VehicleType) => vLabel(vehicle);
+
+/** Badges d'une voiture, tirés de sa fiche de gamme et du barème (climatisation). */
+function carBadges(vehicle: VehicleType): OfferBadge[] {
+  const pitch = CAR_PITCH[vehicle as CarKey];
+  const badges: OfferBadge[] = pitch ? [{ icon: pitch.tagIcon, label: tr(`car.${vehicle as CarKey}.tag` as MessageKey) }] : [];
+  if (tarification().vehicles[vehicle]?.airConditioned) badges.push({ icon: "ac-unit", label: tr("ride.badge.ac") });
+  return badges;
+}
+
+function OfferBadges({ badges }: { badges: OfferBadge[] }) {
+  return (
+    <>
+      {badges.map((badge) => (
+        <View key={badge.label} style={styles.zemBadge}>
+          <MaterialIcons name={badge.icon} size={12} color={colors.primary} />
+          <Text style={styles.zemBadgeText}>{badge.label}</Text>
+        </View>
+      ))}
+    </>
+  );
+}
+
+/** Prix lisible d'un coup d'œil : prise en charge, une cellule par palier, puis un exemple. */
+function PriceBreakdown({ vehicle }: { vehicle: VehicleType }) {
+  const cells = tariffCells(vehicle);
+  return (
+    <>
+      <View style={styles.zemBaseRow}>
+        <Text style={styles.zemBaseLabel}>{tr("ride.base")}</Text>
+        <Text style={styles.zemBaseValue}>{fcfa(tarification().vehicles[vehicle].base)}</Text>
+      </View>
+      <View style={styles.zemTiers}>
+        {cells.map((cell, i) => (
+          <View key={cell.label} style={[styles.zemTier, i < cells.length - 1 && styles.zemTierDivider]}>
+            <Text style={styles.zemTierLabel} numberOfLines={1}>{cell.label}</Text>
+            <Text style={styles.zemTierPrice} numberOfLines={1}>{cell.perKm} F/km</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.zemExample}>
+        {tr("ride.example", { km: EXAMPLE_KM })}<Text style={styles.zemExampleValue}>{fcfa(ridePrice(EXAMPLE_KM, vehicle))}</Text>
+      </Text>
+    </>
+  );
+}
+
+/** Carte de choix d'un véhicule (Zem ou voiture) : même présentation pour les deux filières. */
+function VehicleOfferCard({
+  vehicle,
+  badges,
+  onPress,
+  hint,
+}: {
+  vehicle: VehicleType;
+  badges: OfferBadge[];
+  onPress: () => void;
+  hint?: string;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.zemCard, pressed && styles.zemCardPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={
+        hint
+          ? tr("ride.a11y.offerHint", { vehicle: vLabel(vehicle), base: fcfa(tarification().vehicles[vehicle].base), hint })
+          : tr("ride.a11y.offer", { vehicle: vLabel(vehicle), base: fcfa(tarification().vehicles[vehicle].base) })
+      }
+    >
+      <View style={styles.zemCardTop}>
+        <View style={styles.zemCardIcon}>
+          <MaterialIcons name={VEHICLES[vehicle].icon} size={30} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <View style={styles.zemTitleRow}>
+            <Text style={styles.zemCardTitle} numberOfLines={1}>{shortName(vehicle)}</Text>
+            <OfferBadges badges={badges} />
+          </View>
+          <Text style={styles.zemCardSub}>{vShort(vehicle)}</Text>
+        </View>
+        <MaterialIcons name="chevron-right" size={26} color={colors.outline} />
+      </View>
+      <PriceBreakdown vehicle={vehicle} />
+    </Pressable>
+  );
 }
 /**
- * Note de gamme de la filière voiture (accroche + usage idéal). Les montants, eux,
- * sont toujours lus dans la configuration partagée.
+ * Icône de gamme de la filière voiture (accroche, atouts et usage idéal : voir i18n/*.ts).
+ * Les montants, eux, sont toujours lus dans la configuration partagée.
  */
-const CAR_PITCH: Record<"GAZELLE" | "KOALA" | "LEOPARD", { atouts: string[]; ideal: string }> = {
-  GAZELLE: {
-    atouts: ["Voiture d'entrée de gamme", "Le tarif le plus accessible de la filière voiture"],
-    ideal: "Les trajets courts et urbains",
-  },
-  KOALA: {
-    atouts: ["Niveau de confort intermédiaire", "Pensée pour les trajets du quotidien"],
-    ideal: "Les trajets quotidiens avec un peu plus de confort",
-  },
-  LEOPARD: {
-    atouts: ["Berline haut de gamme", "Le plus haut niveau de confort AZƆ̀"],
-    ideal: "Les trajets premium et les longues distances",
-  },
+type CarKey = "GAZELLE" | "KOALA" | "LEOPARD";
+const CAR_PITCH: Record<CarKey, { tagIcon: keyof typeof MaterialIcons.glyphMap }> = {
+  GAZELLE: { tagIcon: "savings" },
+  KOALA: { tagIcon: "airline-seat-recline-extra" },
+  LEOPARD: { tagIcon: "workspace-premium" },
 };
 
 /**
@@ -127,34 +206,25 @@ function carEntitlements(
   vehicle: VehicleType
 ): { icon: keyof typeof MaterialIcons.glyphMap; text: string }[] {
   const pricing = tarification().vehicles[vehicle];
-  const pitch = CAR_PITCH[vehicle as "GAZELLE" | "KOALA" | "LEOPARD"];
-  const lignesPrix = pricing.brackets.map((b, i) => {
-    const precedent = i === 0 ? 0 : (pricing.brackets[i - 1].upToKm ?? 0);
-    const texte =
-      i === 0
-        ? `Base ${fcfa(pricing.base)} puis ${fcfa(b.perKm)}/km de 0 à ${b.upToKm} km`
-        : b.upToKm === null
-          ? `Au-delà de ${precedent} km : ${fcfa(b.perKm)}/km`
-          : `De ${precedent + 1} à ${b.upToKm} km : ${fcfa(b.perKm)}/km`;
-    return { icon: "payments" as const, text: texte };
-  });
+  const key = vehicle as CarKey;
+  // Les montants ne figurent plus ici : ils sont affichés au-dessus, dans le bloc « Tarif ».
   return [
-    { icon: "shield", text: "Conducteur vérifié AZƆ̀, trajet suivi en direct" },
+    { icon: "shield", text: tr("ride.ent.verified") },
     // La climatisation n'est annoncée que si le barème la déclare (config partagée).
-    ...(pricing.airConditioned ? [{ icon: "stars" as const, text: "Voiture climatisée" }] : []),
-    { icon: "workspace-premium", text: pitch.atouts[0] },
-    { icon: "star", text: pitch.atouts[1] },
-    ...lignesPrix,
-    { icon: "check-circle", text: `Idéal pour : ${pitch.ideal.toLowerCase()}` },
+    ...(pricing.airConditioned ? [{ icon: "ac-unit" as const, text: tr("ride.ent.ac") }] : []),
+    { icon: "workspace-premium", text: tr(`car.${key}.a1` as MessageKey) },
+    { icon: "star", text: tr(`car.${key}.a2` as MessageKey) },
+    { icon: "check-circle", text: tr("ride.ent.ideal", { text: tr(`car.${key}.ideal` as MessageKey) }) },
   ];
 }
 
-const fmtKm = (n: number) => `${n.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`;
+const fmtKm = (n: number) => `${n.toLocaleString(numLocale(), { maximumFractionDigits: 1 })} km`;
 const fmtDuration = (min: number) =>
   min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}`;
 
 export default function RideBookingScreen({ service, onBack, onRecharge, onConfirmed }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
   const gps = useCurrentLocation();
   const originTouched = useRef(false);
   // Étape 1 du parcours Zem : le client choisit d'abord son type de Zem
@@ -191,9 +261,28 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const [selected, setSelected] = useState<VehicleType>(CAR_VEHICLES[0]);
+  const [saved, setSaved] = useState<SavedPlaces>({});
+  useEffect(() => {
+    SecureStore.getItemAsync(SAVED_PLACES_KEY)
+      .then((raw) => { if (raw) setSaved(JSON.parse(raw) as SavedPlaces); })
+      .catch(() => undefined);
+  }, []);
+  const persistSaved = (next: SavedPlaces) => {
+    setSaved(next);
+    SecureStore.setItemAsync(SAVED_PLACES_KEY, JSON.stringify(next)).catch(() => undefined);
+  };
+  const askRemoveSaved = (key: SavedKey) => {
+    Alert.alert(t("place.removeTitle", { name: t(`place.${key}` as MessageKey) }), t("place.removeBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("place.remove"), style: "destructive", onPress: () => { const next = { ...saved }; delete next[key]; persistSaved(next); } },
+    ]);
+  };
+
   const [balance, setBalance] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Solde insuffisant : reconnu au code d'erreur du serveur (la phrase change avec la langue)
+  const [submitNeedsRecharge, setSubmitNeedsRecharge] = useState(false);
 
   /* Le véhicule sélectionné suit la filière (Zem choisi, ou voiture par défaut) */
   useEffect(() => {
@@ -203,10 +292,10 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
   /* Départ = position GPS */
   useEffect(() => {
     if (!gps.coords || originTouched.current) return;
-    const title = gps.address ?? "Ma position";
+    const title = gps.address ?? t("ride.myPos");
     setOrigin({ title, latitude: gps.coords.latitude, longitude: gps.coords.longitude });
     setOriginText(title);
-  }, [gps.coords, gps.address]);
+  }, [gps.coords, gps.address]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
@@ -223,9 +312,14 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
     };
   }, []);
 
-  /* Barème officiel : rafraîchi depuis le serveur (GET /pricing), sinon barème embarqué */
+  /* Barème officiel : rafraîchi depuis le serveur (GET /pricing), sinon barème embarqué.
+   * Le barème est une variable de module : sans ce compteur, l'écran restait dessiné avec la
+   * copie embarquée (anciens prix) même après réception du barème du serveur. */
+  const [, setTariffVersion] = useState(0);
   useEffect(() => {
-    refreshTarification().catch(() => {});
+    refreshTarification()
+      .then(() => setTariffVersion((v) => v + 1))
+      .catch(() => {});
   }, []);
 
   /* Solde du portefeuille */
@@ -284,7 +378,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
             !Number.isFinite(estimate.etaMinutes) || estimate.etaMinutes <= 0 ||
             !Number.isFinite(estimate.price) || estimate.price <= 0
           ) {
-            throw new Error("Le serveur a renvoyé une estimation invalide.");
+            throw new Error(t("ride.invalidEstimate"));
           }
           return [vehicle, estimate] as const;
         }));
@@ -326,7 +420,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
         if (active) setRoadRoute(route);
       })
       .catch(() => {
-        if (active) setRouteError("Impossible de calculer l’itinéraire routier. Vérifie ta connexion puis réessaie.");
+        if (active) setRouteError(t("ride.routeError"));
       })
       .finally(() => {
         clearTimeout(timeout);
@@ -353,7 +447,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
 
     const target = pickTarget;
     setPickTarget(null);
-    const provisional: Place = { title: "Position sur la carte", latitude, longitude };
+    const provisional: Place = { title: t("ride.mapPosition"), latitude, longitude };
     applyPlace(target, provisional);
 
     try {
@@ -374,15 +468,23 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
     if (!origin || !destination || !est) return;
     setSubmitting(true);
     setSubmitError(null);
+    setSubmitNeedsRecharge(false);
     try {
       const ride = await rideApi.create({
         originLat: origin.latitude, originLng: origin.longitude,
         destLat: destination.latitude, destLng: destination.longitude,
         vehicleType: selected,
+        // Adresses lisibles : le serveur les renvoie au Zem (champs ignorés tant qu'il ne les connaît pas)
+        originLabel: origin.title,
+        destLabel: destination.title,
       });
       onConfirmed(ride.id, destination.title);
     } catch (e) {
       setSubmitError(errorMessage(e));
+      const code = errorCode(e);
+      setSubmitNeedsRecharge(
+        code === "WALLET_INSUFFICIENT" || code === "RIDE_CLIENT_INSUFFICIENT_BALANCE" || /solde insuffisant|pas assez de solde/i.test(e instanceof Error ? e.message : "")
+      );
     } finally {
       setSubmitting(false);
     }
@@ -398,25 +500,25 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
           ref={!isOrigin ? destInputRef : undefined}
           style={styles.input}
           value={value}
-          placeholder={isOrigin ? "Point de départ" : "Où allez-vous ?"}
+          placeholder={isOrigin ? t("ride.originPh") : t("ride.destPh")}
           placeholderTextColor={colors.outline}
           onFocus={() => {
             setFocus(target);
             // Si c'est "Position sur la carte", on vide le texte pour laisser l'utilisateur taper
-            if (value === "Position sur la carte") {
+            if (value === t("ride.mapPosition")) {
               if (isOrigin) setOriginText("");
               else setDestText("");
             }
           }}
-          onChangeText={(t) => {
-            if (isOrigin) { originTouched.current = true; setOriginText(t); setOrigin(null); }
-            else { setDestText(t); setDestination(null); }
+          onChangeText={(text) => {
+            if (isOrigin) { originTouched.current = true; setOriginText(text); setOrigin(null); }
+            else { setDestText(text); setDestination(null); }
           }}
           returnKeyType="search"
         />
         {focus === target && searching && <ActivityIndicator size="small" color={colors.primary} />}
         {isOrigin && (
-          <Pressable onPress={() => { originTouched.current = false; gps.refresh(); }} hitSlop={8} accessibilityLabel="Ma position">
+          <Pressable onPress={() => { originTouched.current = false; gps.refresh(); }} hitSlop={8} accessibilityLabel={t("ride.myPos")}>
             {gps.status === "loading" ? <ActivityIndicator size="small" color={colors.primary} />
               : <MaterialIcons name="my-location" size={22} color={colors.primary} />}
           </Pressable>
@@ -424,7 +526,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
         <Pressable
           onPress={() => { Keyboard.dismiss(); setFocus(null); setPickTarget(pickTarget === target ? null : target); }}
           hitSlop={8}
-          accessibilityLabel="Choisir sur la carte"
+          accessibilityLabel={t("ride.pickOnMap")}
         >
           <MaterialIcons name="place" size={22} color={pickTarget === target ? ERROR_COLOR : colors.onSurfaceVariant} />
         </Pressable>
@@ -433,43 +535,49 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
   };
 
   /*
-   * Filière voiture — étape 1 : le client choisit d'abord sa gamme de voiture.
-   * La page ne liste que les gammes (des boutons), sans tarif : l'explication de ce à
-   * quoi il a droit vient à l'écran suivant, avant d'accepter et de continuer.
+   * Filière voiture — étape 1 : le client choisit sa gamme. Chaque carte montre déjà le tarif
+   * (prise en charge, prix au km par palier, exemple) ; ce à quoi il a droit vient à l'écran
+   * suivant, avant d'accepter et de continuer.
    */
   if (service === "transport" && !carType && !carDetail) {
     return (
-      <View style={styles.zemRoot}>
+      <ScrollView
+        style={styles.zemRoot}
+        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.lg }}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={[styles.zemHeader, { paddingTop: insets.top + spacing.sm }]}>
-          <Pressable style={styles.zemBack} onPress={onBack} accessibilityLabel="Retour">
+          <Pressable style={styles.zemBack} onPress={onBack} accessibilityLabel={t("common.back")}>
             <MaterialIcons name="arrow-back" size={24} color={colors.onSurface} />
           </Pressable>
-          <Text style={styles.zemTitle}>Quelle voiture veux-tu ?</Text>
-          <Text style={styles.zemSubtitle}>
-            Choisis ta gamme, découvre ce à quoi tu as droit, puis indique ta destination.
-          </Text>
+          <Text style={styles.zemStep}>{t("ride.step")}</Text>
+          <Text style={styles.zemTitle}>{t("ride.car.title")}</Text>
+          <Text style={styles.zemSubtitle}>{t("ride.car.subtitle")}</Text>
         </View>
 
         <View style={styles.zemList}>
           {CAR_VEHICLES.map((v) => (
-            <Pressable
+            <VehicleOfferCard
               key={v}
-              style={styles.carTypeBtn}
+              vehicle={v}
+              badges={carBadges(v)}
+              hint={t("ride.car.hint")}
               onPress={() => setCarDetail(v)}
-              accessibilityLabel={`${VEHICLES[v].label} — voir ce à quoi j'ai droit`}
-            >
-              <Text style={styles.carTypeBtnText}>{VEHICLES[v].label}</Text>
-              <MaterialIcons name="chevron-right" size={26} color={colors.outline} />
-            </Pressable>
+            />
           ))}
+
+          <View style={styles.zemNote}>
+            <MaterialIcons name="info-outline" size={16} color={colors.onSurfaceVariant} />
+            <Text style={styles.zemNoteText}>{t("ride.car.note")}</Text>
+          </View>
         </View>
-      </View>
+      </ScrollView>
     );
   }
 
   /*
-   * Filière voiture — étape 1 bis : ce à quoi le client a droit pour la gamme choisie
-   * (confort, sécurité, tarif appliqué). Il accepte, puis passe à la destination.
+   * Filière voiture — étape 1 bis : le détail de la gamme choisie (tarif, confort, sécurité).
+   * Le client accepte, puis passe à la destination.
    */
   if (service === "transport" && !carType && carDetail) {
     const v = carDetail;
@@ -480,26 +588,37 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.zemHeader, { paddingTop: insets.top + spacing.sm }]}>
-          <Pressable style={styles.zemBack} onPress={() => setCarDetail(null)} accessibilityLabel="Retour">
+          <Pressable style={styles.zemBack} onPress={() => setCarDetail(null)} accessibilityLabel={t("common.back")}>
             <MaterialIcons name="arrow-back" size={24} color={colors.onSurface} />
           </Pressable>
+          <Text style={styles.zemStep}>{t("ride.step")}</Text>
           <View style={styles.carDetailHead}>
             <View style={styles.zemCardIcon}>
-              <MaterialIcons name={VEHICLES[v].icon} size={34} color={colors.primary} />
+              <MaterialIcons name={VEHICLES[v].icon} size={30} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.zemTitle}>{VEHICLES[v].label}</Text>
-              <Text style={styles.zemSubtitle}>{VEHICLES[v].short}</Text>
+              <Text style={styles.zemTitle}>{shortName(v)}</Text>
+              <View style={styles.zemTitleRow}>
+                <OfferBadges badges={carBadges(v)} />
+              </View>
+              <Text style={styles.zemSubtitle}>{vShort(v)}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.zemList}>
-          <Text style={styles.sectionLabel}>Ce à quoi tu as droit</Text>
+          <Text style={styles.sectionLabel}>{t("ride.detail.tariff")}</Text>
+          <View style={styles.carPriceCard}>
+            <PriceBreakdown vehicle={v} />
+          </View>
+
+          <Text style={styles.sectionLabel}>{t("ride.detail.entitled")}</Text>
           <View style={styles.carFeatures}>
             {carEntitlements(v).map((f, i) => (
               <View key={`${v}-${i}`} style={styles.carFeatureRow}>
-                <MaterialIcons name={f.icon} size={20} color={colors.primary} />
+                <View style={styles.carFeatureIcon}>
+                  <MaterialIcons name={f.icon} size={16} color={colors.primary} />
+                </View>
                 <Text style={styles.carFeatureText}>{f.text}</Text>
               </View>
             ))}
@@ -507,22 +626,19 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
 
           <View style={styles.zemNote}>
             <MaterialIcons name="info-outline" size={16} color={colors.onSurfaceVariant} />
-            <Text style={styles.zemNoteText}>
-              Tarif officiel appliqué : {vehicleTariffLine(v)}. Le prix exact de ta course est
-              calculé sur la distance, après le choix de la destination.
-            </Text>
+            <Text style={styles.zemNoteText}>{t("ride.detail.note")}</Text>
           </View>
 
           <Pressable
             style={styles.confirmBtn}
             onPress={() => { setCarType(v); setSelected(v); }}
-            accessibilityLabel="Accepter et continuer"
+            accessibilityLabel={t("ride.detail.accept")}
           >
-            <Text style={styles.confirmText}>Accepter et continuer</Text>
+            <Text style={styles.confirmText}>{t("ride.detail.accept")}</Text>
           </Pressable>
 
           <Pressable style={styles.carBackLink} onPress={() => setCarDetail(null)}>
-            <Text style={styles.link}>Voir les autres voitures</Text>
+            <Text style={styles.link}>{t("ride.detail.others")}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -536,35 +652,28 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
    */
   if (service === "zem" && !zemType) {
     return (
-      <View style={styles.zemRoot}>
+      <ScrollView
+        style={styles.zemRoot}
+        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.lg }}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={[styles.zemHeader, { paddingTop: insets.top + spacing.sm }]}>
-          <Pressable style={styles.zemBack} onPress={onBack} accessibilityLabel="Retour">
+          <Pressable style={styles.zemBack} onPress={onBack} accessibilityLabel={t("common.back")}>
             <MaterialIcons name="arrow-back" size={24} color={colors.onSurface} />
           </Pressable>
-          <Text style={styles.zemTitle}>Quel Zem veux-tu ?</Text>
-          <Text style={styles.zemSubtitle}>
-            Choisis ton type de moto-taxi, puis indique ta destination.
-          </Text>
+          <Text style={styles.zemStep}>{t("ride.step")}</Text>
+          <Text style={styles.zemTitle}>{t("ride.zem.title")}</Text>
+          <Text style={styles.zemSubtitle}>{t("ride.zem.subtitle")}</Text>
         </View>
 
         <View style={styles.zemList}>
           {ZEM_VEHICLES.map((v) => (
-            <Pressable
+            <VehicleOfferCard
               key={v}
-              style={styles.zemCard}
+              vehicle={v}
+              badges={v === "ZEM_ELECTRIC" ? [{ icon: "eco", label: t("ride.badge.eco") }] : []}
               onPress={() => { setZemType(v); setSelected(v); }}
-              accessibilityLabel={VEHICLES[v].label}
-            >
-              <View style={styles.zemCardIcon}>
-                <MaterialIcons name={VEHICLES[v].icon} size={34} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.zemCardTitle}>{VEHICLES[v].label}</Text>
-                <Text style={styles.zemCardSub}>{VEHICLES[v].short}</Text>
-                <Text style={styles.zemCardPrice}>{vehicleTariffLine(v)}</Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={26} color={colors.outline} />
-            </Pressable>
+            />
           ))}
 
           <View style={styles.zemNote}>
@@ -572,7 +681,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
             <Text style={styles.zemNoteText}>{zemCommonNote()}</Text>
           </View>
         </View>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -583,18 +692,18 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
         onPress={onMapPress}
         polyline={roadRoute?.coordinates ?? []}
         markers={[
-          ...(origin ? [{ coordinate: origin, title: "Départ", color: "green" as const }] : []),
-          ...(destination ? [{ coordinate: destination, title: "Destination", color: "red" as const }] : []),
+          ...(origin ? [{ coordinate: origin, title: t("ride.marker.origin"), color: "green" as const }] : []),
+          ...(destination ? [{ coordinate: destination, title: t("ride.marker.dest"), color: "red" as const }] : []),
         ]}
       />
 
-      <Pressable style={[styles.backBtn, { top: insets.top + 8 }]} onPress={onBack} accessibilityLabel="Retour">
+      <Pressable style={[styles.backBtn, { top: insets.top + 8 }]} onPress={onBack} accessibilityLabel={t("common.back")}>
         <MaterialIcons name="arrow-back" size={24} color={colors.onSurface} />
       </Pressable>
 
       {pickTarget && (
         <View style={[styles.pickHint, { top: insets.top + 8 }]}>
-          <Text style={styles.pickHintText}>Touchez la carte pour choisir {pickTarget === "origin" ? "le départ" : "la destination"}</Text>
+          <Text style={styles.pickHintText}>{pickTarget === "origin" ? t("ride.pickHint.origin") : t("ride.pickHint.destination")}</Text>
         </View>
       )}
 
@@ -610,7 +719,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
       >
         <View style={styles.sheetHandle} />
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <Text style={styles.sheetTitle}>Où allons-nous ?</Text>
+          <Text style={styles.sheetTitle}>{t("ride.sheet.title")}</Text>
 
           {/* Rappel de l'étape 1 (Zem ou voiture), modifiable en un clic */}
           {chosenVehicle && (
@@ -621,11 +730,11 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
                 else { setCarType(null); setCarDetail(null); }
                 setEstimates({});
               }}
-              accessibilityLabel="Changer de véhicule"
+              accessibilityLabel={t("ride.changeA11y")}
             >
               <MaterialIcons name={VEHICLES[chosenVehicle].icon} size={18} color={colors.primary} />
-              <Text style={styles.zemChipText}>{VEHICLES[chosenVehicle].label}</Text>
-              <Text style={styles.zemChipAction}>Changer</Text>
+              <Text style={styles.zemChipText}>{vLabel(chosenVehicle)}</Text>
+              <Text style={styles.zemChipAction}>{t("ride.change")}</Text>
             </Pressable>
           )}
 
@@ -634,27 +743,51 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
               <MaterialIcons name="location-off" size={18} color={ERROR_COLOR} />
               <Text style={styles.bannerText}>
                 {gps.status === "denied"
-                  ? "Localisation refusée. Saisis ton départ à la main ou autorise l'accès."
+                  ? t("ride.locDenied")
                   : gps.error}
               </Text>
               {gps.status === "denied" && !gps.canAskAgain
-                ? <Pressable onPress={() => Linking.openSettings()}><Text style={styles.link}>Réglages</Text></Pressable>
-                : <Pressable onPress={gps.refresh}><Text style={styles.link}>Réessayer</Text></Pressable>}
+                ? <Pressable onPress={() => Linking.openSettings()}><Text style={styles.link}>{t("ride.settings")}</Text></Pressable>
+                : <Pressable onPress={gps.refresh}><Text style={styles.link}>{t("common.retry")}</Text></Pressable>}
             </View>
           )}
 
           {renderField("origin")}
           {renderField("destination")}
 
+          {/* Une fois la destination choisie : l'enregistrer comme domicile ou travail */}
+          {destination && SAVED_KEYS.some((k) => saved[k]?.title !== destination.title) && (
+            <View style={styles.saveRow}>
+              <Text style={styles.quickDestLabel}>{t("place.saveAs")}</Text>
+              {SAVED_KEYS.filter((k) => saved[k]?.title !== destination.title).map((k) => (
+                <Pressable key={k} style={styles.quickDestChip} onPress={() => persistSaved({ ...saved, [k]: destination })}>
+                  <MaterialIcons name={k === "home" ? "home" : "work"} size={15} color={colors.primary} />
+                  <Text style={styles.quickDestText}>{t(`place.${k}` as MessageKey)}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
           {!destination && suggestions.length === 0 && (
             <View style={{ marginBottom: 8 }}>
-              <Text style={styles.quickDestLabel}>Destinations populaires en 1 clic</Text>
+              <Text style={styles.quickDestLabel}>{t("ride.popular")}</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={styles.quickDestRow}
               >
+                {SAVED_KEYS.filter((k) => saved[k]).map((k) => (
+                  <Pressable
+                    key={k}
+                    style={styles.quickDestChip}
+                    onPress={() => applyPlace(focus ?? "destination", saved[k]!)}
+                    onLongPress={() => askRemoveSaved(k)}
+                  >
+                    <MaterialIcons name={k === "home" ? "home" : "work"} size={15} color={colors.primary} />
+                    <Text style={styles.quickDestText}>{t(`place.${k}` as MessageKey)}</Text>
+                  </Pressable>
+                ))}
                 {POPULAR_PLACES.map((p) => (
                   <Pressable
                     key={p.id}
@@ -676,9 +809,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
             </View>
           )}
           {focus && noResult && !searching && (
-            <Text style={styles.muted}>
-              Aucun résultat. Essaie un nom plus court (ex : « Cadjehoun ») ou touche le repère pour choisir sur la carte.
-            </Text>
+            <Text style={styles.muted}>{t("ride.noResult")}</Text>
           )}
 
           {focus && suggestions.length > 0 && (
@@ -698,32 +829,32 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
           {estimating && (
             <View style={styles.center}>
               <ActivityIndicator color={colors.primary} />
-              <Text style={styles.muted}>Calcul du prix…</Text>
+              <Text style={styles.muted}>{t("ride.calcPrice")}</Text>
             </View>
           )}
           {estimateError && (
             <View style={styles.banner}>
               <Text style={[styles.bannerText, { color: ERROR_COLOR }]}>{estimateError}</Text>
-              <Pressable onPress={() => setReloadKey((k) => k + 1)}><Text style={styles.link}>Réessayer</Text></Pressable>
+              <Pressable onPress={() => setReloadKey((k) => k + 1)}><Text style={styles.link}>{t("common.retry")}</Text></Pressable>
             </View>
           )}
           {routeLoading && (
             <View style={styles.center}>
               <ActivityIndicator color={colors.primary} />
-              <Text style={styles.muted}>Calcul de l’itinéraire routier…</Text>
+              <Text style={styles.muted}>{t("ride.calcRoute")}</Text>
             </View>
           )}
           {routeError && (
             <View style={styles.banner}>
               <Text style={[styles.bannerText, { color: ERROR_COLOR }]}>{routeError}</Text>
-              <Pressable onPress={() => setReloadKey((k) => k + 1)}><Text style={styles.link}>Réessayer</Text></Pressable>
+              <Pressable onPress={() => setReloadKey((k) => k + 1)}><Text style={styles.link}>{t("common.retry")}</Text></Pressable>
             </View>
           )}
 
           {!estimating && Object.keys(estimates).length > 0 && (
             <>
               <Text style={styles.sectionLabel}>
-                {service === "zem" ? "Ton Zem" : "Ta voiture"}
+                {service === "zem" ? t("ride.yourZem") : t("ride.yourCar")}
               </Text>
               {options.map((v) => {
                 const e = estimates[v];
@@ -733,7 +864,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
                   <Pressable key={v} style={[styles.option, active && styles.optionActive]} onPress={() => setSelected(v)}>
                     <MaterialIcons name={VEHICLES[v].icon} size={30} color={active ? colors.primary : colors.onSurfaceVariant} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.optionTitle}>{VEHICLES[v].label}</Text>
+                      <Text style={styles.optionTitle}>{vLabel(v)}</Text>
                       <Text style={styles.optionSub}>{fmtDuration(e.etaMinutes)} · {fmtKm(e.distanceKm)}</Text>
                     </View>
                     <Text style={styles.optionPrice}>{fcfa(e.price)}</Text>
@@ -745,15 +876,15 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
                 <View style={styles.summary}>
                   <View style={styles.summaryRow}>
                     <View style={styles.summaryCell}>
-                      <Text style={styles.summaryLabel}>Distance</Text>
+                      <Text style={styles.summaryLabel}>{t("ride.distance")}</Text>
                       <Text style={styles.summaryValue}>{fmtKm(est.distanceKm)}</Text>
                     </View>
                     <View style={styles.summaryCell}>
-                      <Text style={styles.summaryLabel}>Durée</Text>
+                      <Text style={styles.summaryLabel}>{t("ride.duration")}</Text>
                       <Text style={styles.summaryValue}>{fmtDuration(est.durationMin ?? est.etaMinutes)}</Text>
                     </View>
                     <View style={styles.summaryCell}>
-                      <Text style={styles.summaryLabel}>Prix</Text>
+                      <Text style={styles.summaryLabel}>{t("ride.price")}</Text>
                       <Text style={[styles.summaryValue, { color: colors.primary }]}>{fcfa(est.price)}</Text>
                     </View>
                   </View>
@@ -761,8 +892,8 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
                   <Text style={styles.summaryDetail}>
                     {[
                       est.breakdown.baseDiscountApplied
-                        ? `Base ${fcfa(est.breakdown.baseFull)} − ${est.breakdown.baseDiscountPct} % = ${fcfa(est.breakdown.base)}`
-                        : `Base ${fcfa(est.breakdown.base)}`,
+                        ? t("ride.baseDiscount", { full: fcfa(est.breakdown.baseFull), pct: est.breakdown.baseDiscountPct, base: fcfa(est.breakdown.base) })
+                        : t("ride.baseSimple", { amount: fcfa(est.breakdown.base) }),
                       ...(est.breakdown.brackets ?? [])
                         .filter((b) => b.km > 0)
                         .map((b) => `${fmtKm(b.km)} × ${fcfa(b.perKm)}/km`),
@@ -774,17 +905,17 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
               <View style={styles.payBox}>
                 <MaterialIcons name="account-balance-wallet" size={22} color={colors.primary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.optionTitle}>Paiement AZƆ̀ Pay</Text>
+                  <Text style={styles.optionTitle}>{t("ride.pay.title")}</Text>
                   <Text style={styles.optionSub}>
-                    {balance !== null ? `Solde : ${fcfa(balance)} · ` : ""}débité à la fin de la course
+                    {balance !== null ? t("ride.pay.subBalance", { balance: fcfa(balance) }) : t("ride.pay.sub")}
                   </Text>
                 </View>
               </View>
               {walletInsufficient && (
                 <View style={styles.insufficientBalance}>
-                  <Text style={styles.errorText}>Solde insuffisant. Recharge ton portefeuille pour réserver.</Text>
+                  <Text style={styles.errorText}>{t("ride.insufficient")}</Text>
                   <Pressable style={styles.rechargeBtn} onPress={onRecharge}>
-                    <Text style={styles.rechargeText}>Recharger AZƆ̀ Pay</Text>
+                    <Text style={styles.rechargeText}>{t("ride.recharge")}</Text>
                   </Pressable>
                 </View>
               )}
@@ -794,9 +925,9 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
           {submitError && (
             <View style={styles.insufficientBalance}>
               <Text style={styles.errorText}>{submitError}</Text>
-              {/solde insuffisant|pas assez de solde/i.test(submitError) && (
+              {submitNeedsRecharge && (
                 <Pressable style={styles.rechargeBtn} onPress={onRecharge}>
-                  <Text style={styles.rechargeText}>Recharger AZƆ̀ Pay</Text>
+                  <Text style={styles.rechargeText}>{t("ride.recharge")}</Text>
                 </Pressable>
               )}
             </View>
@@ -823,7 +954,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={[styles.confirmText, !destination && { color: colors.primary }]}>
-                {est ? `Confirmer · ${fcfa(est.price)}` : "Choisir une destination"}
+                {est ? t("ride.confirm", { price: fcfa(est.price) }) : t("ride.pickDest")}
               </Text>
             )}
           </Pressable>
@@ -834,6 +965,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
 }
 
 const styles = StyleSheet.create({
+  saveRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 8 },
   root: { flex: 1, backgroundColor: colors.background },
   zemRoot: { flex: 1, backgroundColor: colors.background },
   zemHeader: { paddingHorizontal: spacing.md, paddingBottom: spacing.lg, gap: 4 },
@@ -841,18 +973,34 @@ const styles = StyleSheet.create({
   zemTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", fontSize: 26 },
   zemSubtitle: { ...typography.bodyMd, color: colors.onSurfaceVariant },
   zemList: { paddingHorizontal: spacing.md, gap: spacing.md },
-  zemCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
-  zemCardIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
-  zemCardTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", fontSize: 18 },
+  zemStep: { ...typography.labelSm, color: colors.primary, letterSpacing: 1 },
+  // Carte de choix du Zem : en-tête (icône, titre, chevron), puis le détail du prix en dessous
+  zemCard: { gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
+  zemCardPressed: { borderColor: colors.primary, backgroundColor: colors.primaryFixed },
+  zemCardTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  zemCardIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
+  zemTitleRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  zemCardTitle: { ...typography.headlineSm, color: colors.onSurface, flexShrink: 1 },
+  zemBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
+  zemBadgeText: { ...typography.labelSm, color: colors.primary },
   zemCardSub: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 2 },
-  zemCardPrice: { ...typography.labelSm, color: colors.primary, fontWeight: "700", marginTop: 4 },
+  zemBaseRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, paddingHorizontal: spacing.sm + 2, paddingVertical: 8, marginTop: spacing.xs },
+  zemBaseLabel: { ...typography.labelMd, color: colors.onSurfaceVariant },
+  zemBaseValue: { ...typography.labelLg, color: colors.primary },
+  zemTiers: { flexDirection: "row", borderWidth: 1, borderColor: colors.surfaceContainer, borderRadius: radius.md, overflow: "hidden" },
+  zemTier: { flex: 1, alignItems: "center", paddingVertical: 8, paddingHorizontal: 4, gap: 2 },
+  zemTierDivider: { borderRightWidth: 1, borderRightColor: colors.surfaceContainer },
+  zemTierLabel: { ...typography.bodySm, color: colors.onSurfaceVariant, fontSize: 11 },
+  zemTierPrice: { ...typography.labelMd, color: colors.onSurface },
+  zemExample: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  zemExampleValue: { ...typography.labelMd, color: colors.primary },
   zemNote: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: colors.surfaceContainer, borderRadius: radius.lg, padding: spacing.sm + 2 },
   zemNoteText: { ...typography.bodySm, color: colors.onSurfaceVariant, flex: 1 },
-  carTypeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.surfaceContainer, paddingVertical: spacing.md, paddingHorizontal: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
-  carTypeBtnText: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", fontSize: 20 },
   carDetailHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  carFeatures: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.surfaceContainer, padding: spacing.md, gap: 12, marginBottom: spacing.md },
-  carFeatureRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  carPriceCard: { gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, marginBottom: spacing.md },
+  carFeatures: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, gap: 14, marginBottom: spacing.md },
+  carFeatureIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
+  carFeatureRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   carFeatureText: { ...typography.bodyMd, color: colors.onSurface, flex: 1 },
   carBackLink: { alignItems: "center", marginTop: spacing.sm, paddingVertical: 8 },
   zemChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 8, alignSelf: "flex-start" },

@@ -47,6 +47,15 @@ export async function registerForPushNotifications(): Promise<string | null> {
     const Notifications = require("expo-notifications");
 
     if (Platform.OS === "android") {
+      // Canal dédié aux propositions de Zem : son et vibration forts, visible sur l'écran verrouillé.
+      // Le serveur l'utilise en envoyant `channelId: "ride-offers"` (voir DEMANDE_BACKEND_POPUP_PROPOSITION_ZEM.md).
+      await Notifications.setNotificationChannelAsync("ride-offers", {
+        name: "Propositions de Zem",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 400, 200, 400],
+        lightColor: "#7100AF",
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility?.PUBLIC,
+      });
       await Notifications.setNotificationChannelAsync("default", {
         name: "Notifications AZƆ̀",
         importance: Notifications.AndroidImportance.MAX,
@@ -77,6 +86,19 @@ export async function registerForPushNotifications(): Promise<string | null> {
   } catch (error) {
     console.warn("Erreur registerForPushNotifications :", error);
     return null;
+  }
+}
+
+/** Notification reçue application ouverte (avant tout clic) : sert à ouvrir la popup de proposition tout de suite. */
+export function subscribeNotificationReceived(onNotification: (notification: any) => void): () => void {
+  if (!isPushNotificationSupported()) return () => {};
+  try {
+    const Notifications = require("expo-notifications");
+    const subscription = Notifications.addNotificationReceivedListener((notification: any) => onNotification(notification));
+    return () => subscription.remove();
+  } catch (error) {
+    console.warn("Impossible d'attacher le listener de réception :", error);
+    return () => {};
   }
 }
 

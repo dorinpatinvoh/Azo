@@ -7,6 +7,8 @@
 //   - Émulateur Android         : http://10.0.2.2:3000
 //   - Navigateur (expo web)     : http://localhost:3000
 
+import { getLanguage, hasMessage, tr, type MessageKey } from "../i18n";
+
 export const DEFAULT_API_URL =
   process.env.EXPO_PUBLIC_API_URL || "https://azo-backend.onrender.com";
 export let API_URL = DEFAULT_API_URL;
@@ -54,8 +56,26 @@ function friendlyApiMessage(message: string): string {
   return message;
 }
 
-export const errorMessage = (e: unknown) =>
-  friendlyApiMessage(e instanceof Error ? e.message : "Une erreur est survenue.");
+/**
+ * Texte d'une erreur pour l'écran. Le serveur renvoie un `code` stable (ex. WALLET_INSUFFICIENT) :
+ * s'il est connu de l'application, on affiche sa traduction dans la langue choisie ; sinon le
+ * message français du serveur sert de secours.
+ */
+export const errorMessage = (e: unknown) => {
+  if (e instanceof ApiError) {
+    const code = typeof e.data?.code === "string" ? e.data.code : null;
+    if (code && hasMessage(`err.${code}`)) return tr(`err.${code}` as MessageKey);
+  }
+  return friendlyApiMessage(e instanceof Error ? e.message : "Une erreur est survenue.");
+};
+
+/** Code d'erreur stable du serveur (ex. TIP_ALREADY_SENT), s'il y en a un. */
+export const errorCode = (e: unknown): string | null =>
+  e instanceof ApiError && typeof e.data?.code === "string" ? e.data.code : null;
+
+/** La route n'existe pas encore sur le serveur (Nest répond « Cannot POST /… ») : fonction à venir. */
+export const isRouteMissing = (e: unknown) =>
+  e instanceof ApiError && e.status === 404 && /^Cannot (GET|POST|PATCH|PUT|DELETE) /.test(e.message);
 
 async function request<T>(
   path: string,
@@ -68,6 +88,8 @@ async function request<T>(
       ...options,
       headers: {
         "Content-Type": "application/json",
+        // Langue de l'application : le serveur traduit ses notifications et ses libellés avec
+        "Accept-Language": getLanguage(),
         ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         ...((options.headers as Record<string, string>) ?? {}),
       },
@@ -100,7 +122,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 export const api = {
   get: <T>(path: string, opts?: { timeoutMs?: number }) => request<T>(path, opts),
-  post: <T>(path: string, body?: unknown, opts?: { timeoutMs?: number }) =>
+  post: <T>(path: string, body?: unknown, opts?: { timeoutMs?: number; headers?: Record<string, string> }) =>
     request<T>(path, { method: "POST", body: json(body), ...opts }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body: json(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
@@ -170,14 +192,82 @@ export type UserProfile = {
   id: string;
   phone: string;
   fullName?: string | null;
+  /** Inscription (après l'OTP) : renseignés une fois l'inscription terminée. */
+  firstName?: string | null;
+  lastName?: string | null;
+  gender?: "M" | "F" | null;
+  /** NPI masqué par le serveur (ex. « ••••••7890 ») : jamais renvoyé en clair. */
+  npiMasked?: string | null;
+  /**
+   * `true` quand nom, prénom, sexe et NPI sont enregistrés. Absent tant que le serveur ne
+   * gère pas l'inscription : l'application se rabat alors sur la présence de `fullName`.
+   */
+  profileComplete?: boolean;
   role: string;
   status?: "ACTIVE" | "PENDING_VALIDATION" | "BLOCKED";
   createdAt?: string;
+  language?: string;
+  /** Modifiables par le client (voir PROJECT_SUMMARY/DEMANDE_BACKEND_PROFIL_MESSAGERIE_POURBOIRE.md). */
+  email?: string | null;
+  emergencyContact?: { name: string; phone: string } | null;
+  /** Fin de la fenêtre de correction directe du nom / prénom / sexe (null = fermée). */
+  identityEditableUntil?: string | null;
+  identityCorrectionPending?: boolean;
 };
+
+export type RegistrationPayload = {
+  lastName: string;
+  firstName: string;
+  gender: "M" | "F";
+  npi: string;
+};
+
+/** Un compte doit-il encore passer par l'écran d'inscription ? */
+export const needsRegistration = (user: Pick<UserProfile, "role" | "fullName" | "profileComplete">) =>
+  String(user.role || "CLIENT").toUpperCase().trim() === "CLIENT" &&
+  (user.profileComplete === false || (user.profileComplete === undefined && !user.fullName?.trim()));
 
 export const userApi = {
   me: () => api.get<UserProfile>("/users/me"),
   update: (fullName: string) => api.patch<UserProfile>("/users/me", { fullName }),
+  // POST /users/me/registration — voir PROJECT_SUMMARY/DEMANDE_BACKEND_INSCRIPTION.md
+  register: (payload: RegistrationPayload) => api.post<UserProfile>("/users/me/registration", payload),
+  /** Langue de l'application, mémorisée par le serveur (notifications et libellés traduits). */
+  setLanguage: (language: string) => api.patch<UserProfile>("/users/me/language", { language }),
+  /** E-mail et contact d'urgence : `null` supprime, clé absente = inchangé. */
+  updateProfile: (body: { email?: string | null; emergencyContact?: { name: string; phone: string } | null }) =>
+    api.patch<UserProfile>("/users/me/profile", body),
+  /** Correction directe (une fois, dans la fenêtre de 24 h après l'inscription). */
+  correctIdentity: (body: { firstName?: string; lastName?: string; gender?: "M" | "F" }) =>
+    api.patch<UserProfile>("/users/me/identity", body),
+  /** Demande de correction vérifiée par un administrateur (après la fenêtre). */
+  requestIdentityCorrection: (body: { firstName?: string; lastName?: string; gender?: "M" | "F"; reason: string }) =>
+    api.post<{ id: string; status: string }>("/users/me/identity-correction-requests", body),
+  /** Changement de numéro : code SMS envoyé au NOUVEAU numéro, puis confirmation. */
+  requestPhoneChange: (newPhone: string) =>
+    api.post<{ expiresInSeconds?: number; maskedPhone?: string }>("/users/me/phone-change/request", { newPhone }),
+  confirmPhoneChange: (code: string) =>
+    api.post<UserProfile & { token?: string }>("/users/me/phone-change/confirm", { code }),
+};
+
+/* ==================== MESSAGERIE (onglet Messages) ==================== */
+
+export type Conversation = {
+  peer: { displayName?: string | null; role?: string; photoUrl?: string | null; verified?: boolean; vehicleType?: VehicleType | null };
+  /** Course la plus récente avec cet interlocuteur ; `activeRideId` si une course est en cours. */
+  lastRideId: string;
+  lastRideStatus?: RideStatus;
+  ridesCount?: number;
+  lastMessage?: { text: string; at: string; fromMe: boolean } | null;
+  unreadCount?: number;
+  activeRideId?: string | null;
+  canReply?: boolean;
+};
+
+export const messagesApi = {
+  /** Boîte de réception : une ligne par interlocuteur (404 tant que le serveur ne la fournit pas). */
+  conversations: () => api.get<{ items: Conversation[]; nextCursor?: string | null }>("/messages/conversations"),
+  unreadCount: () => api.get<{ count: number }>("/messages/unread-count"),
 };
 
 /* ==================== PORTEFEUILLE AZƆ̀ PAY ==================== */
@@ -196,7 +286,7 @@ export const walletApi = {
   transactions: () => api.get<WalletTransaction[]>("/wallet/transactions"),
   // ⚠️ Simulation côté backend : le vrai paiement (FedaPay / KKiaPay) reste à brancher.
   recharge: (amount: number, method: string) =>
-    api.post<{ balance: number }>("/wallet/recharge", { amount, method }),
+    api.post<{ url: string; transactionId: number }>("/wallet/recharge", { amount, method }),
 };
 
 /* ==================== CARTES / ADRESSES ==================== */
@@ -227,11 +317,14 @@ export type VehicleType = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" |
 
 /** Filière d'un véhicule : moto-taxi (Zem) ou voiture. */
 export type VehicleFamily = "ZEM" | "CAR";
-export type RideStatus = "PENDING" | "MATCHED" | "ARRIVED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+// OFFERED : un Zem a accepté, le client doit confirmer (voir PROJECT_SUMMARY/DEMANDE_BACKEND_RADAR_PROFIL_ZEM_ET_CARTE.md)
+export type RideStatus = "PENDING" | "OFFERED" | "MATCHED" | "ARRIVED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 // ⚠️ N'ajoute AUCUN autre champ : le backend refuse les champs inconnus.
 export type RideRequest = {
   originLat: number; originLng: number; destLat: number; destLng: number; vehicleType: VehicleType;
+  /** Adresses lisibles (facultatives) : le serveur les renvoie au Zem, qui n'a plus à les géocoder. */
+  originLabel?: string; destLabel?: string;
 };
 
 export type Estimate = {
@@ -259,7 +352,38 @@ export type Estimate = {
   };
 };
 
-export type RidePerson = { fullName?: string | null; phone?: string };
+/**
+ * Profil public d'un Zem, montré au client AVANT qu'il confirme (statut OFFERED).
+ * Tous les champs sont facultatifs : l'application affiche seulement ce que le serveur fournit.
+ */
+export type DriverPublicProfile = {
+  displayName?: string | null;
+  photoUrl?: string | null;
+  verified?: boolean;
+  /** Moyenne des notes (null = pas encore noté). */
+  rating?: number | null;
+  ratingCount?: number;
+  jobsCompleted?: number;
+  experienceYears?: number | null;
+  memberSince?: string | null;
+  city?: string | null;
+  zones?: string[];
+  bio?: string | null;
+  vehicleType?: VehicleType | null;
+  vehicleModel?: string | null;
+  plateMasked?: string | null;
+  agencyName?: string | null;
+};
+
+export type RidePerson = {
+  fullName?: string | null;
+  phone?: string | null;
+  /** « Kossi A. » (nom d'affichage fourni par le serveur) et prénom seul. */
+  displayName?: string | null;
+  firstName?: string | null;
+  /** Présent côté client pour le Zem de la course. */
+  profile?: DriverPublicProfile | null;
+};
 
 export type Ride = {
   id: string;
@@ -276,6 +400,41 @@ export type Ride = {
   /** Visible uniquement au client pendant IN_PROGRESS, à saisir pour terminer la course. */
   dropCode?: string | null;
   driverArrivedAt?: string | null;
+  /** Pourboire déjà envoyé pour cette course, et date limite pour en donner un (client, course terminée). */
+  tip?: { amount: number; at?: string } | null;
+  tipUntil?: string | null;
+  /**
+   * Course partielle (prix au kilomètre parcouru) — voir
+   * PROJECT_SUMMARY/DEMANDE_BACKEND_PRIX_AU_KILOMETRE_ET_CARTES.md. Tous ces champs sont absents
+   * tant que le serveur ne les fournit pas : l'application masque alors la fonction.
+   */
+  /** Distance réellement parcourue depuis le départ de la course, en mètres. */
+  traveledMeters?: number;
+  /** Prix si la course s'arrêtait maintenant (d'après la distance parcourue). */
+  currentPrice?: number;
+  /** Demande d'arrêt en cours : qui l'a faite et pour quel montant. */
+  stopRequest?: { by: "CLIENT" | "DRIVER"; at?: string; expiresAt?: string; price?: number; distanceMeters?: number; accepted?: boolean; codeRequired?: boolean } | null;
+  /** Une fois la course terminée : distance facturée et mode (`FULL` = prix estimé, `PARTIAL` = arrêt anticipé). */
+  settledDistanceMeters?: number;
+  priceMode?: "FULL" | "PARTIAL" | null;
+  /** Montant réellement débité à la fin (peut différer de `price`, l'estimation initiale). */
+  finalPrice?: number;
+  /** Pourquoi la proposition du Zem a pris fin (vue restreinte du Zem) : voir DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md */
+  offerOutcome?: "approved" | "declined" | "expired" | "withdrawn" | "cancelled" | null;
+  /** Proposition d'un Zem en attente de la confirmation du client (statut OFFERED). */
+  offerExpiresAt?: string | null;
+  /** Quand le client a ouvert la popup (null = pas encore vu ; absent = le serveur ne le dit pas). */
+  offerSeenAt?: string | null;
+  offer?: { expiresAt?: string; distanceKm?: number | null; etaMinutes?: number | null } | null;
+  /** Position du client relue par le Zem (MATCHED / ARRIVED), si le serveur la fournit. */
+  clientLat?: number | null;
+  clientLng?: number | null;
+  clientLocatedAt?: string | null;
+  /** Adresses lisibles du départ et de la destination, si le serveur les fournit. */
+  originLabel?: string | null;
+  destLabel?: string | null;
+  /** Dernière position connue du chauffeur, si le serveur la conserve (sinon absent). */
+  driverLocation?: { lat: number; lng: number; heading?: number; speed?: number; at?: number } | null;
   createdAt: string;
   driver?: RidePerson | null;
   client?: RidePerson | null;
@@ -300,7 +459,25 @@ export type RideChatMessage = {
   createdAt: string;
 };
 
+/** Itinéraire calculé par le serveur (mis en cache) vers l'étape en cours de la course. */
+export type RideRoute = {
+  rideId: string;
+  stage: "pickup" | "destination";
+  coordinates: { latitude: number; longitude: number }[];
+  distanceKm: number;
+  durationMinutes: number;
+  computedAt: string;
+  /** `true` : OSRM était indisponible, le serveur renvoie le dernier itinéraire valide. */
+  fallback: boolean;
+};
+
+/** Montant réellement payé : le prix final d'une course terminée, sinon le prix estimé. */
+export const paidAmount = (ride: Pick<Ride, "price" | "finalPrice">) => ride.finalPrice ?? ride.price;
+
 export const ridesApi = {
+  /** `stage=trip` : départ du client → destination, quelle que soit l'étape (voir le md backend, C.2.2). */
+  route: (rideId: string, stage?: "trip") =>
+    api.get<RideRoute>(`${P}/rides/${rideId}/route${stage ? `?stage=${stage}` : ""}`),
   /* --- Client --- */
   estimate: (body: RideRequest) => api.post<Estimate>(`${P}/rides/estimate`, body),
   create: (body: RideRequest) => api.post<Ride>(`${P}/rides`, body),
@@ -311,14 +488,34 @@ export const ridesApi = {
 
   /* --- Conducteur --- */
   /** Radar du chauffeur : sa position est transmise pour filtrer et classer par proximité. */
-  pending: (position?: { latitude: number; longitude: number }) =>
+  pending: (position?: { latitude: number; longitude: number }, radiusKm?: number) =>
     api.get<Ride[]>(
       `${P}/rides/pending` +
         (position
-          ? `?lat=${encodeURIComponent(position.latitude)}&lng=${encodeURIComponent(position.longitude)}`
+          ? `?lat=${encodeURIComponent(position.latitude)}&lng=${encodeURIComponent(position.longitude)}` +
+            (radiusKm ? `&radiusKm=${radiusKm}` : "")
           : "")
     ),
+  /** Nombre de clients disponibles autour du Zem (absent du serveur = 404 : l'application compte elle-même). */
+  pendingSummary: (position: { latitude: number; longitude: number }, radiusKm: number) =>
+    api.get<{ radiusKm: number; count: number; nearestKm: number | null }>(
+      `${P}/rides/pending/summary?lat=${encodeURIComponent(position.latitude)}&lng=${encodeURIComponent(position.longitude)}&radiusKm=${radiusKm}`
+    ),
+  /** Le serveur répond OFFERED (le client doit confirmer) ou MATCHED (ancien comportement). */
   accept: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/accept`),
+  /** Le Zem retire sa proposition tant que le client n'a pas confirmé. */
+  withdrawOffer: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/withdraw-offer`),
+  /** Propositions de Zem en attente de ma décision (rattrapage de la popup) — 404 tant que le serveur ne l'a pas. */
+  /** Ma proposition en cours + la dernière terminée (10 min) : reprise après redémarrage du Zem. 404 tant que le serveur ne l'a pas. */
+  currentOffer: () =>
+    api.get<{ offer: { rideId: string; status: string; expiresAt: string } | null; lastEnded: { rideId: string; outcome: string; endedAt: string } | null }>(`${P}/rides/offers/current`),
+  pendingOffers: () => api.get<{ offers: { rideId: string }[] }>(`${P}/rides/offers/pending`),
+  /** Dit au Zem que le client regarde sa proposition (popup affichée). */
+  offerSeen: (rideId: string) => api.post<{ seenAt?: string }>(`${P}/rides/${rideId}/offer-seen`),
+  /** Le client choisit ce Zem (OFFERED → MATCHED) ou le refuse (OFFERED → PENDING). */
+  approveDriver: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/approve-driver`),
+  declineDriver: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/decline-driver`),
+  driverProfile: (rideId: string) => api.get<DriverPublicProfile>(`${P}/rides/${rideId}/driver-profile`),
   arrive: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/arrive`),
   start: (rideId: string, pin: string) => api.post<Ride>(`${P}/rides/${rideId}/start`, { pin }),
   requestDropCode: (rideId: string) =>
@@ -326,8 +523,28 @@ export const ridesApi = {
   complete: (rideId: string, code: string) =>
     api.post<Ride>(`${P}/rides/${rideId}/complete`, { code }),
 
+  /* --- Arrêt anticipé : on ne paie que la distance parcourue, avec l'accord des deux --- */
+  requestStop: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/stop-request`),
+  acceptStop: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/stop-accept`),
+  declineStop: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/stop-decline`),
+  cancelStop: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/stop-cancel`),
+
+  /** Pourboire : 100 % reversé au Zem, débité du portefeuille. `Idempotency-Key` évite un double débit. */
+  tip: (rideId: string, amount: number, idempotencyKey: string) =>
+    api.post<{ rideId: string; tipId?: string; amount: number; balance?: number; at?: string }>(
+      `${P}/rides/${rideId}/tip`,
+      { amount },
+      { headers: { "Idempotency-Key": idempotencyKey } }
+    ),
+
   /* --- Messagerie sécurisée in-app --- */
-  messages: (rideId: string) => api.get<RideChatMessage[]>(`${P}/rides/${rideId}/messages`),
+  // Le serveur renverra `{ items }` (pagination) ; l'ancien format est un simple tableau.
+  messages: async (rideId: string): Promise<RideChatMessage[]> => {
+    const res = await api.get<RideChatMessage[] | { items: RideChatMessage[] }>(`${P}/rides/${rideId}/messages`);
+    return Array.isArray(res) ? res : (res?.items ?? []);
+  },
+  /** Marque comme lus les messages reçus de cette course (sans effet tant que la route n'existe pas). */
+  markRead: (rideId: string) => api.post<{ unreadTotal?: number }>(`${P}/rides/${rideId}/messages/read`),
   sendMessage: (
     rideId: string,
     body: { text: string; senderRole?: "CLIENT" | "PROVIDER"; senderName?: string }
@@ -678,6 +895,8 @@ export type AgencyRosterMember = {
   state: "EN_COURSE" | "DISPONIBLE";
   rating: number;
   jobsCompleted: number;
+  /** Solde du portefeuille du chauffeur (FCFA). */
+  balance?: number;
 };
 
 export type AgencyDashboardData = {
@@ -706,7 +925,17 @@ export type AgencyDashboardData = {
   withdrawalFeePct: number;
   /** Activation : paiement unique des frais du niveau avant toute opération. */
   activated: boolean;
+  /** Solde du portefeuille de l'agence (FCFA). */
+  walletBalance?: number;
   roster: AgencyRosterMember[];
+};
+
+export type AgencyTransferResult = {
+  direction: "fund" | "withdraw";
+  amount: number;
+  replayed: boolean;
+  agencyBalance: number;
+  driver: { id: string; balance: number };
 };
 
 export const agenciesApi = {
@@ -725,6 +954,12 @@ export const agenciesApi = {
       `${P}/agencies/drivers`,
       { phone }
     ),
+  /** L'agence recharge le compte d'un de ses chauffeurs (portefeuille agence → chauffeur). */
+  fundDriver: (userId: string, amount: number, idempotencyKey: string) =>
+    api.post<AgencyTransferResult>(`${P}/agencies/drivers/${userId}/fund`, { amount }, { headers: { "Idempotency-Key": idempotencyKey } }),
+  /** L'agence retire de l'argent du compte d'un chauffeur (chauffeur → portefeuille agence). */
+  withdrawFromDriver: (userId: string, amount: number, idempotencyKey: string) =>
+    api.post<AgencyTransferResult>(`${P}/agencies/drivers/${userId}/withdraw`, { amount }, { headers: { "Idempotency-Key": idempotencyKey } }),
   detachDriver: (userId: string) =>
     api.delete<{ detached: string; agencyId: string }>(`${P}/agencies/drivers/${userId}`),
 };

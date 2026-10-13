@@ -7,6 +7,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { AppNotification, errorMessage, notificationsApi } from "../services/api";
+import { getLanguage, languageInfo, tr, useI18n } from "../i18n";
 
 /**
  * Notifications AZƆ̀ — **alimentées par le serveur** (`GET /notifications`).
@@ -43,15 +44,16 @@ function dayLabel(iso: string): string {
   const today = new Date();
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const diff = Math.round((startOfDay(today) - startOfDay(date)) / 86400000);
-  if (diff <= 0) return "Aujourd'hui";
-  if (diff === 1) return "Hier";
-  return date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  if (diff <= 0) return tr("notif.today");
+  if (diff === 1) return tr("notif.yesterday");
+  return date.toLocaleDateString(languageInfo(getLanguage()).locale, { weekday: "long", day: "numeric", month: "long" });
 }
 
 const heure = (iso: string) =>
-  new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  new Date(iso).toLocaleTimeString(languageInfo(getLanguage()).locale, { hour: "2-digit", minute: "2-digit" });
 
 export default function NotificationsScreen({ onBack }: Props) {
+  const { t, lang } = useI18n();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -103,20 +105,20 @@ export default function NotificationsScreen({ onBack }: Props) {
       else ordered.push({ day, items: [n] });
     }
     return ordered;
-  }, [items]);
+  }, [items, lang]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.iconButton}>
+        <Pressable onPress={onBack} style={styles.iconButton} accessibilityLabel={t("common.back")}>
           <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />
         </Pressable>
         <Text style={styles.headerTitle}>
-          Notifications{unreadCount > 0 ? ` (${unreadCount})` : ""}
+          {t("notif.title")}{unreadCount > 0 ? ` (${unreadCount})` : ""}
         </Text>
         <Pressable onPress={onMarkAllRead} disabled={unreadCount === 0 || marking}>
           <Text style={[styles.markRead, unreadCount === 0 && { color: colors.outline }]}>
-            {marking ? "…" : "Tout marquer lu"}
+            {marking ? "…" : t("notif.markAll")}
           </Text>
         </Pressable>
       </View>
@@ -140,11 +142,8 @@ export default function NotificationsScreen({ onBack }: Props) {
           {items.length === 0 ? (
             <View style={styles.center}>
               <MaterialIcons name="notifications-none" size={40} color={colors.outline} />
-              <Text style={styles.emptyTitle}>Aucune notification</Text>
-              <Text style={styles.emptyText}>
-                Les nouvelles demandes, les courses acceptées et les paiements AZƆ̀ Pay
-                apparaîtront ici. Tire vers le bas pour actualiser.
-              </Text>
+              <Text style={styles.emptyTitle}>{t("notif.empty.title")}</Text>
+              <Text style={styles.emptyText}>{t("notif.empty.text")}</Text>
             </View>
           ) : (
             groups.map((g) => (

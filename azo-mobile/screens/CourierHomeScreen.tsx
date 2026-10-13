@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
+import { FONT } from "../theme/fontNormalize";
 import { Delivery, deliveryApi, errorMessage, walletApi } from "../services/api";
 import { formatBeninPhoneDisplay, maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
@@ -312,7 +313,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
                     alignItems: "center",
                   }}
                 >
-                  <Text style={{ ...typography.labelSm, color: "#fff", fontWeight: "800", fontSize: 10 }}>
+                  <Text style={{ ...typography.labelSm, color: "#fff", fontFamily: FONT.extrabold, fontSize: 10 }}>
                     1. Ramassage
                   </Text>
                 </View>
@@ -352,7 +353,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
                     alignItems: "center",
                   }}
                 >
-                  <Text style={{ ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "700", fontSize: 10 }}>
+                  <Text style={{ ...typography.labelSm, color: colors.onSurfaceVariant, fontFamily: FONT.bold, fontSize: 10 }}>
                     3. Encaissement
                   </Text>
                 </View>
@@ -410,19 +411,19 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
                     }}
                     onPress={() => setOtpInput(simBannerCode)}
                   >
-                    <Text style={{ ...typography.labelMd, color: "#fff", fontWeight: "700" }}>
+                    <Text style={{ ...typography.labelMd, color: "#fff", fontFamily: FONT.bold }}>
                       💬 Code client (simulation) :{" "}
-                      <Text style={{ color: "#52FF9B", fontWeight: "800", letterSpacing: 2 }}>
+                      <Text style={{ color: "#52FF9B", fontFamily: FONT.extrabold, letterSpacing: 2 }}>
                         {simBannerCode}
                       </Text>
                     </Text>
-                    <Text style={{ ...typography.labelSm, color: "#8CF0B4", fontWeight: "800" }}>
+                    <Text style={{ ...typography.labelSm, color: "#8CF0B4", fontFamily: FONT.extrabold }}>
                       {simBannerSec}s
                     </Text>
                   </Pressable>
                 ) : currentSimCode ? (
                   <Pressable onPress={() => showSimCodeFor5Seconds(currentSimCode)}>
-                    <Text style={{ ...typography.labelSm, color: colors.primary, fontWeight: "700" }}>
+                    <Text style={{ ...typography.labelSm, color: colors.primary, fontFamily: FONT.bold }}>
                       Afficher le code client de simulation pendant 5s
                     </Text>
                   </Pressable>
@@ -522,11 +523,11 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
 
                     <View style={styles.missionAddresses}>
                       <Text style={styles.missionAddr} numberOfLines={1}>
-                        <Text style={{ fontWeight: "700", color: colors.primary }}>De : </Text>
+                        <Text style={{ fontFamily: FONT.bold, color: colors.primary }}>De : </Text>
                         {item.pickupAddress}
                       </Text>
                       <Text style={styles.missionAddr} numberOfLines={1}>
-                        <Text style={{ fontWeight: "700", color: colors.secondary }}>Vers : </Text>
+                        <Text style={{ fontFamily: FONT.bold, color: colors.secondary }}>Vers : </Text>
                         {item.dropAddress}
                       </Text>
                     </View>
