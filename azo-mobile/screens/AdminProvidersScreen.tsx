@@ -103,6 +103,11 @@ const AGENCY_TYPE_LABELS: Record<string, string> = {
   FLOTTE_VOITURE: "Agence VTC & Transport Voiture",
   FLOTTE_LIVRAISON: "Agence de Coursiers & Logistique",
   FLOTTE_MIXTE: "Agence Multi-Flotte (Zem + Voitures + Livreurs)",
+  // Anciens dossiers ci-dessus ; les nouveaux portent directement le niveau choisi
+  PRO: "Pro",
+  SILVER: "Silver",
+  OR: "Or",
+  DIAMANT: "Diamant",
 };
 
 function fmtDate(iso: string | null | undefined) {
@@ -510,7 +515,7 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard }: Props)
           />
           {d.activity.categoryId ? (
             <Info
-              label={d.type === "AGENCY" ? "Type d'agence" : "Spécialité"}
+              label={d.type === "AGENCY" ? "Niveau d'agence" : "Spécialité"}
               value={AGENCY_TYPE_LABELS[d.activity.categoryId] ?? d.activity.categoryId}
             />
           ) : null}

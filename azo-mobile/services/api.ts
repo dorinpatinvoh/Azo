@@ -279,6 +279,8 @@ export type WalletTransaction = {
   label: string;
   meta: string | null;
   createdAt: string;
+  /** CONFIRMED par défaut ; PENDING = recharge FedaPay pas encore confirmée par le webhook. */
+  status?: "CONFIRMED" | "PENDING" | "FAILED";
 };
 
 export const walletApi = {

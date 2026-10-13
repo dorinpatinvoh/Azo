@@ -15,6 +15,8 @@ import { MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
+import { agencyLevelPricing, tarification, type AgencyLevel } from "../services/tarification";
+import { agencyPlanName } from "../utils/agencyPlan";
 import {
   AgencyPlanChoice,
   DocumentKind,
@@ -79,7 +81,7 @@ const EMPTY_FORM: Form = {
   representativeFirstName: "",
   representativeRole: "Gérant",
   representativeNpi: "",
-  agencyType: "FLOTTE_MIXTE",
+  agencyType: "",
   legalForm: "SARL",
   ifuNumber: "",
   rccmNumber: "",
@@ -90,32 +92,18 @@ const EMPTY_FORM: Form = {
   fleetSize: "",
 };
 
-const DEFAULT_AGENCY_TYPES = [
-  {
-    id: "FLOTTE_ZEM",
-    label: "Agence de Flotte Zem & Moto-Taxi",
-    hint: "Gestion de motos-taxis Zem thermiques & électriques",
-    icon: "two-wheeler" as const,
-  },
-  {
-    id: "FLOTTE_VOITURE",
-    label: "Agence VTC & Transport Voiture",
-    hint: "Flotte de berlines climatisées & transport urbain",
-    icon: "directions-car" as const,
-  },
-  {
-    id: "FLOTTE_LIVRAISON",
-    label: "Agence de Coursiers & Logistique",
-    hint: "Flotte de livreurs de colis, coursiers express & personnels",
-    icon: "local-shipping" as const,
-  },
-  {
-    id: "FLOTTE_MIXTE",
-    label: "Agence Multi-Flotte (Zem + Voitures + Livreurs)",
-    hint: "Exploitation complète multi-services sur AZƆ̀",
-    icon: "hub" as const,
-  },
-];
+// Une agence choisit directement son niveau : Pro, Silver, Or ou Diamant. Montants et plafonds viennent de la grille
+// officielle partagée (jamais codés en dur ici).
+const AGENCY_LEVEL_CHOICES = (Object.keys(tarification().agencyLevels) as AgencyLevel[]).map((plan) => {
+  const rules = agencyLevelPricing(plan);
+  return {
+    plan: plan as AgencyPlanChoice,
+    label: agencyPlanName(plan),
+    hint:
+      `Activation unique : ${rules.activationFee.toLocaleString("fr-FR")} F · Jusqu'à ${rules.maxAccounts.toLocaleString("fr-FR")} comptes · ` +
+      `Commission : ${String(rules.commissionPct).replace(".", ",")} % · Frais de retrait : ${String(rules.withdrawalFeePct).replace(".", ",")} %`,
+  };
+});
 
 const REPRESENTATIVE_ROLES = [
   "Gérant",
@@ -173,10 +161,10 @@ const DEFAULT_AGENCY_PLANS: {
   maxAccounts: number;
   commissionRate: number;
 }[] = [
-  { plan: "PRO", label: "Agence Pro", fee: 100000, maxAccounts: 10, commissionRate: 0.03 },
-  { plan: "SILVER", label: "Agence Silver", fee: 215500, maxAccounts: 25, commissionRate: 0.025 },
-  { plan: "OR", label: "Agence Or", fee: 450500, maxAccounts: 100, commissionRate: 0.02 },
-  { plan: "DIAMANT", label: "Agence Diamant", fee: 600500, maxAccounts: 1000, commissionRate: 0.01 },
+  { plan: "PRO", label: "Pro", fee: 100000, maxAccounts: 10, commissionRate: 0.03 },
+  { plan: "SILVER", label: "Silver", fee: 215500, maxAccounts: 25, commissionRate: 0.025 },
+  { plan: "OR", label: "Or", fee: 450500, maxAccounts: 100, commissionRate: 0.02 },
+  { plan: "DIAMANT", label: "Diamant", fee: 600500, maxAccounts: 1000, commissionRate: 0.01 },
 ];
 
 // Pièces dont la date d'expiration a du sens (permis, assurance, visite technique, CNI).
@@ -380,7 +368,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     if (index === 0) {
       if (!currentType) return "Choisis ton activité pour continuer.";
       if (!isAgency && !form.vehicleType) return "Choisis le véhicule avec lequel tu vas travailler.";
-      if (isAgency && !form.agencyType) return "Choisis le type d'agence (Zem, Voiture, Livraison ou Multi-Flotte).";
+      if (isAgency && !form.plan) return "Choisis le niveau de ton agence (Pro, Silver, Or ou Diamant).";
       return null;
     }
     if (index === 1) {
@@ -678,17 +666,17 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             {/* Type d'agence à choisir */}
             {isAgency && (
               <View style={styles.subSection}>
-                <Text style={styles.sectionTitle}>Quel type d'agence souhaites-tu ouvrir ?</Text>
-                {DEFAULT_AGENCY_TYPES.map((at) => {
-                  const selected = form.agencyType === at.id;
+                <Text style={styles.sectionTitle}>Quel niveau d'agence souhaites-tu ouvrir ?</Text>
+                {AGENCY_LEVEL_CHOICES.map((at) => {
+                  const selected = form.plan === at.plan;
                   return (
                     <Pressable
-                      key={at.id}
+                      key={at.plan}
                       style={[styles.choiceRow, selected && styles.choiceRowSelected]}
-                      onPress={() => setForm((f) => ({ ...f, agencyType: at.id }))}
+                      onPress={() => setForm((f) => ({ ...f, plan: at.plan, agencyType: at.plan }))}
                     >
                       <MaterialIcons
-                        name={at.icon}
+                        name="workspace-premium"
                         size={20}
                         color={selected ? colors.primary : colors.onSurfaceVariant}
                       />
@@ -1019,32 +1007,6 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                   keyboardType="number-pad"
                   maxLength={14}
                 />
-
-                <Text style={styles.sectionTitle}>Formule officielle AZƆ̀</Text>
-                {(req?.plans?.length ? req.plans : DEFAULT_AGENCY_PLANS).map((p) => {
-                  const selected = form.plan === p.plan;
-                  return (
-                    <Pressable
-                      key={p.plan}
-                      style={[styles.choiceRow, selected && styles.choiceRowSelected]}
-                      onPress={() => setForm((f) => ({ ...f, plan: p.plan }))}
-                    >
-                      <MaterialIcons
-                        name="workspace-premium"
-                        size={20}
-                        color={selected ? colors.primary : colors.onSurfaceVariant}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.choiceTitle}>{p.label.toUpperCase()}</Text>
-                        <Text style={styles.cardMeta}>
-                          Activation unique : {fcfa(p.fee)} · Jusqu'à {p.maxAccounts.toLocaleString("fr-FR")} comptes · Commission :{" "}
-                          {(p.commissionRate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %
-                        </Text>
-                      </View>
-                      {selected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
-                    </Pressable>
-                  );
-                })}
               </>
             ) : (
               <>
@@ -1105,13 +1067,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             <View style={styles.summaryCard}>
               <SummaryRow label="Activité" value={typeConfig?.label ?? dossier?.typeLabel ?? "—"} />
               {isAgency && (
-                <SummaryRow
-                  label="Type d'agence"
-                  value={
-                    DEFAULT_AGENCY_TYPES.find((at) => at.id === form.agencyType)?.label ??
-                    form.agencyType
-                  }
-                />
+                <SummaryRow label="Niveau d'agence" value={agencyPlanName(form.plan) || form.agencyType} />
               )}
               {isCourier && (
                 <SummaryRow

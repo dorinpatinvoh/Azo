@@ -29,6 +29,7 @@ import {
   type AgencyLevel,
 } from "../services/tarification";
 import { useI18n } from "../i18n";
+import { agencyPlanName } from "../utils/agencyPlan";
 import {
   cleanBeninDigits,
   formatBeninPhoneDisplay,
@@ -175,7 +176,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
     if (!data) return;
     Alert.alert(
       t("ag.activate.title"),
-      t("ag.activate.body", { fee: fcfa(data.agency.activationFee), plan: data.agency.planLabel }),
+      t("ag.activate.body", { fee: fcfa(data.agency.activationFee), plan: agencyPlanName(data.agency.plan) }),
       [
         { text: t("common.cancel"), style: "cancel" },
         {
@@ -188,7 +189,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
               Alert.alert(
                 t("ag.activated.title"),
                 t("ag.activated.body", {
-                  plan: res.plan,
+                  plan: agencyPlanName(res.plan),
                   fee: fcfa(res.activationFee),
                   accounts: num(agencyLevelPricing(res.plan).maxAccounts),
                 })
@@ -261,7 +262,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>
             {data
-              ? t("ag.planLine", { plan: data.agency.planLabel, pct: num(data.agency.commissionRate * 100) })
+              ? t("ag.planLine", { plan: agencyPlanName(data.agency.plan), pct: num(data.agency.commissionRate * 100) })
               : t("ag.subtitleFleet")}
           </Text>
         </View>
@@ -292,7 +293,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
             <Text style={styles.activationText}>
               {t("ag.notActivatedBody", {
                 fee: fcfa(data.agency.activationFee),
-                plan: data.agency.planLabel,
+                plan: agencyPlanName(data.agency.plan),
                 commission: data.commissionPct,
                 withdrawal: data.withdrawalFeePct,
                 accounts: num(agencyLevelPricing(data.agency.plan).maxAccounts),
@@ -347,13 +348,13 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                     </Text>
                     <Text style={styles.agencyMeta}>
                       {t("ag.metaLine", {
-                        plan: data.agency.planLabel,
+                        plan: agencyPlanName(data.agency.plan),
                         pct: num(data.agency.commissionRate * 100, { maximumFractionDigits: 2 }),
                       })}
                     </Text>
                   </View>
                   <View style={styles.planPill}>
-                    <Text style={styles.planPillText}>{data.agency.planLabel}</Text>
+                    <Text style={styles.planPillText}>{agencyPlanName(data.agency.plan)}</Text>
                   </View>
                 </View>
 
@@ -570,7 +571,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                         />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.driverName}>{t("ag.tierName", { plan: tier.plan })}</Text>
+                        <Text style={styles.driverName}>{agencyPlanName(tier.plan)}</Text>
                         <Text style={styles.driverMeta}>
                           {t("ag.tierMeta", { fee: num(tier.fee), accounts: num(tier.maxAccounts) })}
                         </Text>

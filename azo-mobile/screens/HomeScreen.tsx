@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  AppState,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -81,6 +82,22 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
   const [name, setName] = useState(clientName);
   const [balance, setBalance] = useState<number | null>(null);
   const [loadingWallet, setLoadingWallet] = useState(true);
+
+  // Le solde se met à jour tout seul : une recharge FedaPay est créditée par le webhook, parfois après le retour
+  // dans l'application. On relit le solde au retour au premier plan et toutes les 15 s.
+  useEffect(() => {
+    const refresh = () => {
+      walletApi.get().then((w) => setBalance(w.balance)).catch(() => undefined);
+    };
+    const timer = setInterval(refresh, 15000);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     userApi

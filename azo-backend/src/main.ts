@@ -10,7 +10,8 @@ async function bootstrap() {
 
   // Augmente la taille maximale des corps JSON pour accepter les photos KYC en base64
   // (contourne le bug multipart de React Native Android sur certains téléphones).
-  app.use(json({ limit: "15mb" }));
+  // `rawBody` : corps brut conservé pour vérifier la signature des webhooks FedaPay (HMAC sur le texte exact reçu).
+  app.use(json({ limit: "15mb", verify: (req: any, _res, buf) => { req.rawBody = buf; } }));
   app.use(urlencoded({ extended: true, limit: "15mb" }));
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

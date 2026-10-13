@@ -6,6 +6,9 @@ import { Prisma, TransactionStatus, TransactionType } from "@prisma/client";
 
 const MONTHLY_ZEM_SETTLEMENT_LABEL = "Prélèvement mensuel Zem";
 
+/** Recharge minimale par FedaPay (FCFA). Le mobile applique la même valeur (config/wallet.ts). */
+export const MIN_RECHARGE = 300;
+
 @Injectable()
 export class WalletService {
   constructor(
@@ -32,6 +35,8 @@ export class WalletService {
   }
 
   async initRecharge(userId: string, amount: number, email?: string) {
+    if (!Number.isInteger(amount) || amount < MIN_RECHARGE)
+      throw new BadRequestException(`Le montant minimum de recharge est de ${MIN_RECHARGE} FCFA`);
     // Relire l'email depuis la base — l'objet JWT ne le contient pas.
     if (!email) {
       const user = await this.prisma.user.findUnique({

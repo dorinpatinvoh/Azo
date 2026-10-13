@@ -195,11 +195,12 @@ const COURIER_SPECIALTIES: { id: string; label: string; hint: string }[] = [
   { id: "LIVREUR_COLIS", label: "Livreur de colis", hint: "Livraison de colis et marchandises avec double OTP" },
 ];
 
+// Une agence choisit directement son niveau (voir agencies/plans.ts) : Pro, Silver, Or ou Diamant.
 export const AGENCY_TYPES: { id: string; label: string; hint: string }[] = [
-  { id: "FLOTTE_ZEM", label: "Agence de Flotte Zem & Moto-Taxi", hint: "Gestion de motos-taxis Zem thermiques & électriques" },
-  { id: "FLOTTE_VOITURE", label: "Agence VTC & Transport Voiture", hint: "Flotte de berlines climatisées & transport urbain" },
-  { id: "FLOTTE_LIVRAISON", label: "Agence de Coursiers & Logistique", hint: "Flotte de livreurs de colis, coursiers express & personnels" },
-  { id: "FLOTTE_MIXTE", label: "Agence Multi-Flotte (Zem + Voitures + Livreurs)", hint: "Exploitation complète multi-services sur AZƆ̀" },
+  { id: "PRO", label: PLAN_LABELS.PRO, hint: "Agence Pro" },
+  { id: "SILVER", label: PLAN_LABELS.SILVER, hint: "Agence Silver" },
+  { id: "OR", label: PLAN_LABELS.OR, hint: "Agence Or" },
+  { id: "DIAMANT", label: PLAN_LABELS.DIAMANT, hint: "Agence Diamant" },
 ];
 
 export type AgencyDetails = {
@@ -241,7 +242,7 @@ function parseAgencyDetails(provider: {
     representativeLastName: parsed.representativeLastName ?? defaultLast,
     representativeRole: parsed.representativeRole ?? "Gérant",
     representativeNpi: parsed.representativeNpi ?? "",
-    agencyType: parsed.agencyType ?? provider.categoryId ?? "FLOTTE_MIXTE",
+    agencyType: parsed.agencyType ?? provider.categoryId ?? "",
     legalForm: parsed.legalForm ?? "SARL",
     ifuNumber: parsed.ifuNumber ?? "",
     rccmNumber: parsed.rccmNumber ?? "",

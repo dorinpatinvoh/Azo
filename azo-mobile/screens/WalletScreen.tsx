@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, Linking } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, AppState, Modal, TextInput, View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { walletApi, WalletTransaction } from "../services/api";
+import { errorMessage, walletApi, WalletTransaction } from "../services/api";
+import PaymentWebView from "../components/PaymentWebView";
+import { MIN_RECHARGE, RECHARGE_POLL_MAX_MS, RECHARGE_POLL_MS, RECHARGE_PRESETS } from "../config/wallet";
 import { useI18n, type MessageKey } from "../i18n";
 
 const ACTIONS: { id: string; labelKey: MessageKey; icon: keyof typeof MaterialIcons.glyphMap }[] = [
@@ -33,42 +35,100 @@ export default function WalletScreen({ onBack }: Props) {
   const [cashback, setCashback] = useState(0);
   const [tx, setTx] = useState<WalletTransaction[]>([]);
 
-  // Recharge le solde ET l'historique depuis le backend
-  async function load() {
+  // Recharge le solde ET l'historique depuis le backend (renvoie le solde lu, ou null si le serveur est injoignable)
+  const load = useCallback(async (): Promise<number | null> => {
     try {
       const [w, list] = await Promise.all([walletApi.get(), walletApi.transactions()]);
       setBalance(w.balance);
       setCashback(w.cashback);
       setTx(list);
       setLoadFailed(false);
+      return w.balance;
     } catch {
       // Serveur injoignable : pas de solde inventé (48 500 F s'affichait avant), « — FCFA » et un message
       setLoadFailed(true);
+      return null;
     }
-  }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
-  // Recharge simulée de 5 000 FCFA (le vrai paiement FedaPay viendra plus tard)
+  // --- Recharge FedaPay -------------------------------------------------------------------------------------------
+  // Le crédit n'arrive pas à la fin du paiement mais quand FedaPay prévient le serveur (webhook). On suit donc le solde :
+  // toutes les 4 s pendant 3 minutes, et dès que l'application revient au premier plan (retour de la page de paiement).
+  const [rechargeOpen, setRechargeOpen] = useState(false);
+  const [rechargeAmount, setRechargeAmount] = useState("");
+  const [rechargeBusy, setRechargeBusy] = useState(false);
+  // Adresse de paiement FedaPay affichée dans l'application (fenêtre plein écran), sans quitter l'application
+  const [payUrl, setPayUrl] = useState<string | null>(null);
+  const [awaiting, setAwaiting] = useState<{ baseline: number; amount: number; since: number } | null>(null);
+  const awaitingRef = useRef(awaiting);
+  awaitingRef.current = awaiting;
+  const finished = useRef(false);
+
+  const checkCredited = useCallback(async () => {
+    const pending = awaitingRef.current;
+    if (!pending) return;
+    const fresh = await load();
+    if (fresh === null || finished.current) return;
+    if (fresh >= pending.baseline + pending.amount) {
+      finished.current = true;
+      setAwaiting(null);
+      Alert.alert(
+        t("wallet.recharge.done.title"),
+        t("wallet.recharge.done.body", {
+          amount: (fresh - pending.baseline).toLocaleString(locale),
+          balance: fresh.toLocaleString(locale),
+        })
+      );
+    } else if (Date.now() - pending.since > RECHARGE_POLL_MAX_MS) {
+      finished.current = true;
+      setAwaiting(null);
+      Alert.alert(t("wallet.recharge.title"), t("wallet.recharge.timeout"));
+    }
+  }, [load, locale, t]);
+
+  useEffect(() => {
+    if (!awaiting) return;
+    finished.current = false;
+    const timer = setInterval(checkCredited, RECHARGE_POLL_MS);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") checkCredited();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [awaiting, checkCredited]);
+
+  const rechargeValue = Number(rechargeAmount.replace(/\D/g, ""));
+  const rechargeValid = Number.isInteger(rechargeValue) && rechargeValue >= MIN_RECHARGE;
+
+  async function startRecharge() {
+    if (!rechargeValid) {
+      Alert.alert(t("common.error"), t("wallet.recharge.min", { min: MIN_RECHARGE }));
+      return;
+    }
+    setRechargeBusy(true);
+    try {
+      const baseline = balance ?? 0;
+      // Le serveur renvoie l'adresse de paiement FedaPay : le crédit arrive après le paiement, via le webhook
+      const { url } = await walletApi.recharge(rechargeValue, "FEDAPAY");
+      setRechargeOpen(false);
+      setAwaiting({ baseline, amount: rechargeValue, since: Date.now() });
+      if (url) setPayUrl(url);
+    } catch (e) {
+      Alert.alert(t("common.error"), errorMessage(e));
+    } finally {
+      setRechargeBusy(false);
+    }
+  }
+
   function handleRecharge() {
-    Alert.alert(t("wallet.rechargeTitle"), t("wallet.rechargeBody"), [
-      { text: t("common.cancel"), style: "cancel" },
-      {
-        text: t("wallet.rechargeTitle"),
-        onPress: async () => {
-          try {
-            // Le serveur renvoie l'adresse de paiement FedaPay : le crédit arrive après le paiement
-            const { url } = await walletApi.recharge(5000, "MTN_MOMO");
-            if (url) await Linking.openURL(url);
-            await load();
-          } catch (e: any) {
-            Alert.alert(t("common.error"), e.message);
-          }
-        },
-      },
-    ]);
+    setRechargeAmount("");
+    setRechargeOpen(true);
   }
 
   // Transforme les transactions du backend au format d'affichage (aucune ligne de démonstration)
@@ -76,8 +136,10 @@ export default function WalletScreen({ onBack }: Props) {
     id: item.id,
     label: item.label,
     meta: `${new Date(item.createdAt).toLocaleString(locale)}${item.meta ? " · " + item.meta : ""}`,
-    amount: `${item.type === "CREDIT" ? "+" : "-"}${item.amount.toLocaleString(locale)} F`,
-    positive: item.type === "CREDIT",
+    amount: `${item.type === "CREDIT" ? "+" : "-"}${item.amount.toLocaleString(locale)} F${
+      item.status === "PENDING" ? " " + t("wallet.tx.pending") : item.status === "FAILED" ? " " + t("wallet.tx.failed") : ""
+    }`,
+    positive: item.type === "CREDIT" && (item.status ?? "CONFIRMED") === "CONFIRMED",
     icon: (item.type === "CREDIT" ? "arrow-downward" : "arrow-upward") as keyof typeof MaterialIcons.glyphMap,
   }));
 
@@ -102,6 +164,15 @@ export default function WalletScreen({ onBack }: Props) {
             <Text style={styles.cashbackText}>{t("wallet.cashback", { amount: cashback })}</Text>
           </View>
           {loadFailed && <Text style={styles.cashbackText}>{t("wallet.loadError")}</Text>}
+          {awaiting && (
+            <View style={styles.cashbackRow}>
+              <ActivityIndicator size="small" color="#fff" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cashbackText}>{t("wallet.recharge.pending")}</Text>
+                <Text style={[styles.cashbackText, { fontWeight: "400" }]}>{t("wallet.recharge.pendingHelp")}</Text>
+              </View>
+            </View>
+          )}
         </LinearGradient>
 
         <View style={styles.actionsRow}>
@@ -161,11 +232,96 @@ export default function WalletScreen({ onBack }: Props) {
           ))}
         </View>
       </ScrollView>
+
+      {/* Page de paiement FedaPay intégrée : se ferme à la fin du paiement, le solde est ensuite suivi automatiquement */}
+      <PaymentWebView
+        url={payUrl}
+        onClose={() => {
+          setPayUrl(null);
+          checkCredited();
+        }}
+        onReturn={() => {
+          setPayUrl(null);
+          checkCredited();
+        }}
+      />
+
+      {/* Montant de la recharge FedaPay (minimum {MIN_RECHARGE} FCFA) */}
+      <Modal visible={rechargeOpen} transparent animationType="fade" onRequestClose={() => setRechargeOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t("wallet.recharge.title")}</Text>
+            <Text style={styles.modalHint}>{t("wallet.recharge.amountLabel", { min: MIN_RECHARGE })}</Text>
+            <View style={styles.presetRow}>
+              {RECHARGE_PRESETS.map((value) => {
+                const active = rechargeValue === value;
+                return (
+                  <Pressable
+                    key={value}
+                    style={[styles.presetChip, active && styles.presetChipActive]}
+                    onPress={() => setRechargeAmount(String(value))}
+                  >
+                    <Text style={[styles.presetText, active && styles.presetTextActive]}>{value.toLocaleString(locale)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <TextInput
+              style={styles.amountInput}
+              value={rechargeAmount}
+              onChangeText={(v) => setRechargeAmount(v.replace(/\D/g, "").slice(0, 7))}
+              placeholder={t("wallet.recharge.placeholder")}
+              placeholderTextColor={colors.outline}
+              keyboardType="number-pad"
+              maxLength={7}
+            />
+            {rechargeAmount !== "" && !rechargeValid ? (
+              <Text style={styles.modalError}>{t("wallet.recharge.min", { min: MIN_RECHARGE })}</Text>
+            ) : (
+              <Text style={styles.modalHint}>{t("wallet.recharge.secure")}</Text>
+            )}
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalCancel} onPress={() => setRechargeOpen(false)}>
+                <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalConfirm, (!rechargeValid || rechargeBusy) && { opacity: 0.6 }]}
+                disabled={!rechargeValid || rechargeBusy}
+                onPress={startRecharge}
+              >
+                {rechargeBusy ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>
+                    {t("wallet.recharge.pay", { amount: `${(rechargeValue || 0).toLocaleString(locale)} F` })}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: spacing.lg },
+  modalCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.sm },
+  modalTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  modalHint: { ...typography.bodySm, color: colors.onSurfaceVariant, lineHeight: 20 },
+  modalError: { ...typography.bodySm, color: colors.error, lineHeight: 20 },
+  presetRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  presetChip: { paddingHorizontal: 14, height: 38, borderRadius: radius.full, backgroundColor: colors.surfaceContainer, alignItems: "center", justifyContent: "center" },
+  presetChipActive: { backgroundColor: colors.primary },
+  presetText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
+  presetTextActive: { color: "#fff" },
+  amountInput: { ...typography.headlineSm, color: colors.onSurface, borderWidth: 1.5, borderColor: colors.outlineVariant, borderRadius: radius.lg, paddingHorizontal: spacing.md, height: 52 },
+  modalActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
+  modalCancel: { flex: 1, height: 46, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.outlineVariant, alignItems: "center", justifyContent: "center" },
+  modalCancelText: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
+  modalConfirm: { flex: 1.4, height: 46, borderRadius: radius.full, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
+  modalConfirmText: { ...typography.labelLg, color: "#fff", fontWeight: "800" },
   safe: { flex: 1, backgroundColor: colors.background },
   header: { height: 56, paddingHorizontal: spacing.md, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   iconButton: { width: 40, height: 40, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
