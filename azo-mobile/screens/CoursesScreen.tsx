@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
+import { Alert, Share, View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { ridesApi, Ride } from "../services/api";
+import { errorMessage, ridesApi, Ride } from "../services/api";
+import { receiptText } from "../utils/receipt";
 import ClientTabBar, { ClientTab } from "../components/ClientTabBar";
 import { useI18n, type MessageKey } from "../i18n";
 import {
@@ -27,7 +28,7 @@ type Props = {
 };
 
 export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRide }: Props) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -47,6 +48,16 @@ export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRid
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, [load]);
+
+  // Reçu d'une course terminée : texte prêt à partager (WhatsApp, SMS, e-mail…)
+  const shareReceipt = useCallback(async (ride: Ride) => {
+    try {
+      const receipt = await ridesApi.receipt(ride.id);
+      await Share.share({ message: receiptText(receipt, VEHICLE_LABEL[ride.vehicleType], locale) });
+    } catch (e) {
+      Alert.alert(t("receipt.failed"), errorMessage(e));
+    }
+  }, [locale, t]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -154,6 +165,12 @@ export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRid
                   ) : isActive ? (
                     <Text style={styles.follow}>{t("courses.follow")}</Text>
                   ) : null}
+                  {r.status === "COMPLETED" && !offline ? (
+                    <Pressable style={styles.receiptBtn} onPress={() => shareReceipt(r)} accessibilityLabel={t("receipt.button")}>
+                      <MaterialIcons name="receipt-long" size={14} color={colors.primary} />
+                      <Text style={styles.receiptText}>{t("receipt.button")}</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </Pressable>
             );
@@ -167,6 +184,8 @@ export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRid
 }
 
 const styles = StyleSheet.create({
+  receiptBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, height: 28, borderRadius: radius.full, backgroundColor: colors.primaryFixed },
+  receiptText: { ...typography.labelSm, color: colors.primary, fontWeight: "700" },
   safe: { flex: 1, backgroundColor: colors.background },
   header: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm },
   title: { ...typography.headlineLg, color: colors.onSurface, fontWeight: "800" },

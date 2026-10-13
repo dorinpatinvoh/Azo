@@ -15,6 +15,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import ClientTabBar, { type ClientTab } from "../components/ClientTabBar";
 import { userApi, walletApi } from "../services/api";
+import StandingBanner from "../components/StandingBanner";
 import { ridePrice } from "../services/tarification";
 import { useI18n, type MessageKey } from "../i18n";
 
@@ -154,6 +155,8 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Carte Portefeuille AZƆ̀ Pay (Point focal financier) */}
+        <StandingBanner />
+
         <View style={styles.walletCard}>
           <View style={styles.walletInfo}>
             <View style={styles.walletIconBox}>

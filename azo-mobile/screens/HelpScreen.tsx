@@ -7,7 +7,7 @@ import { typography } from "../theme/typography";
 import { useI18n, type MessageKey } from "../i18n";
 import { EMERGENCY_NUMBERS } from "../config/emergency";
 
-type Props = { onBack: () => void };
+type Props = { onBack: () => void; onOpenSupport?: () => void };
 
 const FAQ: { q: MessageKey; a: MessageKey }[] = [
   { q: "help.q1", a: "help.a1" },
@@ -20,7 +20,7 @@ const FAQ: { q: MessageKey; a: MessageKey }[] = [
 ];
 
 /** Aide : numéros d'urgence (appel direct) et questions fréquentes. Aucun serveur nécessaire. */
-export default function HelpScreen({ onBack }: Props) {
+export default function HelpScreen({ onBack, onOpenSupport }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const [open, setOpen] = useState<number | null>(null);
@@ -57,6 +57,13 @@ export default function HelpScreen({ onBack }: Props) {
           ))}
         </View>
 
+        {onOpenSupport ? (
+          <Pressable style={styles.supportBtn} onPress={onOpenSupport} accessibilityRole="button">
+            <MaterialIcons name="support-agent" size={22} color="#fff" />
+            <Text style={styles.supportBtnText}>{t("sup.contact")}</Text>
+          </Pressable>
+        ) : null}
+
         <Text style={[styles.section, { marginTop: spacing.lg }]}>{t("help.faq")}</Text>
         <View style={styles.faq}>
           {FAQ.map((item, i) => {
@@ -83,6 +90,8 @@ export default function HelpScreen({ onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
+  supportBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 48, borderRadius: radius.full, backgroundColor: colors.primary, marginTop: spacing.lg },
+  supportBtnText: { ...typography.labelLg, color: "#fff", fontWeight: "800" },
   safe: { flex: 1, backgroundColor: colors.background },
   appBar: {
     flexDirection: "row",

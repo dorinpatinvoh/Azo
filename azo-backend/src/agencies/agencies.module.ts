@@ -131,7 +131,8 @@ export class AgenciesService {
       driver.id,
       "Rattachement à une agence",
       `Tu as été rattaché à l'agence ${agency.name} (formule ${PLAN_LABELS[agency.plan]}).`,
-      "AGENCY"
+      "AGENCY",
+      { titleKey: "NOTIFICATION_AGENCY_ATTACHED", params: { agency: agency.name, plan: PLAN_LABELS[agency.plan] } }
     );
     return { driver: { id: updated.id, phone: updated.phone, fullName: updated.fullName }, agencyId: agency.id };
   }
@@ -168,7 +169,8 @@ export class AgenciesService {
       driverId,
       "Fin du rattachement à une agence",
       `Tu ne fais plus partie de l'agence ${agency.name}. Tu redeviens indépendant.`,
-      "AGENCY"
+      "AGENCY",
+      { titleKey: "NOTIFICATION_AGENCY_DETACHED", params: { agency: agency.name } }
     );
     return { detached: driverId, agencyId: agency.id };
   }
@@ -220,7 +222,16 @@ export class AgenciesService {
       "Agence activée ✅",
       `${agency.name} est active (${PLAN_LABELS[agency.plan]} · ${this.pricing.agencyMaxAccounts(agency.plan)} comptes · ` +
         `commission ${this.pricing.getAgencyLevel(agency.plan).commissionPct} %).`,
-      "AGENCY"
+      "AGENCY",
+      {
+        titleKey: "NOTIFICATION_AGENCY_ACTIVATED",
+        params: {
+          agency: agency.name,
+          plan: PLAN_LABELS[agency.plan],
+          accounts: this.pricing.agencyMaxAccounts(agency.plan),
+          commission: this.pricing.getAgencyLevel(agency.plan).commissionPct,
+        },
+      }
     );
 
     return {

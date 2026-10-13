@@ -42,6 +42,8 @@ type Props = {
   onOpenDossier?: () => void;
   /** Ouvre le portefeuille de l'agence (recharge FedaPay) : il alimente les recharges des chauffeurs et l'activation. */
   onOpenWallet?: () => void;
+  /** Ouvre l'assistance (tickets avec l'équipe AZƆ̀). */
+  onOpenSupport?: () => void;
 };
 
 type RosterFilter = "ALL" | "EN_COURSE" | "DISPONIBLE";
@@ -59,7 +61,7 @@ const OFFICIAL_AGENCY_GRID = (Object.keys(tarification().agencyLevels) as Agency
   };
 });
 
-export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWallet }: Props) {
+export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWallet, onOpenSupport }: Props) {
   const { t, locale } = useI18n();
   const fcfa = (n: number) => `${n.toLocaleString(locale)} F`;
   const num = (n: number, opts?: Intl.NumberFormatOptions) => n.toLocaleString(locale, opts);
@@ -266,6 +268,11 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
               : t("ag.subtitleFleet")}
           </Text>
         </View>
+        {onOpenSupport ? (
+          <Pressable style={styles.kycBtn} onPress={onOpenSupport} accessibilityLabel={t("sup.title")}>
+            <MaterialIcons name="support-agent" size={15} color={colors.primary} />
+          </Pressable>
+        ) : null}
         {onOpenWallet ? (
           <Pressable style={styles.kycBtn} onPress={onOpenWallet}>
             <MaterialIcons name="account-balance-wallet" size={15} color={colors.primary} />

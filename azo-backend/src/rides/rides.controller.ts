@@ -1,10 +1,11 @@
 import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
-import { IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min, ValidateIf } from "class-validator";
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, Length, Matches, Max, MaxLength, Min, ValidateIf } from "class-validator";
 import { Type } from "class-transformer";
 import { Role } from "@prisma/client";
 import { RidesService } from "./rides.service";
 import { TipsService } from "./tips.service";
 import { MessagesService } from "./messages.service";
+import { RideExtrasService } from "./ride-extras.service";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -29,6 +30,15 @@ class RadarQueryDto {
     if (!Number.isFinite(this.lat) || !Number.isFinite(this.lng)) return undefined;
     return { latitude: this.lat, longitude: this.lng };
   }
+}
+
+class SosDto {
+  @IsOptional() @IsNumber() @Min(-90) @Max(90) lat?: number;
+  @IsOptional() @IsNumber() @Min(-180) @Max(180) lng?: number;
+}
+
+class EarningsQueryDto {
+  @IsOptional() @IsIn(["day", "week", "month"]) period?: "day" | "week" | "month";
 }
 
 class RateDto {
@@ -103,6 +113,7 @@ export class RidesController {
     private rides: RidesService,
     private tips: TipsService,
     private messages: MessagesService,
+    private extras: RideExtrasService,
   ) {}
 
   // POST /rides/estimate  -> prix + durée avant confirmation
@@ -140,6 +151,19 @@ export class RidesController {
     return this.rides.currentOffer(user.userId);
   }
 
+  // GET /rides/standing — ma note récente et ma situation (OK, AVERTISSEMENT, RESTRICTION). Client ou chauffeur.
+  @Get("standing")
+  standing(@CurrentUser() user) {
+    return this.extras.standing(user.userId, user.role);
+  }
+
+  // GET /rides/earnings?period=day|week|month — gains détaillés du chauffeur (déclaré AVANT @Get(":id")).
+  @Get("earnings")
+  @Roles(Role.DRIVER)
+  earnings(@CurrentUser() user, @Query() query: EarningsQueryDto) {
+    return this.extras.driverEarnings(user.userId, query.period ?? "week");
+  }
+
   // GET /rides/pending/summary?lat=…&lng=…&radiusKm=10  — compteur radar (DOIT être avant /pending)
   @Get("pending/summary")
   @Roles(Role.DRIVER)
@@ -154,6 +178,25 @@ export class RidesController {
   @Roles(Role.DRIVER)
   pending(@CurrentUser() user, @Query() query: RadarQueryDto) {
     return this.rides.pending(user.userId, query.position(), query.radiusKm);
+  }
+
+  // GET /rides/:id/receipt — reçu d'une course terminée (client ou chauffeur de la course)
+  @Get(":id/receipt")
+  receipt(@Param("id") id: string, @CurrentUser() user) {
+    return this.extras.receipt(id, user.userId);
+  }
+
+  // POST /rides/:id/rate-client { stars } — le chauffeur note le client après la course
+  @Post(":id/rate-client")
+  @Roles(Role.DRIVER)
+  rateClient(@Param("id") id: string, @CurrentUser() user, @Body() dto: RateDto) {
+    return this.extras.rateClient(id, user.userId, dto.stars);
+  }
+
+  // POST /rides/:id/sos { lat?, lng? } — alerte SOS pendant une course : prévient AZƆ̀ (admins) et l'autre participant
+  @Post(":id/sos")
+  sos(@Param("id") id: string, @CurrentUser() user, @Body() dto: SosDto) {
+    return this.extras.sos(id, user.userId, { lat: dto.lat, lng: dto.lng });
   }
 
   @Get(":id/route")

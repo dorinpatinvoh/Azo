@@ -34,6 +34,7 @@ import { formatBeninPhoneDisplay } from "../utils/phone";
 type Props = {
   onBack: () => void;
   onOpenDashboard?: () => void;
+  onOpenSupport?: () => void;
 };
 
 type Filter = { id: ProviderStatus | "ALL"; label: string };
@@ -181,7 +182,7 @@ function ReasonModal(props: {
   );
 }
 
-export default function AdminProvidersScreen({ onBack, onOpenDashboard }: Props) {
+export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSupport }: Props) {
   const [filter, setFilter] = useState<ProviderStatus | "ALL">("SUBMITTED");
   const [typeFilter, setTypeFilter] = useState<ProviderType | "ALL">("ALL");
   const [queue, setQueue] = useState<AdminProviderQueue | null>(null);
@@ -319,6 +320,12 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard }: Props)
               {stats ? `${stats.pending} en attente · ${stats.overdue} hors délai` : "Console administrateur"}
             </Text>
           </View>
+          {onOpenSupport ? (
+            <Pressable onPress={onOpenSupport} style={styles.dashboardBtn} accessibilityLabel="Support">
+              <MaterialIcons name="support-agent" size={16} color={colors.primary} />
+              <Text style={styles.dashboardBtnText}>Support</Text>
+            </Pressable>
+          ) : null}
           {onOpenDashboard ? (
             <Pressable
               onPress={onOpenDashboard}

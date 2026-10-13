@@ -7,7 +7,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { io, type Socket } from "socket.io-client";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { API_URL, Ride, RideStatus, VehicleType, errorMessage, getToken, paidAmount, rideApi, walletApi } from "../services/api";
+import { API_URL, Ride, RideStatus, VehicleType, errorMessage, getToken, paidAmount, rideApi, userApi, walletApi } from "../services/api";
 import RideChatModal from "../components/RideChatModal";
 import RideStopPanel from "../components/RideStopPanel";
 import DriverOfferCard from "../components/DriverOfferCard";
@@ -372,16 +372,49 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   }
 
   const done = ride.status === "COMPLETED";
-  const searching = ride.status === "PENDING";
+  const scheduledWait = ride.status === "PENDING" && !!ride.scheduledAt && !ride.scheduledReleasedAt;
+  const searching = ride.status === "PENDING" && !scheduledWait;
   const finished = done || ride.status === "CANCELLED";
   const cancellable = ride.status === "PENDING" || ride.status === "OFFERED" || ride.status === "MATCHED" || ride.status === "ARRIVED";
   const offered = ride.status === "OFFERED";
   const paymentLabel = ride.status === "CANCELLED" ? t("live.pay.none") : done ? t("live.pay.done") : t("live.pay.arrival");
   const money = (n: number) => n.toLocaleString(locale);
 
-  // SOS : propose d'appeler les secours (appel direct, aucun serveur)
+  // SOS : appeler les secours, prévenir AZƆ̀ (avec la position) ou envoyer un SMS à son contact d'urgence
+  async function sosAlertAzo() {
+    if (!ride) return;
+    const here = driverPos ?? myPos;
+    try {
+      await rideApi.sos(ride.id, here ? { lat: here.latitude, lng: here.longitude } : undefined);
+      Alert.alert(t("sos.sentTitle"), t("sos.sent"));
+    } catch {
+      Alert.alert(t("sos.title"), t("sos.failed"));
+    }
+  }
+
+  async function sosTextContact() {
+    try {
+      const me = await userApi.me();
+      const phone = me.emergencyContact?.phone;
+      if (!phone) {
+        Alert.alert(t("sos.title"), t("sos.noContact"));
+        return;
+      }
+      const here = driverPos ?? myPos;
+      const body = [
+        t("sos.smsBody", { vehicle: ride ? t(vehicleKey(ride.vehicleType)) : "" }),
+        here ? t("sos.smsPosition", { link: `https://maps.google.com/?q=${here.latitude},${here.longitude}` }) : "",
+      ].filter(Boolean).join("\n");
+      await Linking.openURL(`sms:${phone}?body=${encodeURIComponent(body)}`);
+    } catch {
+      Alert.alert(t("sos.title"), t("sos.noContact"));
+    }
+  }
+
   function handleSos() {
     Alert.alert(t("sos.title"), t("sos.body"), [
+      { text: t("sos.alertAzo"), onPress: sosAlertAzo },
+      { text: t("sos.contact"), onPress: sosTextContact },
       { text: t("sos.police", { number: EMERGENCY_NUMBERS.police }), onPress: () => Linking.openURL(`tel:${EMERGENCY_NUMBERS.police}`) },
       { text: t("sos.fire", { number: EMERGENCY_NUMBERS.fire }), onPress: () => Linking.openURL(`tel:${EMERGENCY_NUMBERS.fire}`) },
       { text: t("common.cancel"), style: "cancel" },
@@ -442,6 +475,17 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
         <Text style={styles.status}>{t(`live.status.${ride.status}` as MessageKey)}</Text>
         {!driverPos && (ride.status === "MATCHED" || ride.status === "ARRIVED" || ride.status === "IN_PROGRESS") && (
           <Text style={styles.muted}>{t("live.driverPos")}</Text>
+        )}
+        {scheduledWait && ride.scheduledAt && (
+          <View style={styles.searchRow}>
+            <MaterialIcons name="event" size={22} color={colors.primary} />
+            <Text style={[styles.muted, { flex: 1 }]}>
+              {t("live.scheduled", {
+                date: new Date(ride.scheduledAt).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" }),
+                time: new Date(ride.scheduledAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }),
+              })}
+            </Text>
+          </View>
         )}
         {searching && <View style={styles.searchRow}><Pulse /><Text style={[styles.muted, { flex: 1 }]}>{t("live.searching")}{typeof ride.expiresInMinutes === "number" && ride.expiresInMinutes > 0 ? t("live.searchingMore", { min: ride.expiresInMinutes }) : ""}</Text></View>}
         {searching && pendingRouteLoading && <Text style={styles.muted}>{t("live.routeLoading")}</Text>}

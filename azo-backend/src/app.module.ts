@@ -1,4 +1,6 @@
 import { PlacesModule } from "./places/places.module";
+import { SavedPlacesModule } from "./places/saved-places.module";
+import { SupportModule } from "./support/support.module";
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common";
 import { PrismaModule } from "./prisma/prisma.module";
 import { AuthModule } from "./auth/auth.module";
@@ -26,6 +28,8 @@ import { LanguageMiddleware } from "./common/language.middleware";
     UsersModule,
     RidesModule,
     PlacesModule,
+    SavedPlacesModule,
+    SupportModule,
     WalletModule,
     DeliveryModule,
     RentalModule,

@@ -12,9 +12,7 @@ import { useI18n, type MessageKey } from "../i18n";
 
 const ACTIONS: { id: string; labelKey: MessageKey; icon: keyof typeof MaterialIcons.glyphMap }[] = [
   { id: "recharge", labelKey: "wallet.act.recharge", icon: "add-circle" },
-  { id: "transfer", labelKey: "wallet.act.transfer", icon: "send" },
   { id: "history", labelKey: "wallet.act.history", icon: "receipt-long" },
-  { id: "security", labelKey: "wallet.act.security", icon: "fingerprint" },
 ];
 
 // Moyens de paiement acceptés (aucun numéro ni carte inventés : le serveur ne liste pas encore les comptes liés)
@@ -67,6 +65,8 @@ export default function WalletScreen({ onBack }: Props) {
   const awaitingRef = useRef(awaiting);
   awaitingRef.current = awaiting;
   const finished = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const activityY = useRef(0);
 
   const checkCredited = useCallback(async () => {
     const pending = awaitingRef.current;
@@ -153,7 +153,7 @@ export default function WalletScreen({ onBack }: Props) {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll}>
         <LinearGradient colors={colors.gradientCta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>{t("wallet.balance")}</Text>
           <Text style={styles.balanceValue}>
@@ -177,7 +177,7 @@ export default function WalletScreen({ onBack }: Props) {
 
         <View style={styles.actionsRow}>
           {ACTIONS.map((a) => (
-            <Pressable key={a.id} style={styles.actionItem} onPress={() => a.id === "recharge" && handleRecharge()}>
+            <Pressable key={a.id} style={styles.actionItem} onPress={() => (a.id === "recharge" ? handleRecharge() : scrollRef.current?.scrollTo({ y: activityY.current, animated: true }))}>
               <View style={styles.actionIcon}>
                 <MaterialIcons name={a.icon} size={22} color={colors.primary} />
               </View>
@@ -188,7 +188,6 @@ export default function WalletScreen({ onBack }: Props) {
 
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>{t("wallet.methods")}</Text>
-          <Text style={styles.sectionAction}>{t("wallet.manage")}</Text>
         </View>
         <View style={{ gap: spacing.sm }}>
           {PAYMENT_METHODS.map((m) => (
@@ -202,15 +201,10 @@ export default function WalletScreen({ onBack }: Props) {
               </View>
             </View>
           ))}
-          <Pressable style={styles.addCardRow}>
-            <MaterialIcons name="add-card" size={20} color={colors.primary} />
-            <Text style={styles.addCardText}>{t("wallet.link")}</Text>
-          </Pressable>
         </View>
 
-        <View style={styles.sectionHeaderRow}>
+        <View style={styles.sectionHeaderRow} onLayout={(e) => { activityY.current = e.nativeEvent.layout.y; }}>
           <Text style={styles.sectionTitle}>{t("wallet.activity")}</Text>
-          <Text style={styles.sectionAction}>{t("wallet.seeAll")}</Text>
         </View>
         <View style={{ gap: spacing.sm }}>
           {activity.length === 0 && (

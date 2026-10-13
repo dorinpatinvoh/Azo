@@ -18,6 +18,9 @@ import { CreateRideDto } from "./dto/create-ride.dto";
 import { LatLng, buildRadar, haversineKm, isRideExpired, rideAgeMinutes } from "./radar";
 import { haversineMeters } from "./odometer";
 import { buildDisplayName, buildDriverDisplayName } from "./display-name";
+import { assertClientAllowed, assertDriverAllowed } from "./standing";
+import { clientStatsFor } from "./client-stats";
+import { SCHEDULE_RELEASE_LEAD_MIN, isWaitingForRelease, parseSchedule, withReleaseAsCreation } from "./schedule";
 import { offerPushText } from "./offer-texts";
 
 // Le client attaché à la course, tel que le chauffeur le reçoit.
@@ -290,10 +293,15 @@ export class RidesService {
   }
 
   async create(clientId: string, dto: CreateRideDto) {
-    const { price } = await this.estimate(dto);
+    // Note récente trop basse : plus de nouvelle demande de course (voir standing.ts)
+    await assertClientAllowed(this.prisma, clientId);
+    const { scheduledAt: scheduledRaw, ...rideDto } = dto;
+    // Course programmée : l'heure est vérifiée (30 min à 7 jours d'avance) avant tout calcul
+    const scheduledAt = scheduledRaw ? parseSchedule(scheduledRaw) : null;
+    const { price } = await this.estimate(rideDto as CreateRideDto);
     const ride = await this.prisma.ride.create({
       data: {
-        ...dto,
+        ...rideDto,
         clientId,
         price,
         commission: 0,
@@ -301,20 +309,29 @@ export class RidesService {
         pickupCode: createPickupCode(),
         originLabel: dto.originLabel ?? null,
         destLabel: dto.destLabel ?? null,
+        scheduledAt,
       },
     });
 
-    // Notification des chauffeurs dont le véhicule correspond (notification in-app :
-    // elle apparaît dans l'écran « Notifications » et alimente le badge du radar).
+    // Course programmée : aucune diffusion maintenant, la demande sera ouverte aux chauffeurs peu avant l'heure
+    // (releaseDueScheduledRides, tâche périodique).
+    if (!scheduledAt) await this.publishRequest(ride, clientId);
+
+    // Le code reste côté serveur jusqu'à l'arrivée du chauffeur.
+    return this.withoutPickupCode(ride);
+  }
+
+  /** Diffuse une demande aux chauffeurs : notifications in-app + événement temps réel pour les radars ouverts. */
+  private async publishRequest(
+    ride: { id: string; vehicleType: any; price: number; originLat: number; originLng: number },
+    clientId: string
+  ) {
     const clientRaw = await this.prisma.user.findUnique({
       where: { id: clientId },
       select: { firstName: true, lastName: true, fullName: true },
     });
     const { displayName: clientDisplayName } = buildDisplayName(clientRaw ?? {});
     await this.notifyMatchingDrivers(ride.vehicleType, ride.price, ride.originLat, ride.originLng, clientDisplayName).catch(() => 0);
-
-    // Diffusion temps réel : les radars ouverts se rafraîchissent sans attendre le
-    // prochain cycle de rafraîchissement (8 s côté chauffeur).
     this.gateway.emitNewRequest({
       rideId: ride.id,
       vehicleType: ride.vehicleType,
@@ -323,9 +340,49 @@ export class RidesService {
       originLng: ride.originLng,
       clientDisplayName,
     });
+  }
 
-    // Le code reste côté serveur jusqu'à l'arrivée du chauffeur.
-    return this.withoutPickupCode(ride);
+  private lastScheduledSweep = 0;
+
+  /**
+   * Filet de sécurité : la tâche périodique ne tourne pas quand le serveur dort (offre gratuite de Render, qui s'endort après
+   * ~15 min sans appel). Dès qu'une requête le réveille (un chauffeur ouvre son radar, un client suit sa course), les
+   * courses programmées dont l'heure d'ouverture est passée sont publiées. Au plus une fois toutes les 15 s, sans attendre.
+   */
+  private sweepScheduledRides() {
+    const now = Date.now();
+    if (now - this.lastScheduledSweep < 15_000) return;
+    this.lastScheduledSweep = now;
+    void this.releaseDueScheduledRides().catch(() => undefined);
+  }
+
+  /**
+   * Ouvre aux chauffeurs les courses programmées dont l'heure approche (SCHEDULE_RELEASE_LEAD_MIN avant). Appelée
+   * toutes les 30 s ; l'écriture est conditionnée à `scheduledReleasedAt: null` : une demande n'est jamais publiée deux fois.
+   */
+  async releaseDueScheduledRides(now: Date = new Date()): Promise<number> {
+    const horizon = new Date(now.getTime() + SCHEDULE_RELEASE_LEAD_MIN * 60_000);
+    const due = await this.prisma.ride.findMany({
+      where: { status: "PENDING", scheduledReleasedAt: null, scheduledAt: { not: null, lte: horizon } },
+      take: 50,
+    });
+    let released = 0;
+    for (const ride of due) {
+      const { count } = await this.prisma.ride.updateMany({
+        where: { id: ride.id, status: "PENDING", scheduledReleasedAt: null },
+        data: { scheduledReleasedAt: now },
+      });
+      if (count === 0) continue;
+      released += 1;
+      await this.publishRequest(ride, ride.clientId).catch((e) => this.logger.warn(`publishRequest ${ride.id} : ${e?.message ?? e}`));
+      await this.notifications
+        .push(ride.clientId, "Ta course programmée est ouverte", "Nous cherchons un chauffeur pour l'heure prévue.", "ride", {
+          data: { event: "ride-scheduled-open", rideId: ride.id },
+          titleKey: "NOTIFICATION_RIDE_SCHEDULED_OPEN",
+        })
+        .catch(() => null);
+    }
+    return released;
   }
 
   /**
@@ -439,6 +496,8 @@ export class RidesService {
         status: "PENDING",
         // Exclure les demandes où ce Zem a déjà été refusé / retiré
         NOT: { declinedDriverIds: { has: driverId } },
+        // Une course programmée n'apparaît qu'une fois ouverte aux chauffeurs
+        OR: [{ scheduledAt: null }, { scheduledReleasedAt: { not: null } }],
       },
       include: {
         client: { select: { fullName: true, firstName: true, lastName: true } },
@@ -446,7 +505,7 @@ export class RidesService {
       orderBy: { createdAt: "desc" },
     });
 
-    const { rides: radar, expired } = buildRadar(rides, {
+    const { rides: radar, expired } = buildRadar(rides.map(withReleaseAsCreation), {
       expiryMinutes: settings.pendingExpiryMinutes,
       radiusKm: effectiveRadius,
       driver: position ?? null,
@@ -456,14 +515,20 @@ export class RidesService {
       await Promise.all(expired.map((ride) => this.expireRide(ride).catch(() => false)));
     }
 
-    return radar
-      .filter((ride) => this.pricing.rideVisibleFor(driverVehicle, ride.vehicleType))
-      .map((ride) => {
-        const { client, ...rest } = ride as typeof ride & { client: { fullName: string | null; firstName: string | null; lastName: string | null } };
-        const { displayName, firstName } = buildDisplayName(client ?? {});
-        // Ne pas envoyer fullName ni le téléphone dans le radar
-        return { ...this.withoutPickupCode(rest), client: { displayName, firstName } };
-      });
+    this.sweepScheduledRides();
+    const visible = radar.filter((ride) => this.pricing.rideVisibleFor(driverVehicle, ride.vehicleType));
+    // Note moyenne et nombre de courses de chaque client, pour que le Zem décide en connaissance de cause
+    const stats = await clientStatsFor(this.prisma, visible.map((ride) => ride.clientId));
+
+    return visible.map((ride) => {
+      const { client, ...rest } = ride as typeof ride & { client: { fullName: string | null; firstName: string | null; lastName: string | null } };
+      const { displayName, firstName } = buildDisplayName(client ?? {});
+      // Ne pas envoyer fullName ni le téléphone dans le radar
+      return {
+        ...this.withoutPickupCode(rest),
+        client: { displayName, firstName, ...(stats ? stats.get(ride.clientId) : {}) },
+      };
+    });
   }
 
   /** Résumé rapide pour le compteur du radar (GET /rides/pending/summary). */
@@ -482,12 +547,14 @@ export class RidesService {
       where: {
         status: "PENDING",
         NOT: { declinedDriverIds: { has: driverId } },
+        OR: [{ scheduledAt: null }, { scheduledReleasedAt: { not: null } }],
       },
-      select: { id: true, clientId: true, vehicleType: true, createdAt: true, originLat: true, originLng: true },
+      select: { id: true, clientId: true, vehicleType: true, createdAt: true, originLat: true, originLng: true, scheduledAt: true, scheduledReleasedAt: true },
       orderBy: { createdAt: "asc" },
     });
 
-    const { rides: radar, expired } = buildRadar(rides, {
+    this.sweepScheduledRides();
+    const { rides: radar, expired } = buildRadar(rides.map(withReleaseAsCreation), {
       expiryMinutes: settings.pendingExpiryMinutes,
       radiusKm,
       driver: position,
@@ -521,6 +588,8 @@ export class RidesService {
   // Acceptation atomique : `updateMany` avec le statut dans le WHERE évite que deux
   // chauffeurs prennent la même course en même temps (avant : lecture puis écriture).
   async accept(rideId: string, driverId: string) {
+    // Note récente trop basse : plus de nouvelle course à accepter (voir standing.ts)
+    await assertDriverAllowed(this.prisma, driverId);
     await this.assertDriverIsFree(driverId);
 
     const settings = this.pricing.rideSettings();
@@ -529,10 +598,13 @@ export class RidesService {
     // Vérifier que le Zem n'a pas déjà été exclu de cette demande
     const rideCheck = await this.prisma.ride.findUnique({
       where: { id: rideId },
-      select: { id: true, declinedDriverIds: true, status: true },
+      select: { id: true, declinedDriverIds: true, status: true, createdAt: true, scheduledAt: true, scheduledReleasedAt: true },
     });
     if (!rideCheck) throw new NotFoundException("Course introuvable");
     if (rideCheck.status !== "PENDING") throw new BadRequestException("Course déjà prise");
+    if (isWaitingForRelease(rideCheck)) {
+      throw new BadRequestException("Cette course est programmée : elle sera ouverte aux chauffeurs peu avant l'heure prévue.");
+    }
     if (rideCheck.declinedDriverIds.includes(driverId)) {
       throw new ForbiddenException("Le client a déjà refusé cette proposition");
     }
@@ -1719,6 +1791,7 @@ export class RidesService {
   async findOne(id: string, userId: string) {
     // Rattrapage de l'expiration d'offre avant de lire (B.4)
     await this.expireOfferedIfNeeded(id);
+    this.sweepScheduledRides();
 
     let ride = await this.prisma.ride.findUnique({
       where: { id },
@@ -1748,7 +1821,7 @@ export class RidesService {
 
     // Demande restée sans chauffeur : on l'annule au moment où le client recharge son
     // suivi (aucun débit), et on le lui signale dans la réponse (`expired: true`).
-    if (ride.status === "PENDING" && isRideExpired(ride.createdAt, this.pricing.radarSettings().pendingExpiryMinutes)) {
+    if (ride.status === "PENDING" && !isWaitingForRelease(ride) && isRideExpired(withReleaseAsCreation(ride).createdAt, this.pricing.radarSettings().pendingExpiryMinutes)) {
       const cancelled = await this.expireRide(ride);
       if (cancelled) return this.visibleRideToUser({ ...ride, status: "CANCELLED", expired: true }, userId);
     }
@@ -1756,7 +1829,8 @@ export class RidesService {
     // Le client voit combien de temps il reste avant l'expiration de sa demande.
     if (ride.status === "PENDING") {
       const expiryMinutes = this.pricing.radarSettings().pendingExpiryMinutes;
-      const ageMinutes = rideAgeMinutes(ride.createdAt);
+      // Course programmée pas encore ouverte : pas de compte à rebours d'attente
+      const ageMinutes = isWaitingForRelease(ride) ? 0 : rideAgeMinutes(withReleaseAsCreation(ride).createdAt);
       return this.visibleRideToUser(
         { ...ride, expiresInMinutes: Math.max(0, Math.ceil(expiryMinutes - ageMinutes)) },
         userId

@@ -16,6 +16,8 @@ import AssistOfferScreen from "./screens/AssistOfferScreen";
 import LanguageScreen from "./screens/LanguageScreen";
 import PersonalInfoScreen from "./screens/PersonalInfoScreen";
 import HelpScreen from "./screens/HelpScreen";
+import SupportScreen from "./screens/SupportScreen";
+import AdminSupportScreen from "./screens/AdminSupportScreen";
 import MessagesScreen from "./screens/MessagesScreen";
 import { clearAvatar } from "./utils/avatar";
 import { useOfferWatcher } from "./hooks/useOfferWatcher";
@@ -154,6 +156,12 @@ function AppInner() {
   // Popup « un Zem a accepté ta course » : par-dessus n'importe quel écran du client
   // Écran d'où le portefeuille a été ouvert (l'agence y revient, pas à l'accueil client)
   const [walletBack, setWalletBack] = useState<Route>("home");
+  // Écran d'où l'assistance a été ouverte (aide client, espace Zem, agence ou administrateur)
+  const [supportBack, setSupportBack] = useState<Route>("help");
+  const openSupport = (from: Route) => {
+    setSupportBack(from);
+    goTo("support");
+  };
   const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "rental"];
   const offerWatcher = useOfferWatcher(!!sessionToken && clientRoutes.includes(route), route === "ride-tracking");
   // Session ouverte mais inscription (nom, prénom, sexe, NPI) pas terminée : on rouvre le formulaire.
@@ -487,7 +495,9 @@ function AppInner() {
 
         {route === "profile-info" && <PersonalInfoScreen onBack={() => goTo("profile")} />}
 
-        {route === "help" && <HelpScreen onBack={() => goTo("profile")} />}
+        {route === "help" && <HelpScreen onBack={() => goTo("profile")} onOpenSupport={() => openSupport("help")} />}
+        {route === "support" && <SupportScreen onBack={() => goTo(supportBack)} />}
+        {route === "admin-support" && <AdminSupportScreen onBack={() => goTo("admin-providers")} />}
 
         {route === "messages" && (
           <MessagesScreen onNavigateTab={goTo} />
@@ -520,6 +530,7 @@ function AppInner() {
           <AdminProvidersScreen
             onBack={handleLogout}
             onOpenDashboard={() => goTo("admin-dashboard")}
+            onOpenSupport={() => goTo("admin-support")}
           />
         )}
 
@@ -527,6 +538,7 @@ function AppInner() {
           <DriverHomeScreen
             onLogout={handleLogout}
             onOpenDossier={() => goTo("provider-status")}
+            onOpenSupport={() => openSupport("driver-home")}
           />
         )}
 
@@ -545,6 +557,7 @@ function AppInner() {
               setWalletBack("agency-dashboard");
               goTo("wallet");
             }}
+            onOpenSupport={() => openSupport("agency-dashboard")}
           />
         )}
 

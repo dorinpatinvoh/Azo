@@ -162,12 +162,16 @@ model User {
   emergencyContactName     String?
   emergencyContactPhone    String?
   identityCorrectedAt      DateTime?   // quand la correction « directe » a été utilisée (une seule fois)
+  ratingResetAt            DateTime?   // un administrateur a remis les notes à zéro : les avis antérieurs sont ignorés
 
   agencyId String?
   agency   Agency? @relation(fields: [agencyId], references: [id])
 
   // Dossier prestataire (null pour un simple client)
   provider ProviderProfile?
+
+  savedPlaces    SavedPlace[]
+  supportTickets SupportTicket[]
 
   wallet                        Wallet?
   ridesAsClient                 Ride[]                      @relation("ClientRides")
@@ -307,6 +311,10 @@ model Ride {
   offers              RideOffer[]
   matchedAt           DateTime?   // quand le client a confirmé (OFFERED → MATCHED)
   completedAt         DateTime?   // quand la course est passée à COMPLETED
+  clientRating        Int?        // note (1-5) du client par le chauffeur, après la course
+  clientRatedAt       DateTime?
+  scheduledAt         DateTime?   // course programmée : heure de prise en charge souhaitée (null = tout de suite)
+  scheduledReleasedAt DateTime?   // quand la demande programmée a été ouverte aux chauffeurs (null = pas encore)
   trackPoints                 RideTrackPoint[]
   messages                    RideMessage[]
   tip                         RideTip?
@@ -350,7 +358,21 @@ model RentalBooking {
   formula      String
   pricePerDay  Int
   status       String   @default("pending")
+  vehicleId    String?  // véhicule du catalogue (RentalVehicle)
+  totalPrice   Int?     // prix total calculé par le serveur (FCFA)
   createdAt    DateTime @default(now())
+}
+
+/// Catalogue de location géré en base (prix fixés par le serveur, jamais par le client).
+model RentalVehicle {
+  id          String   @id @default(uuid())
+  name        String
+  seats       Int      @default(4)
+  pricePerDay Int
+  price4h     Int? // formule « 4 heures » (null = non proposée)
+  priceWeek   Int? // formule « semaine » (null = non proposée)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
 }
 
 model MarketplaceOrder {
@@ -589,4 +611,49 @@ model RideOffer {
 
   @@index([driverId, status])
   @@index([rideId, driverId])
+}
+
+/// Adresses enregistrées du client (domicile, travail, autres), synchronisées entre ses appareils.
+model SavedPlace {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String // HOME | WORK | OTHER (un seul HOME et un seul WORK par client)
+  title     String
+  address   String?
+  lat       Float
+  lng       Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, kind])
+}
+
+/// Assistance : un échange entre un utilisateur et l'équipe AZƆ̀.
+model SupportTicket {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String // RIDE | PAYMENT | ACCOUNT | SAFETY | OTHER
+  subject   String
+  status    String   @default("OPEN") // OPEN | ANSWERED | CLOSED
+  rideId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messages  SupportMessage[]
+
+  @@index([userId, status])
+  @@index([status, updatedAt])
+}
+
+model SupportMessage {
+  id         String        @id @default(uuid())
+  ticketId   String
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorRole String // USER | ADMIN
+  authorId   String?
+  text       String
+  createdAt  DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
 }

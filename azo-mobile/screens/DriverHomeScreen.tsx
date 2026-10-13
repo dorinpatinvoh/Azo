@@ -18,6 +18,10 @@ import { distanceKm, fmtKm } from "../utils/geo";
 import RideChatModal from "../components/RideChatModal";
 import OSMMapView, { type OSMMarker } from "../components/OSMMapView";
 import RideStopPanel from "../components/RideStopPanel";
+import EarningsCard from "../components/EarningsCard";
+import StandingBanner from "../components/StandingBanner";
+import RateClientModal from "../components/RateClientModal";
+import { tr } from "../i18n";
 import { getRideRoute, getTripRoute } from "../services/routing";
 import NearbyClientsMap, { clientLabel } from "../components/NearbyClientsMap";
 import DriverOfferWaiting from "../components/DriverOfferWaiting";
@@ -25,7 +29,7 @@ import { nearbyRadiusKm } from "../config/radar";
 import { ApiError } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 
-type Props = { onLogout: () => void; onOpenDossier?: () => void };
+type Props = { onLogout: () => void; onOpenDossier?: () => void; onOpenSupport?: () => void };
 type LatLng = { latitude: number; longitude: number };
 type GpsStatus = "idle" | "ok" | "denied" | "error";
 
@@ -42,8 +46,10 @@ const isToday = (iso: string) => {
 // Issues de proposition déjà annoncées au Zem (évite de répéter l'alerte à chaque réouverture).
 const announcedEndings = new Set<string>();
 
-export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
+export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSupport }: Props) {
   const [online, setOnline] = useState(false);
+  // Course terminée : le Zem note son client (null = rien à noter)
+  const [rateTarget, setRateTarget] = useState<{ rideId: string; name: string } | null>(null);
   const [pending, setPending] = useState<Ride[]>([]);
   const [history, setHistory] = useState<Ride[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
@@ -781,7 +787,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
             setBusy(true);
             try {
               const done = await ridesApi.complete(activeRide.id, cleanPin);
+              const finishedName = clientLabel(activeRide);
               setActiveRide(null);
+              setRateTarget({ rideId: done.id ?? activeRide.id, name: finishedName });
               setDropCodeInput("");
               await loadAccount();
               const net = paidAmount(done) - (done.commission ?? 0);
@@ -851,6 +859,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
           <View style={{ width: 40 }} />
         )}
         <Text style={styles.headerTitle}>Zém Radar</Text>
+        {onOpenSupport ? (
+          <Pressable onPress={onOpenSupport} style={styles.iconButton} accessibilityLabel="Assistance">
+            <MaterialIcons name="support-agent" size={20} color={colors.primary} />
+          </Pressable>
+        ) : null}
         <Pressable onPress={handleLogout} style={styles.iconButton} accessibilityLabel="Se déconnecter">
           <MaterialIcons name="logout" size={20} color={colors.onSurfaceVariant} />
         </Pressable>
@@ -1116,6 +1129,10 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
           </Text>
         </View>
 
+        <StandingBanner />
+
+        <EarningsCard refreshKey={history.length} />
+
         <View style={styles.statsGrid}>
           <StatTile icon="local-taxi" value={String(stats.countToday)} label="Courses du jour" />
           <StatTile icon="star" value={stats.rating ? stats.rating.toFixed(2) : "—"} label="Note moyenne" />
@@ -1186,6 +1203,15 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
                       <Text style={styles.requestClient} numberOfLines={1}>
                         Client : {clientLabel(ride)}
                       </Text>
+                      {ride.client && typeof ride.client.rides === "number" ? (
+                        <Text style={styles.requestMeta} numberOfLines={1}>
+                          {ride.client.rides === 0 && !ride.client.ratedCount
+                            ? tr("cr.new")
+                            : ride.client.rating != null
+                              ? tr("cr.stats", { rating: ride.client.rating.toFixed(1), count: ride.client.ratedCount ?? 0, rides: ride.client.rides })
+                              : tr("cr.noRating", { rides: ride.client.rides })}
+                        </Text>
+                      ) : null}
                       <Text style={styles.requestDestination} numberOfLines={2}>
                         Destination : {ride.destLabel ?? pendingDestinations[ride.id] ?? `${ride.destLat.toFixed(4)}, ${ride.destLng.toFixed(4)}`}
                       </Text>
@@ -1245,6 +1271,24 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier }: Props) {
           onClose={() => setChatOpen(false)}
         />
       )}
+
+      {/* Notation du client : hors du bloc « course active », la course vient de se terminer */}
+      <RateClientModal
+        visible={!!rateTarget}
+        clientName={rateTarget?.name ?? ""}
+        onSkip={() => setRateTarget(null)}
+        onRate={async (stars) => {
+          const target = rateTarget;
+          setRateTarget(null);
+          if (!target) return;
+          try {
+            await ridesApi.rateClient(target.rideId, stars);
+            Alert.alert(tr("cr.thanks"));
+          } catch (e) {
+            Alert.alert(tr("cr.failed"), errorMessage(e));
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsEnum, IsISO8601, IsNumber, IsOptional, IsString, MaxLength } from "class-validator";
 import { Transform } from "class-transformer";
 import { VehicleType } from "@prisma/client";
 
@@ -28,4 +28,9 @@ export class CreateRideDto {
   @MaxLength(120)
   @Transform(({ value }) => sanitizeLabel(value))
   destLabel?: string;
+
+  /** Course programmée : heure de prise en charge souhaitée (ISO 8601). Absent = tout de suite. */
+  @IsOptional()
+  @IsISO8601()
+  scheduledAt?: string;
 }

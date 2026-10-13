@@ -13,6 +13,7 @@ import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { translateNotification } from "./notification-texts";
 
 type PushOptions = {
   /** Send an OS-level notification through Expo Push Service as well as saving it in-app. */
@@ -40,6 +41,17 @@ export class NotificationsService {
 
   // Save every notification in the inbox. Callers opt in to an OS push when it is urgent.
   async push(userId: string, title: string, body: string, type: string, options: PushOptions = {}) {
+    // Titre et corps dans la langue de l'utilisateur (notification poussée ET boîte de réception) quand le message a des clés
+    // traduites ; le français, ou un message sans traduction, garde le texte de l'appelant.
+    if (options.titleKey || options.bodyKey) {
+      const language = await this.userLanguage(userId);
+      if (language && language !== "fr") {
+        const translated = translateNotification(language, options.titleKey, options.bodyKey, options.params);
+        if (translated.title) title = translated.title;
+        if (translated.body) body = translated.body;
+      }
+    }
+
     const notification = await this.prisma.notification.create({
       data: {
         userId,
@@ -60,6 +72,16 @@ export class NotificationsService {
     }
 
     return notification;
+  }
+
+  /** Langue de l'utilisateur (`User.language`), ou null si elle ne peut pas être lue : le texte d'origine est alors gardé. */
+  private async userLanguage(userId: string): Promise<string | null> {
+    try {
+      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { language: true } });
+      return user?.language ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /**

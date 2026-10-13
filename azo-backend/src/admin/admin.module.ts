@@ -129,6 +129,15 @@ export class AdminService {
     });
   }
 
+  /** Remet les notes d'un utilisateur à zéro : les avis antérieurs sont ignorés (lève une restriction de notation). */
+  async resetRatings(adminId: string, userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new NotFoundException("Utilisateur introuvable");
+    const at = new Date();
+    await this.prisma.user.update({ where: { id: userId }, data: { ratingResetAt: at } });
+    return { userId, ratingResetAt: at.toISOString(), by: adminId };
+  }
+
   async setUserStatus(adminId: string, userId: string, dto: UpdateUserStatusDto) {
     if (adminId === userId && dto.status === "BLOCKED") {
       throw new BadRequestException("Tu ne peux pas bloquer ton propre compte administrateur");
@@ -237,6 +246,12 @@ export class AdminController {
   @Get("users/:id/npi")
   userNpi(@CurrentUser() u, @Param("id") id: string) {
     return this.svc.getUserNpi(u.userId, id);
+  }
+
+  // POST /admin/users/:id/ratings-reset — repart de zéro côté notes (client ou chauffeur)
+  @Post("users/:id/ratings-reset")
+  resetRatings(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.resetRatings(u.userId, id);
   }
 
   @Post("users/:id/status")

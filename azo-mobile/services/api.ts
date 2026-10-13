@@ -125,6 +125,7 @@ export const api = {
   post: <T>(path: string, body?: unknown, opts?: { timeoutMs?: number; headers?: Record<string, string> }) =>
     request<T>(path, { method: "POST", body: json(body), ...opts }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body: json(body) }),
+  put: <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body: json(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
@@ -295,7 +296,18 @@ export const walletApi = {
 
 export type Place = { id?: string; title: string; subtitle?: string; latitude: number; longitude: number };
 
+export type SavedPlaceKind = "HOME" | "WORK" | "OTHER";
+export type SavedPlaceRow = { id: string; kind: SavedPlaceKind; title: string; address: string | null; latitude: number; longitude: number };
+export type PlaceSuggestion = { title: string; latitude: number; longitude: number; rides: number };
+
 export const placesApi = {
+  /** Adresses enregistrées du client, conservées sur le serveur (suivent le client d'un téléphone à l'autre). */
+  saved: () => api.get<{ places: SavedPlaceRow[] }>(`${P}/places/saved`),
+  setSaved: (kind: "HOME" | "WORK", place: { title: string; address?: string; latitude: number; longitude: number }) =>
+    api.put<SavedPlaceRow>(`${P}/places/saved/${kind}`, place),
+  removeSaved: (id: string) => api.delete<{ removed: string }>(`${P}/places/saved/${id}`),
+  /** Destinations les plus fréquentes d'après l'historique des courses. */
+  suggestions: () => api.get<{ suggestions: PlaceSuggestion[] }>(`${P}/places/suggestions`),
   reverseGeocode: (latitude: number, longitude: number) =>
     api.post<{ address: string; fullAddress: string }>(`${P}/places/reverse-geocode`, { latitude, longitude }),
   search: async (q: string, near?: { latitude: number; longitude: number }) => {
@@ -327,6 +339,8 @@ export type RideRequest = {
   originLat: number; originLng: number; destLat: number; destLng: number; vehicleType: VehicleType;
   /** Adresses lisibles (facultatives) : le serveur les renvoie au Zem, qui n'a plus à les géocoder. */
   originLabel?: string; destLabel?: string;
+  /** Course programmée : heure de prise en charge souhaitée (ISO 8601). Absent = tout de suite. */
+  scheduledAt?: string;
 };
 
 export type Estimate = {
@@ -383,6 +397,10 @@ export type RidePerson = {
   /** « Kossi A. » (nom d'affichage fourni par le serveur) et prénom seul. */
   displayName?: string | null;
   firstName?: string | null;
+  /** Sur le radar du Zem : note moyenne donnée par les chauffeurs, nombre de notes, courses terminées. */
+  rating?: number | null;
+  ratedCount?: number;
+  rides?: number;
   /** Présent côté client pour le Zem de la course. */
   profile?: DriverPublicProfile | null;
 };
@@ -397,6 +415,9 @@ export type Ride = {
   price: number;
   commission?: number;
   rating?: number | null;
+  /** Course programmée : heure souhaitée, et moment où la demande a été ouverte aux chauffeurs (null = pas encore). */
+  scheduledAt?: string | null;
+  scheduledReleasedAt?: string | null;
   /** Visible uniquement au client lorsque le chauffeur a signalé son arrivée. */
   pickupCode?: string | null;
   /** Visible uniquement au client pendant IN_PROGRESS, à saisir pour terminer la course. */
@@ -476,6 +497,44 @@ export type RideRoute = {
 /** Montant réellement payé : le prix final d'une course terminée, sinon le prix estimé. */
 export const paidAmount = (ride: Pick<Ride, "price" | "finalPrice">) => ride.finalPrice ?? ride.price;
 
+export type DriverEarnings = {
+  period: "day" | "week" | "month";
+  from: string;
+  days: { date: string; gross: number; net: number; rides: number }[];
+  totals: { gross: number; net: number; rides: number; commission: number };
+  averagePerActiveDay: number;
+  bestDay: { date: string; net: number } | null;
+};
+
+export type RideReceipt = {
+  reference: string;
+  date: string;
+  currency: string;
+  amount: number;
+  vehicleType: VehicleType;
+  originLabel: string | null;
+  destLabel: string | null;
+  distanceKm: number;
+  priceMode: string;
+  paymentMethod: string;
+  client: string | null;
+  driver: string | null;
+  vehicle: { model: string | null; plate: string | null } | null;
+  commission?: number;
+  net?: number;
+};
+
+export type Standing = {
+  role: "CLIENT" | "DRIVER";
+  rating: number | null;
+  count: number;
+  level: "OK" | "WARNING" | "RESTRICTED";
+  windowDays: number;
+  minRatings: number;
+  warnBelow: number;
+  restrictBelow: number;
+};
+
 export const ridesApi = {
   /** `stage=trip` : départ du client → destination, quelle que soit l'étape (voir le md backend, C.2.2). */
   route: (rideId: string, stage?: "trip") =>
@@ -485,6 +544,17 @@ export const ridesApi = {
   create: (body: RideRequest) => api.post<Ride>(`${P}/rides`, body),
   get: (id: string) => api.get<Ride>(`${P}/rides/${id}`, { timeoutMs: 8000 }),
   history: () => api.get<Ride[]>(`${P}/rides/history`),
+  /** Gains détaillés du chauffeur sur 1, 7 ou 30 jours (jours locaux). */
+  earnings: (period: "day" | "week" | "month") => api.get<DriverEarnings>(`${P}/rides/earnings?period=${period}`),
+  /** Ma note récente et ma situation (OK / avertissement / restriction), client ou chauffeur. */
+  standing: () => api.get<Standing>(`${P}/rides/standing`),
+  /** Le chauffeur note le client (1 à 5) après la course. */
+  rateClient: (rideId: string, stars: number) => api.post<{ rated: boolean; stars: number }>(`${P}/rides/${rideId}/rate-client`, { stars }),
+  /** Reçu d'une course terminée (client ou chauffeur). */
+  receipt: (rideId: string) => api.get<RideReceipt>(`${P}/rides/${rideId}/receipt`),
+  /** Alerte SOS pendant une course : prévient AZƆ̀ et l'autre participant. */
+  sos: (rideId: string, position?: { lat: number; lng: number }) =>
+    api.post<{ sent: boolean; notifiedAdmins: number }>(`${P}/rides/${rideId}/sos`, position ?? {}),
   rate: (rideId: string, stars: number) => api.post<Ride>(`${P}/rides/${rideId}/rate`, { stars }),
   cancel: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/cancel`),
 
@@ -606,10 +676,58 @@ export type RentalBooking = {
   id: string; vehicleModel: string; formula: string; pricePerDay: number; status: string; createdAt: string;
 };
 
+export type RentalFormula = "4h" | "day" | "week";
+
+export type RentalVehicle = {
+  id: string;
+  name: string;
+  seats: number;
+  pricePerDay: number;
+  price4h: number | null;
+  priceWeek: number | null;
+  /** Formules réellement proposées, avec leur prix (calculé par le serveur). */
+  formulas: { id: RentalFormula; price: number }[];
+};
+
+export type SupportCategory = "RIDE" | "PAYMENT" | "ACCOUNT" | "SAFETY" | "OTHER";
+export type SupportStatus = "OPEN" | "ANSWERED" | "CLOSED";
+export type SupportMessage = { id: string; authorRole: "USER" | "ADMIN"; text: string; createdAt: string };
+export type SupportTicketSummary = {
+  id: string;
+  category: SupportCategory;
+  subject: string;
+  status: SupportStatus;
+  rideId: string | null;
+  updatedAt: string;
+  lastMessage: { authorRole: "USER" | "ADMIN"; text: string } | null;
+  /** Renseigné pour l'administrateur : qui a écrit. */
+  user?: { fullName: string | null; phone: string; role: string };
+};
+export type SupportTicket = Omit<SupportTicketSummary, "lastMessage"> & {
+  createdAt: string;
+  messages: SupportMessage[];
+  user?: { fullName: string | null; phone: string; role: string };
+};
+
+export const supportApi = {
+  create: (body: { category: SupportCategory; subject: string; message: string; rideId?: string }) =>
+    api.post<SupportTicket>(`${P}/support/tickets`, body),
+  list: () => api.get<{ tickets: SupportTicketSummary[] }>(`${P}/support/tickets`),
+  get: (id: string) => api.get<SupportTicket>(`${P}/support/tickets/${id}`),
+  reply: (id: string, text: string) => api.post<SupportMessage>(`${P}/support/tickets/${id}/messages`, { text }),
+  admin: {
+    list: (status?: SupportStatus) =>
+      api.get<{ tickets: SupportTicketSummary[] }>(`${P}/admin/support/tickets${status ? `?status=${status}` : ""}`),
+    get: (id: string) => api.get<SupportTicket>(`${P}/admin/support/tickets/${id}`),
+    reply: (id: string, text: string) => api.post<SupportMessage>(`${P}/admin/support/tickets/${id}/reply`, { text }),
+    close: (id: string) => api.post<{ id: string; status: SupportStatus }>(`${P}/admin/support/tickets/${id}/close`),
+  },
+};
+
 export const rentalApi = {
-  catalog: () => api.get<{ id: string; name: string; pricePerDay: number; seats: number }[]>(`${P}/rentals/catalog`),
-  book: (body: { vehicleModel: string; formula: string; pricePerDay: number }) =>
-    api.post<RentalBooking>(`${P}/rentals`, body),
+  catalog: () => api.get<RentalVehicle[]>(`${P}/rentals/catalog`),
+  /** Le prix total est calculé par le serveur : on n'envoie que le véhicule, la formule et le nombre de jours. */
+  book: (body: { vehicleId: string; formula: RentalFormula; days?: number }) => api.post<RentalBooking & { totalPrice?: number }>(`${P}/rentals`, body),
   mine: () => api.get<RentalBooking[]>(`${P}/rentals/mine`),
 };
 

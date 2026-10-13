@@ -11,7 +11,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { Estimate, Place, VehicleType, errorCode, errorMessage, placesApi, rideApi, ridesApi, walletApi } from "../services/api";
+import { Estimate, Place, PlaceSuggestion, VehicleType, errorCode, errorMessage, placesApi, rideApi, ridesApi, walletApi } from "../services/api";
+import SchedulePicker from "../components/SchedulePicker";
 import {
   CAR_VEHICLES,
   ZEM_VEHICLES,
@@ -261,15 +262,59 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const [selected, setSelected] = useState<VehicleType>(CAR_VEHICLES[0]);
+  // Course programmée : heure de prise en charge choisie (null = tout de suite)
+  const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
+  const [scheduleMode, setScheduleMode] = useState(false);
   const [saved, setSaved] = useState<SavedPlaces>({});
   useEffect(() => {
     SecureStore.getItemAsync(SAVED_PLACES_KEY)
       .then((raw) => { if (raw) setSaved(JSON.parse(raw) as SavedPlaces); })
       .catch(() => undefined);
   }, []);
+  // Identifiants serveur des adresses (pour pouvoir les supprimer) et destinations fréquentes de l'historique
+  const [savedIds, setSavedIds] = useState<Partial<Record<SavedKey, string>>>({});
+  const [frequent, setFrequent] = useState<PlaceSuggestion[]>([]);
+  const cacheSaved = (next: SavedPlaces) => SecureStore.setItemAsync(SAVED_PLACES_KEY, JSON.stringify(next)).catch(() => undefined);
+  const pushSaved = (key: SavedKey, place: Place) =>
+    placesApi
+      .setSaved(key === "home" ? "HOME" : "WORK", { title: place.title, address: place.subtitle, latitude: place.latitude, longitude: place.longitude })
+      .then((row) => setSavedIds((ids) => ({ ...ids, [key]: row.id })))
+      .catch(() => undefined); // hors ligne : l'adresse reste sur le téléphone et sera envoyée à la prochaine ouverture
+  useEffect(() => {
+    // Le serveur fait foi (suit le client d'un téléphone à l'autre) ; une adresse seulement locale lui est envoyée
+    placesApi
+      .saved()
+      .then(({ places }) => {
+        const ids: Partial<Record<SavedKey, string>> = {};
+        const fromServer: SavedPlaces = {};
+        for (const row of places) {
+          const key: SavedKey | null = row.kind === "HOME" ? "home" : row.kind === "WORK" ? "work" : null;
+          if (!key) continue;
+          ids[key] = row.id;
+          fromServer[key] = { title: row.title, subtitle: row.address ?? undefined, latitude: row.latitude, longitude: row.longitude };
+        }
+        setSavedIds(ids);
+        setSaved((local) => {
+          const merged = { ...local, ...fromServer };
+          for (const key of SAVED_KEYS) if (local[key] && !fromServer[key]) pushSaved(key, local[key]!);
+          cacheSaved(merged);
+          return merged;
+        });
+      })
+      .catch(() => undefined);
+    placesApi.suggestions().then((r) => setFrequent(r.suggestions)).catch(() => undefined);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const persistSaved = (next: SavedPlaces) => {
+    const previous = saved;
     setSaved(next);
-    SecureStore.setItemAsync(SAVED_PLACES_KEY, JSON.stringify(next)).catch(() => undefined);
+    cacheSaved(next);
+    for (const key of SAVED_KEYS) {
+      if (next[key] && next[key] !== previous[key]) pushSaved(key, next[key]!);
+      if (!next[key] && previous[key] && savedIds[key]) {
+        placesApi.removeSaved(savedIds[key]!).catch(() => undefined);
+        setSavedIds((ids) => { const copy = { ...ids }; delete copy[key]; return copy; });
+      }
+    }
   };
   const askRemoveSaved = (key: SavedKey) => {
     Alert.alert(t("place.removeTitle", { name: t(`place.${key}` as MessageKey) }), t("place.removeBody"), [
@@ -462,7 +507,9 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
   const chosenVehicle = service === "zem" ? zemType : carType;
   const est = estimates[selected];
   const walletInsufficient = balance !== null && !!est && balance < est.price;
-  const canConfirm = !!origin && !!destination && !!roadRoute && !!est && !routeLoading && !estimating && !submitting && !walletInsufficient;
+  // « Programmer » choisi mais aucune heure sélectionnée : on ne peut pas confirmer
+  const scheduleMissing = scheduleMode && !scheduledAt;
+  const canConfirm = !!origin && !!destination && !!roadRoute && !!est && !routeLoading && !estimating && !submitting && !walletInsufficient && !scheduleMissing;
 
   const onConfirm = async () => {
     if (!origin || !destination || !est) return;
@@ -477,6 +524,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
         // Adresses lisibles : le serveur les renvoie au Zem (champs ignorés tant qu'il ne les connaît pas)
         originLabel: origin.title,
         destLabel: destination.title,
+        ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
       });
       onConfirmed(ride.id, destination.title);
     } catch (e) {
@@ -788,6 +836,17 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
                     <Text style={styles.quickDestText}>{t(`place.${k}` as MessageKey)}</Text>
                   </Pressable>
                 ))}
+                {frequent.map((f) => (
+                  <Pressable
+                    key={`freq-${f.title}`}
+                    style={styles.quickDestChip}
+                    onPress={() => applyPlace(focus ?? "destination", { title: f.title, latitude: f.latitude, longitude: f.longitude })}
+                    accessibilityLabel={t("ride.frequent")}
+                  >
+                    <MaterialIcons name="history" size={15} color={colors.primary} />
+                    <Text style={styles.quickDestText}>{f.title}</Text>
+                  </Pressable>
+                ))}
                 {POPULAR_PLACES.map((p) => (
                   <Pressable
                     key={p.id}
@@ -922,6 +981,17 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
             </>
           )}
 
+          {!!destination && (
+            <SchedulePicker
+              value={scheduledAt}
+              onChange={(value) => {
+                setScheduledAt(value);
+                setScheduleMode(value !== null || scheduleMode);
+              }}
+              onModeChange={setScheduleMode}
+            />
+          )}
+
           {submitError && (
             <View style={styles.insufficientBalance}>
               <Text style={styles.errorText}>{submitError}</Text>
@@ -954,7 +1024,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={[styles.confirmText, !destination && { color: colors.primary }]}>
-                {est ? t("ride.confirm", { price: fcfa(est.price) }) : t("ride.pickDest")}
+                {est ? t(scheduledAt ? "ride.confirmScheduled" : "ride.confirm", { price: fcfa(est.price) }) : t("ride.pickDest")}
               </Text>
             )}
           </Pressable>
