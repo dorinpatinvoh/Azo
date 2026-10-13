@@ -27,6 +27,9 @@ export const en: Record<MessageKey, string> = {
   "lang.subtitle": "The whole app will be shown in this language.",
   "lang.welcome":
     "Welcome to Azo. I will guide you step by step to create your account. Tap Continue when you are ready.",
+  "lang.voiceOnlyTitle": "Voice in a local language",
+  "lang.voiceOnlyNote": "The screen stays in French; only the voice guides you through sign-up in this language.",
+  "lang.voiceFallback": "Recordings in {name} are not available yet: the voice speaks French in the meantime.",
   "lang.voiceMissing":
     "This phone has no voice for this language. The text stays on screen; you can install the voice in the text-to-speech settings.",
   "voice.replay": "Listen again",
@@ -468,6 +471,7 @@ export const en: Record<MessageKey, string> = {
   "wallet.recharge.done.title": "Account topped up ✅",
   "wallet.recharge.done.body": "+{amount} FCFA added. New balance: {balance} FCFA.",
   "wallet.recharge.timeout": "The payment is not confirmed yet. Your balance will update as soon as FedaPay confirms it.",
+  "wallet.recharge.failed": "The payment failed or was cancelled. Nothing was debited from your account.",
   "wallet.tx.pending": "(pending)",
   "wallet.tx.failed": "(failed)",
   "notif.title": "Notifications",

@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import React from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
@@ -24,7 +24,6 @@ type Props = {
  */
 export default function PaymentWebView({ url, onClose, onReturn }: Props) {
   const { t } = useI18n();
-  const [loading, setLoading] = useState(true);
 
   return (
     <Modal visible={!!url} animationType="slide" onRequestClose={onClose}>
@@ -45,8 +44,6 @@ export default function PaymentWebView({ url, onClose, onReturn }: Props) {
               style={{ flex: 1 }}
               javaScriptEnabled
               domStorageEnabled
-              onLoadStart={() => setLoading(true)}
-              onLoadEnd={() => setLoading(false)}
               // Retour du paiement : on intercepte l'adresse de retour (la page n'a pas à se charger sur le téléphone)
               onShouldStartLoadWithRequest={(request) => {
                 if (request.url.includes(PAYMENT_RETURN_PATH)) {
@@ -62,11 +59,6 @@ export default function PaymentWebView({ url, onClose, onReturn }: Props) {
                 return true;
               }}
             />
-            {loading ? (
-              <View style={styles.loader} pointerEvents="none">
-                <ActivityIndicator size="large" color={colors.primary} />
-              </View>
-            ) : null}
           </View>
         ) : null}
       </SafeAreaView>
@@ -79,5 +71,4 @@ const styles = StyleSheet.create({
   header: { height: 52, paddingHorizontal: spacing.sm, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   close: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   title: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700", flex: 1, textAlign: "center" },
-  loader: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, alignItems: "center", justifyContent: "center" },
 });

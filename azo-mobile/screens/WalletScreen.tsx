@@ -34,14 +34,14 @@ export default function WalletScreen({ onBack }: Props) {
   const [tx, setTx] = useState<WalletTransaction[]>([]);
 
   // Recharge le solde ET l'historique depuis le backend (renvoie le solde lu, ou null si le serveur est injoignable)
-  const load = useCallback(async (): Promise<number | null> => {
+  const load = useCallback(async (): Promise<{ balance: number; list: WalletTransaction[] } | null> => {
     try {
       const [w, list] = await Promise.all([walletApi.get(), walletApi.transactions()]);
       setBalance(w.balance);
       setCashback(w.cashback);
       setTx(list);
       setLoadFailed(false);
-      return w.balance;
+      return { balance: w.balance, list };
     } catch {
       // Serveur injoignable : pas de solde inventé (48 500 F s'affichait avant), « — FCFA » et un message
       setLoadFailed(true);
@@ -61,7 +61,8 @@ export default function WalletScreen({ onBack }: Props) {
   const [rechargeBusy, setRechargeBusy] = useState(false);
   // Adresse de paiement FedaPay affichée dans l'application (fenêtre plein écran), sans quitter l'application
   const [payUrl, setPayUrl] = useState<string | null>(null);
-  const [awaiting, setAwaiting] = useState<{ baseline: number; amount: number; since: number } | null>(null);
+  // Recharge suivie : on repère SA transaction (numéro FedaPay), pas une variation du solde — d'autres crédits peuvent arriver entre-temps
+  const [awaiting, setAwaiting] = useState<{ transactionId: number; amount: number; since: number } | null>(null);
   const awaitingRef = useRef(awaiting);
   awaitingRef.current = awaiting;
   const finished = useRef(false);
@@ -71,18 +72,23 @@ export default function WalletScreen({ onBack }: Props) {
   const checkCredited = useCallback(async () => {
     const pending = awaitingRef.current;
     if (!pending) return;
-    const fresh = await load();
-    if (fresh === null || finished.current) return;
-    if (fresh >= pending.baseline + pending.amount) {
+    const data = await load();
+    if (!data || finished.current) return;
+    const mine = data.list.find((item) => item.meta === `fedaPayId:${pending.transactionId}`);
+    if (mine?.status === "CONFIRMED") {
+      // Créditée : la fenêtre de paiement se ferme toute seule et le nouveau solde est déjà affiché derrière
       finished.current = true;
       setAwaiting(null);
+      setPayUrl(null);
       Alert.alert(
         t("wallet.recharge.done.title"),
-        t("wallet.recharge.done.body", {
-          amount: (fresh - pending.baseline).toLocaleString(locale),
-          balance: fresh.toLocaleString(locale),
-        })
+        t("wallet.recharge.done.body", { amount: mine.amount.toLocaleString(locale), balance: data.balance.toLocaleString(locale) })
       );
+    } else if (mine?.status === "FAILED") {
+      finished.current = true;
+      setAwaiting(null);
+      setPayUrl(null);
+      Alert.alert(t("wallet.recharge.title"), t("wallet.recharge.failed"));
     } else if (Date.now() - pending.since > RECHARGE_POLL_MAX_MS) {
       finished.current = true;
       setAwaiting(null);
@@ -113,11 +119,10 @@ export default function WalletScreen({ onBack }: Props) {
     }
     setRechargeBusy(true);
     try {
-      const baseline = balance ?? 0;
-      // Le serveur renvoie l'adresse de paiement FedaPay : le crédit arrive après le paiement, via le webhook
-      const { url } = await walletApi.recharge(rechargeValue, "FEDAPAY");
+      // Le serveur renvoie l'adresse de paiement FedaPay et le numéro de la transaction : le crédit est contrôlé juste après le paiement
+      const { url, transactionId } = await walletApi.recharge(rechargeValue, "FEDAPAY");
       setRechargeOpen(false);
-      setAwaiting({ baseline, amount: rechargeValue, since: Date.now() });
+      setAwaiting({ transactionId, amount: rechargeValue, since: Date.now() });
       if (url) setPayUrl(url);
     } catch (e) {
       Alert.alert(t("common.error"), errorMessage(e));

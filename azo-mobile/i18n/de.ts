@@ -27,6 +27,9 @@ export const de: Record<MessageKey, string> = {
   "lang.subtitle": "Die gesamte App wird in dieser Sprache angezeigt.",
   "lang.welcome":
     "Willkommen bei Azo. Ich begleite dich Schritt für Schritt bei der Erstellung deines Kontos. Tippe auf Weiter, wenn du bereit bist.",
+  "lang.voiceOnlyTitle": "Stimme in einer lokalen Sprache",
+  "lang.voiceOnlyNote": "Der Bildschirm bleibt auf Französisch; nur die Stimme führt dich in dieser Sprache durch die Anmeldung.",
+  "lang.voiceFallback": "Aufnahmen auf {name} sind noch nicht verfügbar: Bis dahin spricht die Stimme Französisch.",
   "lang.voiceMissing":
     "Dieses Telefon hat keine Stimme für diese Sprache. Der Text bleibt sichtbar; du kannst die Stimme in den Einstellungen der Sprachausgabe installieren.",
   "voice.replay": "Nochmal anhören",
@@ -468,6 +471,7 @@ export const de: Record<MessageKey, string> = {
   "wallet.recharge.done.title": "Konto aufgeladen ✅",
   "wallet.recharge.done.body": "+{amount} FCFA gutgeschrieben. Neues Guthaben: {balance} FCFA.",
   "wallet.recharge.timeout": "Die Zahlung ist noch nicht bestätigt. Dein Guthaben wird aktualisiert, sobald FedaPay sie bestätigt.",
+  "wallet.recharge.failed": "Die Zahlung ist fehlgeschlagen oder wurde abgebrochen. Es wurde nichts von deinem Konto abgebucht.",
   "wallet.tx.pending": "(ausstehend)",
   "wallet.tx.failed": "(fehlgeschlagen)",
   "notif.title": "Benachrichtigungen",

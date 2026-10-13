@@ -15,7 +15,7 @@ import { useAvatar } from "../utils/avatar";
 import { fcfa } from "../utils/rideDisplay";
 import { formatBeninPhoneDisplay } from "../utils/phone";
 import { languageInfo, useI18n } from "../i18n";
-import { speak, stopSpeaking } from "../i18n/voice";
+import { speakKey, stopSpeaking } from "../i18n/voice";
 
 type Props = {
   onNavigateTab: (tab: ClientTab) => void;
@@ -40,7 +40,7 @@ export function initials(user?: Pick<UserProfile, "firstName" | "lastName" | "fu
 
 export default function ProfileScreen({ onNavigateTab, onOpenNotifications, onOpenProvider, onOpenInfo, onOpenHelp, onLogout }: Props) {
   const insets = useSafeAreaInsets();
-  const { t, lang, locale, voiceAssist, setVoiceAssist } = useI18n();
+  const { t, lang, locale, voiceAssist, setVoiceAssist, voiceLang } = useI18n();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [rides, setRides] = useState<Ride[]>([]);
@@ -78,7 +78,7 @@ export default function ProfileScreen({ onNavigateTab, onOpenNotifications, onOp
 
   function toggleVoice(on: boolean) {
     setVoiceAssist(on);
-    if (on) speak(t("voice.hintOn"), lang);
+    if (on) speakKey("voice.hintOn", voiceLang);
     else stopSpeaking();
   }
 

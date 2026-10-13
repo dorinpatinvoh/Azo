@@ -8,6 +8,7 @@
     "@expo/vector-icons": "^15.0.2",
     "axios": "^1.20.0",
     "expo": "~57.0.25",
+    "expo-audio": "~57.0.5",
     "expo-constants": "~57.0.19",
     "expo-dev-client": "~57.0.19",
     "expo-file-system": "~57.0.7",
@@ -38,6 +39,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "voice:manifest": "node scripts/gen-voice-manifest.js",
     "sync:tarification": "node scripts/sync-tarification.js"
   },
   "private": true

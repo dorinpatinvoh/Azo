@@ -74,13 +74,28 @@ export class WalletService {
   }
 
   /**
+   * Passe une recharge en attente à CONFIRMED et crédite le solde, UNE seule fois : le passage PENDING → CONFIRMED est une
+   * écriture conditionnelle (`updateMany` sur le statut) dans la même transaction que le crédit. Le webhook et le contrôle
+   * automatique (reconcilePendingRecharges) peuvent donc arriver en même temps sans jamais créditer deux fois.
+   */
+  private async confirmPendingRecharge(pending: { id: string; walletId: string; amount: number }): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.transaction.updateMany({
+        where: { id: pending.id, status: TransactionStatus.PENDING },
+        data: { status: TransactionStatus.CONFIRMED },
+      });
+      if (count !== 1) return false;
+      await tx.wallet.update({ where: { id: pending.walletId }, data: { balance: { increment: pending.amount } } });
+      return true;
+    });
+  }
+
+  /**
    * Callback FedaPay — crédite le solde si le paiement est approuvé.
    *
-   * FedaPay envoie un événement `transaction.approved` en POST sur FEDAPAY_CALLBACK_URL.
-   * On trouve la transaction PENDING correspondante via le fedaPayId dans le meta, on la
-   * passe à CONFIRMED, et on incrémente le solde.
-   * Si la transaction est introuvable ou déjà traitée, on répond 200 sans rien faire
-   * (idempotence — FedaPay peut réémettre l'événement).
+   * FedaPay envoie un événement `transaction.approved` en POST sur le webhook. On relit le statut chez FedaPay, on trouve la
+   * transaction PENDING correspondante via le fedaPayId dans le meta, on la passe à CONFIRMED et on incrémente le solde.
+   * Introuvable ou déjà traitée : réponse sans effet (idempotence — FedaPay peut réémettre l'événement).
    */
   async handleFedaPayCallback(fedaPayTransactionId: number) {
     const remote = await this.fedaPay.verifyTransaction(fedaPayTransactionId);
@@ -91,21 +106,64 @@ export class WalletService {
     const meta = `fedaPayId:${fedaPayTransactionId}`;
     const pending = await this.prisma.transaction.findFirst({
       where: { meta, type: TransactionType.CREDIT, status: TransactionStatus.PENDING },
-      include: { wallet: true },
     });
     if (!pending) return { credited: false, reason: "already_processed_or_not_found" };
 
-    await this.prisma.$transaction([
-      this.prisma.transaction.update({
-        where: { id: pending.id },
-        data: { status: TransactionStatus.CONFIRMED },
-      }),
-      this.prisma.wallet.update({
-        where: { id: pending.walletId },
-        data: { balance: { increment: pending.amount } },
-      }),
-    ]);
-    return { credited: true, amount: pending.amount, walletId: pending.walletId };
+    const credited = await this.confirmPendingRecharge(pending);
+    return credited
+      ? { credited: true, amount: pending.amount, walletId: pending.walletId }
+      : { credited: false, reason: "already_processed_or_not_found" };
+  }
+
+  private lastReconcile = new Map<string, number>();
+
+  /**
+   * Contrôle automatique des recharges en attente : pour chaque recharge FedaPay encore PENDING (moins de 48 h), on demande son
+   * statut à FedaPay ; approuvée → crédit, refusée / annulée / expirée → passée en FAILED. Appelé quand l'application lit le
+   * solde ou l'historique : le solde se met à jour tout seul, MÊME SI le webhook n'est jamais arrivé (serveur en veille, adresse du
+   * webhook périmée, essai en local). Au plus un contrôle toutes les 1,5 s par utilisateur ; ne lève jamais d'erreur.
+   */
+  async reconcilePendingRecharges(userId: string, now: number = Date.now()): Promise<number> {
+    const last = this.lastReconcile.get(userId) ?? 0;
+    if (now - last < 1_500) return 0;
+    this.lastReconcile.set(userId, now);
+    try {
+      const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
+      if (!wallet) return 0;
+      const pending = await this.prisma.transaction.findMany({
+        where: {
+          walletId: wallet.id,
+          type: TransactionType.CREDIT,
+          status: TransactionStatus.PENDING,
+          meta: { startsWith: "fedaPayId:" },
+          createdAt: { gte: new Date(now - 48 * 3600 * 1000) },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      });
+      let credited = 0;
+      for (const tx of pending) {
+        const id = Number(String(tx.meta).slice("fedaPayId:".length));
+        if (!Number.isInteger(id)) continue;
+        try {
+          const remote = await this.fedaPay.verifyTransaction(id);
+          const status = String((remote as any)?.status ?? "");
+          if (status === "approved") {
+            if (await this.confirmPendingRecharge(tx)) credited += 1;
+          } else if (["declined", "canceled", "cancelled", "expired"].includes(status)) {
+            await this.prisma.transaction.updateMany({
+              where: { id: tx.id, status: TransactionStatus.PENDING },
+              data: { status: TransactionStatus.FAILED },
+            });
+          }
+        } catch {
+          // FedaPay injoignable pour cette transaction : on réessaiera au prochain contrôle
+        }
+      }
+      return credited;
+    } catch {
+      return 0;
+    }
   }
 
   async credit(userId: string, amount: number, label: string, meta?: string, labelKey?: string, labelParams?: Prisma.InputJsonValue) {

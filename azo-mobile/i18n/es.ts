@@ -27,6 +27,9 @@ export const es: Record<MessageKey, string> = {
   "lang.subtitle": "Toda la aplicación se mostrará en este idioma.",
   "lang.welcome":
     "Bienvenido a Azo. Te acompañaré paso a paso para crear tu cuenta. Pulsa Continuar cuando estés listo.",
+  "lang.voiceOnlyTitle": "Voz en lengua local",
+  "lang.voiceOnlyNote": "La pantalla sigue en francés; solo la voz te guía durante el registro en esta lengua.",
+  "lang.voiceFallback": "Las grabaciones en {name} aún no están disponibles: mientras tanto la voz habla francés.",
   "lang.voiceMissing":
     "Este teléfono no tiene voz para este idioma. El texto sigue en pantalla; puedes instalar la voz en los ajustes de síntesis de voz.",
   "voice.replay": "Escuchar de nuevo",
@@ -468,6 +471,7 @@ export const es: Record<MessageKey, string> = {
   "wallet.recharge.done.title": "Cuenta recargada ✅",
   "wallet.recharge.done.body": "+{amount} FCFA añadidos. Nuevo saldo: {balance} FCFA.",
   "wallet.recharge.timeout": "El pago aún no está confirmado. Tu saldo se actualizará en cuanto FedaPay lo confirme.",
+  "wallet.recharge.failed": "El pago falló o fue cancelado. No se descontó nada de tu cuenta.",
   "wallet.tx.pending": "(pendiente)",
   "wallet.tx.failed": "(fallido)",
   "notif.title": "Notificaciones",

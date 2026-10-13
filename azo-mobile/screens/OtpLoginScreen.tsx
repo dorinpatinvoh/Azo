@@ -20,7 +20,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
 import { useI18n, type MessageKey } from "../i18n";
-import { speak, stopSpeaking } from "../i18n/voice";
+import { speakKey, speakText, stopSpeaking, type VoiceKey } from "../i18n/voice";
 import {
   ApiError,
   DEFAULT_API_URL,
@@ -75,7 +75,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
   const [firstName, setFirstName] = useState("");
   const [gender, setGender] = useState<Gender | null>(null);
   const [npi, setNpi] = useState("");
-  const { t, lang, voiceAssist } = useI18n();
+  const { t, voiceAssist, voiceLang } = useI18n();
   // Pause : coupe la voix pour cette inscription sans changer le réglage du profil
   const [paused, setPaused] = useState(false);
   const talk = voiceAssist && !paused;
@@ -88,15 +88,15 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
   useEffect(() => {
     if (!talk) return;
     // Court délai : on laisse l'écran (et le clavier) s'installer avant de parler
-    const timer = setTimeout(() => speak(t(stepKey), lang), 500);
+    const timer = setTimeout(() => speakKey(stepKey as VoiceKey, voiceLang), 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, talk, lang]);
+  }, [step, talk, voiceLang]);
   // La voix se tait quand on quitte l'écran, sauf le message de fin d'inscription
   useEffect(() => () => { if (!spokenDone.current) stopSpeaking(); }, []);
   function notify(title: string, message: string) {
     Alert.alert(title, message);
-    if (talk) speak(`${title}. ${message}`, lang);
+    if (talk) speakText(`${title}. ${message}`, voiceLang);
   }
 
   const firstNameRef = useRef<TextInput | null>(null);
@@ -256,7 +256,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
       await SecureStore.deleteItemAsync(REGISTRATION_PENDING_KEY);
       // Message de fin : il doit être prononcé jusqu'au bout même si l'écran change aussitôt
       spokenDone.current = true;
-      if (talk) speak(t("voice.done"), lang);
+      if (talk) speakKey("voice.done", voiceLang);
       onVerified("CLIENT", null);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
@@ -368,7 +368,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
                 <>
                   {talk && (
                     <Pressable
-                      onPress={() => speak(t(stepKey), lang)}
+                      onPress={() => speakKey(stepKey as VoiceKey, voiceLang)}
                       style={styles.iconButton}
                       accessibilityRole="button"
                       accessibilityLabel={t("voice.replay")}

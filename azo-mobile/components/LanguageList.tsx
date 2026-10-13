@@ -3,17 +3,20 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { LANGUAGES, type LangCode } from "../i18n";
+import { LANGUAGES, LOCAL_VOICE_LANGUAGES, type LangCode, type LocalVoiceCode } from "../i18n";
 
 type Props = {
-  selected: LangCode;
+  /** Langue d'application active (null quand une langue locale de voix est choisie) */
+  selected: LangCode | null;
   onSelect: (lang: LangCode) => void;
+  /** Option : langues locales pour la VOIX seule (Fon, Yoruba), avec titre et note */
+  local?: { selected: LocalVoiceCode | null; onSelect: (code: LocalVoiceCode) => void; title: string; note: string };
   /** `dark` : sur le fond violet de l'onboarding · `light` : dans le profil (fond clair) */
   variant?: "dark" | "light";
 };
 
 /** Liste des langues proposées : drapeau, nom dans sa propre langue, coche sur la langue active. */
-export default function LanguageList({ selected, onSelect, variant = "light" }: Props) {
+export default function LanguageList({ selected, onSelect, local, variant = "light" }: Props) {
   const dark = variant === "dark";
   return (
     <View style={styles.list} accessibilityRole="radiogroup">
@@ -48,11 +51,41 @@ export default function LanguageList({ selected, onSelect, variant = "light" }: 
           </Pressable>
         );
       })}
+
+      {local && (
+        <>
+          <Text style={[styles.sectionTitle, dark ? styles.nameDark : styles.nameLight]}>{local.title}</Text>
+          <Text style={[styles.note, dark ? styles.noteDark : styles.noteLight]}>{local.note}</Text>
+          {LOCAL_VOICE_LANGUAGES.map((language) => {
+            const active = language.code === local.selected;
+            return (
+              <Pressable
+                key={language.code}
+                onPress={() => local.onSelect(language.code)}
+                style={[styles.row, dark ? styles.rowDark : styles.rowLight, active && (dark ? styles.rowDarkActive : styles.rowLightActive)]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={language.native}
+              >
+                <Text style={styles.flag}>{language.flag}</Text>
+                <Text style={[styles.name, dark ? styles.nameDark : styles.nameLight, active && (dark ? styles.nameDarkActive : styles.nameLightActive)]}>{language.native}</Text>
+                <View style={[styles.radio, active ? styles.radioActive : dark ? styles.radioDark : styles.radioLight]}>
+                  {active && <MaterialIcons name="check" size={16} color={colors.onPrimary} />}
+                </View>
+              </Pressable>
+            );
+          })}
+        </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  sectionTitle: { ...typography.headlineSm, marginTop: spacing.md },
+  note: { ...typography.bodySm, marginTop: -spacing.xs },
+  noteDark: { color: `${colors.onPrimary}CC` },
+  noteLight: { color: colors.onSurfaceVariant },
   list: { gap: spacing.sm },
   row: {
     flexDirection: "row",

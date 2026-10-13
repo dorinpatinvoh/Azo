@@ -56,12 +56,15 @@ export class WalletController {
   constructor(private wallet: WalletService) {}
 
   @Get()
-  get(@CurrentUser() user) {
+  async get(@CurrentUser() user) {
+    // Recharges FedaPay en attente : contrôlées auprès de FedaPay à chaque lecture (le solde se met à jour sans le webhook)
+    await this.wallet.reconcilePendingRecharges(user.userId);
     return this.wallet.getWallet(user.userId);
   }
 
   @Get("transactions")
-  transactions(@CurrentUser() user) {
+  async transactions(@CurrentUser() user) {
+    await this.wallet.reconcilePendingRecharges(user.userId);
     return this.wallet.transactions(user.userId);
   }
 

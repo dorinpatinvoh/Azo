@@ -5,34 +5,40 @@
 // Les textes libres du serveur (notifications, libellés) restent dans la langue où il les écrit.
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
-import { DEFAULT_LANGUAGE, isLangCode, languageInfo, type LangCode } from "./languages";
+import { DEFAULT_LANGUAGE, isLangCode, isLocalVoice, languageInfo, type LangCode, type LocalVoiceCode, type VoiceLangCode } from "./languages";
 import { fr, type MessageKey } from "./fr";
 import { en } from "./en";
 import { es } from "./es";
 import { de } from "./de";
 
 export type { LangCode, MessageKey };
-export { LANGUAGES, languageInfo } from "./languages";
+export { LANGUAGES, LOCAL_VOICE_LANGUAGES, isLocalVoice, languageInfo } from "./languages";
+export type { LocalVoiceCode, VoiceLangCode };
 
 const DICTIONARIES: Record<LangCode, Record<MessageKey, string>> = { fr, en, es, de };
 
 const LANGUAGE_KEY = "appLanguage";
 const VOICE_KEY = "voiceAssist";
 const OFFER_ANSWERED_KEY = "voiceOfferAnswered";
+// Langue locale de la VOIX (Fon, Yoruba) : absente = la voix suit la langue de l'application
+const VOICE_LANG_KEY = "voiceLang";
 
 // État lu UNE fois au démarrage (`loadI18n`), avant le premier affichage : pas de flash en français.
 let currentLang: LangCode = DEFAULT_LANGUAGE;
 let currentVoice = false;
+let currentLocalVoice: LocalVoiceCode | null = null;
 let offerAnswered = false;
 
 export async function loadI18n(): Promise<void> {
   try {
-    const [lang, voice, answered] = await Promise.all([
+    const [lang, voice, answered, localVoice] = await Promise.all([
       SecureStore.getItemAsync(LANGUAGE_KEY),
       SecureStore.getItemAsync(VOICE_KEY),
       SecureStore.getItemAsync(OFFER_ANSWERED_KEY),
+      SecureStore.getItemAsync(VOICE_LANG_KEY),
     ]);
     if (isLangCode(lang)) currentLang = lang;
+    if (isLocalVoice(localVoice)) currentLocalVoice = localVoice;
     currentVoice = voice === "1";
     offerAnswered = answered === "1";
   } catch {
@@ -63,6 +69,8 @@ export const tr = (key: MessageKey, vars?: Record<string, string | number>) => t
 /** Une traduction existe-t-elle pour cette clé ? (codes d'erreur du serveur, clés venues d'ailleurs) */
 export const hasMessage = (key: string): key is MessageKey => key in fr;
 export const getLanguage = () => currentLang;
+/** Langue de la voix : la langue locale choisie (Fon, Yoruba) ou, à défaut, celle de l'application. */
+export const getVoiceLanguage = (): VoiceLangCode => currentLocalVoice ?? currentLang;
 
 type I18nContextValue = {
   lang: LangCode;
@@ -72,6 +80,10 @@ type I18nContextValue = {
   t: (key: MessageKey, vars?: Record<string, string | number>) => string;
   voiceAssist: boolean;
   setVoiceAssist: (on: boolean) => void;
+  /** Langue de la voix d'aide : une langue locale (Fon, Yoruba) ou la langue de l'application. */
+  voiceLang: VoiceLangCode;
+  /** Choisit une langue locale pour la voix SEULE : l'application passe/reste en français. */
+  setLocalVoice: (code: LocalVoiceCode) => void;
 };
 
 const I18nContext = createContext<I18nContextValue>({
@@ -81,16 +93,33 @@ const I18nContext = createContext<I18nContextValue>({
   t: (key, vars) => translate(DEFAULT_LANGUAGE, key, vars),
   voiceAssist: false,
   setVoiceAssist: () => undefined,
+  voiceLang: DEFAULT_LANGUAGE,
+  setLocalVoice: () => undefined,
 });
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<LangCode>(currentLang);
   const [voiceAssist, setVoiceState] = useState<boolean>(currentVoice);
+  const [localVoice, setLocalVoiceState] = useState<LocalVoiceCode | null>(currentLocalVoice);
 
+  // Choisir une langue d'application : la voix la suit (une éventuelle langue locale de voix est abandonnée)
   const setLang = useCallback((next: LangCode) => {
     currentLang = next;
+    currentLocalVoice = null;
     setLangState(next);
+    setLocalVoiceState(null);
     SecureStore.setItemAsync(LANGUAGE_KEY, next).catch(() => undefined);
+    SecureStore.deleteItemAsync(VOICE_LANG_KEY).catch(() => undefined);
+  }, []);
+
+  // Langue locale pour la voix seulement : l'écran reste en français
+  const setLocalVoice = useCallback((code: LocalVoiceCode) => {
+    currentLang = DEFAULT_LANGUAGE;
+    currentLocalVoice = code;
+    setLangState(DEFAULT_LANGUAGE);
+    setLocalVoiceState(code);
+    SecureStore.setItemAsync(LANGUAGE_KEY, DEFAULT_LANGUAGE).catch(() => undefined);
+    SecureStore.setItemAsync(VOICE_LANG_KEY, code).catch(() => undefined);
   }, []);
 
   const setVoiceAssist = useCallback((on: boolean) => {
@@ -107,8 +136,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       t: (key, vars) => translate(lang, key, vars),
       voiceAssist,
       setVoiceAssist,
+      voiceLang: localVoice ?? lang,
+      setLocalVoice,
     }),
-    [lang, voiceAssist, setLang, setVoiceAssist]
+    [lang, voiceAssist, localVoice, setLang, setVoiceAssist, setLocalVoice]
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

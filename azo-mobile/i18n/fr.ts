@@ -29,6 +29,9 @@ export const fr = {
   "lang.subtitle": "Toute l'application s'affichera dans cette langue.",
   "lang.welcome":
     "Bienvenue sur Azo. Je vais t'accompagner pas à pas pour créer ton compte. Appuie sur Continuer quand tu es prêt.",
+  "lang.voiceOnlyTitle": "Voix en langue locale",
+  "lang.voiceOnlyNote": "L'écran reste en français ; seule la voix te guide pendant l'inscription dans cette langue.",
+  "lang.voiceFallback": "Les enregistrements en {name} ne sont pas encore disponibles : la voix parle français en attendant.",
   "lang.voiceMissing":
     "Ce téléphone n'a pas de voix pour cette langue. Le texte reste affiché ; tu peux installer la voix dans les réglages de synthèse vocale.",
   "voice.replay": "Réécouter",
@@ -470,6 +473,7 @@ export const fr = {
   "wallet.recharge.done.title": "Compte rechargé ✅",
   "wallet.recharge.done.body": "+{amount} FCFA ajoutés. Nouveau solde : {balance} FCFA.",
   "wallet.recharge.timeout": "Le paiement n'est pas encore confirmé. Ton solde se mettra à jour dès que FedaPay nous le confirmera.",
+  "wallet.recharge.failed": "Le paiement a échoué ou a été annulé. Aucun montant n'a été débité de ton compte.",
   "wallet.tx.pending": "(en attente)",
   "wallet.tx.failed": "(échoué)",
   "notif.title": "Notifications",

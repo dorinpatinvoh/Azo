@@ -8,8 +8,8 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
 import LanguageList from "../components/LanguageList";
-import { translate, useI18n, type LangCode } from "../i18n";
-import { hasVoiceFor, speak, stopSpeaking } from "../i18n/voice";
+import { isLocalVoice, translate, useI18n, type LangCode, type LocalVoiceCode } from "../i18n";
+import { hasRecordings, hasVoiceFor, localVoiceName, speak, speakKey, stopSpeaking } from "../i18n/voice";
 
 type Props = {
   onContinue: () => void;
@@ -21,13 +21,24 @@ type Props = {
  * TOUTE l'application passe dans cette langue et la voix se présente dans cette langue.
  */
 export default function LanguageScreen({ onContinue, onBack }: Props) {
-  const { lang, setLang, t } = useI18n();
+  const { lang, setLang, t, voiceLang, setLocalVoice } = useI18n();
   const [voiceMissing, setVoiceMissing] = useState(false);
+  // Langue locale choisie pour la voix seule : les enregistrements existent-ils ? sinon on prévient que la voix parle français
+  const [recordingsMissing, setRecordingsMissing] = useState(false);
+  const localVoice = isLocalVoice(voiceLang) ? voiceLang : null;
 
   // La voix s'arrête si l'on quitte l'écran
   useEffect(() => () => stopSpeaking(), []);
 
+  function chooseLocal(code: LocalVoiceCode) {
+    setLocalVoice(code);
+    setVoiceMissing(false);
+    setRecordingsMissing(!hasRecordings(code));
+    speakKey("lang.welcome", code);
+  }
+
   async function choose(code: LangCode) {
+    setRecordingsMissing(false);
     setLang(code);
     const available = await hasVoiceFor(code);
     setVoiceMissing(!available);
@@ -51,7 +62,19 @@ export default function LanguageScreen({ onContinue, onBack }: Props) {
           <Text style={styles.title}>{t("lang.title")}</Text>
           <Text style={styles.subtitle}>{t("lang.subtitle")}</Text>
           <View style={{ height: spacing.lg }} />
-          <LanguageList selected={lang} onSelect={choose} variant="dark" />
+          <LanguageList
+            selected={localVoice ? null : lang}
+            onSelect={choose}
+            variant="dark"
+            local={{ selected: localVoice, onSelect: chooseLocal, title: t("lang.voiceOnlyTitle"), note: t("lang.voiceOnlyNote") }}
+          />
+
+          {recordingsMissing && localVoice && (
+            <View style={styles.warning}>
+              <MaterialIcons name="volume-off" size={18} color={colors.tertiaryFixed} />
+              <Text style={styles.warningText}>{t("lang.voiceFallback", { name: localVoiceName(localVoice) })}</Text>
+            </View>
+          )}
 
           {voiceMissing && (
             <View style={styles.warning}>
