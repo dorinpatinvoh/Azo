@@ -193,8 +193,8 @@ Les niveaux ne concernent **que les agences**.
 
 | Niveau | Frais d'activation (uniques) | Commission par course | Frais par retrait | Limite de comptes |
 |---|---|---|---|---|
-| **PRO** | 100 000 | 3 % | 1 % | 25 |
-| **SILVER** | 215 500 | 2,5 % | 0,75 % | 50 |
+| **PRO** | 100 000 | 3 % | 1 % | 10 |
+| **SILVER** | 215 500 | 2,5 % | 0,75 % | 25 |
 | **OR** | 450 500 | 2 % | 0,50 % | 100 |
 | **DIAMANT** | 600 500 | 1 % | 0,25 % | 1 000 |
 

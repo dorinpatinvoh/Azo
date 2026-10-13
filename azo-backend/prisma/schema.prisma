@@ -246,7 +246,7 @@ model Agency {
   plan           AgencyPlan @default(PRO)
   // Valeurs par défaut = niveau PRO de la grille officielle (src/pricing/tarification.json).
   commissionRate Float      @default(0.03) // PRO : 3 % de commission par course
-  maxAccounts    Int        @default(25) // PRO : 25 comptes maximum
+  maxAccounts    Int        @default(10) // PRO : 10 comptes maximum (grille validée le 04/10/2026)
   activationFee  Int        @default(100000) // PRO : frais d'activation uniques (FCFA)
   feePaidAt      DateTime? // null = frais pas encore encaissés
   createdAt      DateTime   @default(now())
