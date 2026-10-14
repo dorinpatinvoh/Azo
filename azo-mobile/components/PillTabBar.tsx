@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, Pressable, StyleSheet, Keyboard, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
@@ -15,6 +15,17 @@ type Props<T extends string> = { items: PillTabItem<T>[]; active: T; onNavigate:
  * avec des onglets au choix. Placée dans le flux de l'écran, au-dessus de la barre système (zone sûre gérée par l'écran).
  */
 export default function PillTabBar<T extends string>({ items, active, onNavigate }: Props<T>) {
+  // Clavier ouvert (saisie d'un code…) : la barre se masque au lieu de remonter au-dessus du clavier
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  if (keyboardOpen) return null;
   return (
     <View style={styles.wrap}>
       <View style={styles.bar} accessibilityRole="tablist">

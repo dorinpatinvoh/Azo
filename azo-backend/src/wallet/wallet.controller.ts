@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Header,
   Headers,
@@ -71,6 +72,10 @@ export class WalletController {
   @Post("recharge")
   @UseGuards(RegistrationCompleteGuard)
   recharge(@CurrentUser() user, @Body() dto: RechargeDto) {
+    // Zem, conducteurs et coursiers ne rechargent pas AZƆ̀ Pay : leur solde vient des courses et des fonds de leur agence.
+    if (user.role === "DRIVER") {
+      throw new ForbiddenException("Les Zem et conducteurs ne peuvent pas recharger leur compte AZƆ̀ Pay.");
+    }
     // `user.email` peut être undefined si l'utilisateur s'est inscrit par téléphone.
     // initRecharge gère le repli vers une adresse fictive.
     return this.wallet.initRecharge(user.userId, dto.amount, user.email);

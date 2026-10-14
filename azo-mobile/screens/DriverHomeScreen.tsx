@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, TextInput, StyleSheet, Pressable, ScrollView, Switch,
-  ActivityIndicator, RefreshControl, Alert, Linking, useWindowDimensions,
+  ActivityIndicator, RefreshControl, Alert, Linking, useWindowDimensions, BackHandler,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -61,6 +61,19 @@ const announcedEndings = new Set<string>();
 
 export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet }: Props) {
   const [tab, setTab] = useState<ZemTab>("home");
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [tab]);
+  // Bouton retour du téléphone : d'abord l'accueil, puis la sortie de l'application
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (tab === "home") return false;
+      setTab("home");
+      return true;
+    });
+    return () => sub.remove();
+  }, [tab]);
   const [online, setOnline] = useState(false);
   // Course terminée : le Zem note son client (null = rien à noter)
   const [rateTarget, setRateTarget] = useState<{ rideId: string; name: string } | null>(null);
@@ -905,10 +918,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
-        {tab === "home" && (
+        <View style={tab === "home" ? undefined : styles.hidden}>
         <>
         <StandingBanner />
 
@@ -1143,7 +1157,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         )}
 
         </>
-        )}
+        </View>
 
         {tab === "gains" && (
         <>
@@ -1189,7 +1203,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         </>
         )}
 
-        {tab === "home" && (
+        <View style={tab === "home" ? undefined : styles.hidden}>
         <>
         {/* --- Proposition envoyée : le client regarde ton profil avant de te choisir --- */}
         {!activeRide && offered && <DriverOfferWaiting ride={offered} busy={busy} onWithdraw={handleWithdrawOffer} position={position} heading={heading} />}
@@ -1286,7 +1300,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         )}
 
         </>
-        )}
+        </View>
 
         {tab === "activity" && (
         <>
@@ -1484,6 +1498,7 @@ const styles = StyleSheet.create({
   profileRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.md, padding: spacing.md },
   profileRowTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
   profileRowSub: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  hidden: { display: "none" },
   tripRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.md, padding: spacing.md },
   tripText: { ...typography.labelMd, color: colors.onSurface },
   tripMeta: { ...typography.labelSm, color: colors.onSurfaceVariant },

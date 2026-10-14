@@ -80,14 +80,14 @@ export const REQUIRED_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   DRIVER: ["CNI", "SELFIE", "PROFILE_PHOTO", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
   COURIER: ["CNI", "SELFIE", "PROFILE_PHOTO", "PERMIS", "PHOTO_VEHICULE"],
   // Agences : logo obligatoire.
-  AGENCY: ["CNI", "LOGO", "RCCM", "IFU"],
+  AGENCY: ["CNI", "LOGO", "RCCM", "IFU", "STATUTS"],
   ARTISAN: ["CNI", "SELFIE"],
 };
 
 export const OPTIONAL_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   DRIVER: ["EXTRAIT_CASIER"],
   COURIER: ["CARTE_GRISE", "ASSURANCE", "EXTRAIT_CASIER"],
-  AGENCY: [],
+  AGENCY: ["EXTRAIT_CASIER"], // facultatif, en dernier dans la liste
   ARTISAN: ["EXTRAIT_CASIER"],
 };
 

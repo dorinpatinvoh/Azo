@@ -3,6 +3,7 @@ import { ActivityIndicator, AppState, Modal, TextInput, View, Text, StyleSheet, 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as SecureStore from "expo-secure-store";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { errorMessage, walletApi, WalletTransaction } from "../services/api";
@@ -27,6 +28,13 @@ type Props = { onBack: () => void };
 
 export default function WalletScreen({ onBack }: Props) {
   const { t, locale } = useI18n();
+  // Zem, conducteurs et coursiers ne rechargent pas AZƆ̀ Pay : leur solde vient des courses (et de leur agence)
+  const [canRecharge, setCanRecharge] = useState(true);
+  useEffect(() => {
+    SecureStore.getItemAsync("userRole")
+      .then((role) => setCanRecharge((role ?? "").toUpperCase().trim() !== "DRIVER"))
+      .catch(() => undefined);
+  }, []);
   const [loadFailed, setLoadFailed] = useState(false);
   // Solde réel depuis le backend (nécessite d'être connecté via l'écran OTP)
   const [balance, setBalance] = useState<number | null>(null);
@@ -132,6 +140,7 @@ export default function WalletScreen({ onBack }: Props) {
   }
 
   function handleRecharge() {
+    if (!canRecharge) return;
     setRechargeAmount("");
     setRechargeOpen(true);
   }
@@ -181,7 +190,7 @@ export default function WalletScreen({ onBack }: Props) {
         </LinearGradient>
 
         <View style={styles.actionsRow}>
-          {ACTIONS.map((a) => (
+          {ACTIONS.filter((a) => canRecharge || a.id !== "recharge").map((a) => (
             <Pressable key={a.id} style={styles.actionItem} onPress={() => (a.id === "recharge" ? handleRecharge() : scrollRef.current?.scrollTo({ y: activityY.current, animated: true }))}>
               <View style={styles.actionIcon}>
                 <MaterialIcons name={a.icon} size={22} color={colors.primary} />
@@ -191,9 +200,12 @@ export default function WalletScreen({ onBack }: Props) {
           ))}
         </View>
 
+        {canRecharge && (
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>{t("wallet.methods")}</Text>
         </View>
+)}
+        {canRecharge && (
         <View style={{ gap: spacing.sm }}>
           {PAYMENT_METHODS.map((m) => (
             <View key={m.id} style={styles.paymentCard}>
@@ -207,6 +219,7 @@ export default function WalletScreen({ onBack }: Props) {
             </View>
           ))}
         </View>
+)}
 
         <View style={styles.sectionHeaderRow} onLayout={(e) => { activityY.current = e.nativeEvent.layout.y; }}>
           <Text style={styles.sectionTitle}>{t("wallet.activity")}</Text>

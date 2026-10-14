@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Linking,
   Pressable,
   RefreshControl,
@@ -59,6 +60,18 @@ const COURIER_TABS: PillTabItem<CourierTab>[] = [
 
 export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet }: Props) {
   const [tab, setTab] = useState<CourierTab>("home");
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [tab]);
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (tab === "home") return false;
+      setTab("home");
+      return true;
+    });
+    return () => sub.remove();
+  }, [tab]);
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState<Delivery[]>([]);
   const [history, setHistory] = useState<Delivery[]>([]);
@@ -266,6 +279,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
         </View>
       ) : (
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
           keyboardShouldPersistTaps="handled"
