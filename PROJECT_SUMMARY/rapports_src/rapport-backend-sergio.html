@@ -1,0 +1,59 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — travail de Sergio</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce que Sergio a réalisé sur le serveur (<code>azo-backend</code>) depuis qu'il en a pris la main</p><span class="tag">12 octobre 2026 · 4 commits sur main</span></div>
+
+<h2>1. En résumé</h2>
+<p>Sergio a repris le backend le 12 octobre 2026. Il a traité trois demandes écrites par le mobile (fichiers <code>DEMANDE_BACKEND_*.md</code>), corrigé des tests périmés et mis en ligne le tout sur <code>main</code> (déployé sur Render, <code>/health</code> vérifié après chaque envoi). Suite de tests : <b>166 tests passent</b>.</p>
+
+<table>
+<tr><th>Commit</th><th>Sujet</th></tr>
+<tr><td><code>cd3dd1b7</code></td><td>Popup de proposition du Zem pour le client</td></tr>
+<tr><td><code>dd05de04</code></td><td>Le Zem connaît l'issue de sa proposition</td></tr>
+<tr><td><code>98d463cd</code></td><td>Correction des 7 tests qui échouaient déjà</td></tr>
+<tr><td><code>ee76a2da</code></td><td>Arrêt anticipé accepté : paiement à la saisie du code d'arrivée</td></tr>
+</table>
+
+<h2>2. Popup de proposition du Zem (<code>DEMANDE_BACKEND_POPUP_PROPOSITION_ZEM.md</code>)</h2>
+<p><b>Problème :</b> quand un Zem acceptait une demande, le client n'était pas alerté et n'avait pas le temps de regarder le profil du Zem.</p>
+<ul>
+<li>Événement temps réel <code>ride:offered</code> envoyé au client avec le profil public du Zem (jamais de téléphone, d'identifiant ni de nom complet), le prix, le trajet et un compte à rebours calé sur l'heure du serveur.</li>
+<li>Notification poussée dédiée (canal Android « ride-offers », durée de vie = délai de la proposition), envoyée <b>sans bloquer</b> la réponse au Zem.</li>
+<li><code>GET /rides/offers/pending</code> : rattrapage si le client rouvre l'application.</li>
+<li><code>POST /rides/:id/offer-seen</code> : le Zem apprend que le client regarde son profil.</li>
+<li>Marge de confirmation de 5 s après la fin du compte à rebours (latence réseau) ; salle personnelle <code>user:{id}</code> rejointe dès la connexion.</li>
+<li>Nouvelle colonne <code>offerSeenAt</code> (migration <code>20261012130000</code>) ; 23 tests ajoutés.</li>
+</ul>
+
+<h2>3. Fin de proposition : le Zem n'est plus bloqué (<code>DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md</code>)</h2>
+<p><b>Problème :</b> quand le client refusait ou ne répondait pas, le Zem restait figé sur « 0 s » : le serveur lui répondait 403 et ne lui envoyait aucun événement.</p>
+<ul>
+<li>Nouvelle table <code>RideOffer</code> (migration <code>20261012140000</code>) : historique de chaque proposition et de son issue (acceptée, refusée, expirée, retirée, annulée).</li>
+<li><code>GET /rides/:id</code> : un Zem dont la proposition vient de finir reçoit une <b>vue restreinte</b> avec <code>offerOutcome</code> (24 h) — jamais la position, le téléphone ni le nom complet du client ; un Zem sans proposition reste en 403.</li>
+<li><code>GET /rides/offers/current</code> : proposition en cours et dernière terminée (10 min), pour reprendre après un redémarrage.</li>
+<li>Événements <code>ride:offer-ended</code>, <code>ride:offer-approved</code> et <code>ride:status MATCHED</code> envoyés directement au Zem.</li>
+<li>Notifications poussées à l'expiration et au refus ; erreur <code>RIDE_OFFER_ENDED</code> en 409.</li>
+</ul>
+
+<h2>4. Tests corrigés (7 échecs historiques)</h2>
+<ul>
+<li><b>Odometer (3) :</b> les tests attendaient l'ancien tarif du Zem électrique ; le tarif en vigueur (base 120 F, paliers 60/50/45, commit <code>5a3b3bd0</code>) donne 180, 210 et 300 F. Tests alignés. <b>Point d'attention :</b> la note de <code>tarification.json</code> et la demande « prix au kilomètre » annoncent encore un autre tarif électrique (base 100 F, 70/60/50) : à trancher avec l'équipe.</li>
+<li><b>Radar client (4) :</b> le code demande et renvoie maintenant le pseudo sous forme <code>displayName</code> / <code>firstName</code> ; tests alignés.</li>
+</ul>
+
+<h2>5. Arrêt anticipé avec code d'arrivée</h2>
+<p><b>Besoin :</b> si la course s'arrête après quelques mètres, le client doit confirmer avec un code, comme au départ, et l'argent ne part qu'à ce moment.</p>
+<ul>
+<li><code>stop-accept</code> ne règle plus : il enregistre l'acceptation (<code>stopAcceptedAt</code>, migration <code>20261012150000</code>), génère le code d'arrivée visible du client et prévient les deux parties.</li>
+<li><code>POST /rides/:id/complete</code> avec le bon code règle la distance réellement parcourue (prix figé à la demande) : le client est débité, le Zem crédité moins la commission ; le Zem n'a pas à être à destination.</li>
+<li>Après acceptation, l'arrêt ne peut plus être refusé ni annulé ; il expire après 2 minutes si le code n'est pas saisi (le code disparaît, la course continue).</li>
+<li>Réponses : <code>stopRequest</code> expose <code>accepted</code> et <code>codeRequired</code>. 3 tests ajoutés/remplacés.</li>
+</ul>
+
+<h2>6. Limites et suites</h2>
+<ul>
+<li>Ces flux sont testés en tests automatiques et vérifiés en ligne (routes présentes, commit déployé), mais <b>pas encore avec deux vrais téléphones</b>.</li>
+<li>Pas de route <code>GET /pricing</code> côté serveur (le mobile utilise le barème embarqué).</li>
+<li>Render (offre gratuite) s'endort : premier appel lent (~50 s) ; la tâche d'expiration ne tourne pas pendant la veille (un rattrapage existe à la lecture).</li>
+<li>Règle de sécurité respectée : le fichier <code>.env</code> n'a jamais été lu ni reproduit.</li>
+</ul>
+<div class="foot">Rapport établi le 12 octobre 2026 à partir de l'historique Git et des essais effectués.</div>
+</body></html>

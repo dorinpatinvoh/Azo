@@ -1,0 +1,122 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 13 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">13 octobre 2026 · 5 commits sur main · 23 suites / 271 tests</span></div>
+
+<h2>1. En résumé</h2>
+<p>Aujourd'hui, côté serveur : <b>agences</b> (grille validée, transferts agence ↔ chauffeurs), <b>recharge FedaPay fiabilisée</b> (webhook corrigé et signé, crédit automatique), et <b>neuf modules ou règles nouveaux</b> issus de l'analyse concurrents : gains, reçu, SOS, adresses enregistrées, assistance, location en base, courses programmées, note du client, règle de notation, notifications traduites. Cinq migrations s'ajoutent (appliquées par <code>render:start</code> au déploiement). Tout est sur <code>main</code> et déployé (<code>/health</code> : commit <code>8099fae5</code>).</p>
+<div class="box warn"><b>À vérifier en premier :</b> (1) les variables FedaPay sur Render (§3.1) ; (2) le <b>changement de contrat</b> <code>POST /rentals</code> (§4.5) qui casse les anciennes versions de l'application ; (3) les <b>seuils de la règle de notation</b> (§4.7), que j'ai choisis sans validation métier.</div>
+
+<h2>2. Agences (<code>agencies/</code>, <code>providers/</code>, <code>pricing/</code>)</h2>
+<ul>
+<li><b>Grille alignée sur le PDF du 04/10/2026</b> : plafonds de comptes <b>PRO 10, SILVER 25, OR 100, DIAMANT 1 000</b> (<code>tarification.json</code>, défaut du schéma, et migration <code>20261013100000</code> qui met à jour les agences existantes selon leur niveau). <code>TARIFICATION.md</code> corrigé (il disait 25/50 depuis une évolution du 5 octobre).</li>
+<li><b>Noms</b> : <code>PLAN_LABELS</code> devient <code>Pro / Silver / Or / Diamant</code> (sans « Agence ») ; <code>AGENCY_TYPES</code> (types d'agence) est remplacé par les 4 niveaux.</li>
+<li><b>Le propriétaire n'est plus compté comme chauffeur</b> : il a <code>User.agencyId</code> posé à l'approbation du dossier ; il est écarté de la liste, des places utilisées et du plafond, et ne peut pas se retirer lui-même.</li>
+<li><b>Nouvelles routes</b> (rôle AGENCY) : <code>POST /agencies/drivers/:userId/fund</code> (agence → chauffeur) et <code>/withdraw</code> (chauffeur → agence). Transferts <b>atomiques</b> (débit conditionnel au solde), <b>idempotents</b> (en-tête <code>Idempotency-Key</code>), écritures des deux côtés avec <code>kind = AGENCY_TRANSFER</code>, notification au chauffeur, sans frais. Chauffeur de la flotte uniquement, agence activée obligatoire.</li>
+<li><code>GET /agencies/dashboard</code> renvoie en plus <code>walletBalance</code> (agence) et <code>balance</code> par chauffeur.</li>
+</ul>
+
+<h2>3. Recharge FedaPay (<code>wallet/</code>)</h2>
+<h3>3.1 Variables d'environnement (Render)</h3>
+<table>
+<tr><th>Variable</th><th>Rôle</th></tr>
+<tr><td><code>FEDAPAY_SECRET_KEY</code></td><td>clé secrète du compte (test aujourd'hui ; live quand l'entreprise sera validée)</td></tr>
+<tr><td><code>FEDAPAY_ENV</code></td><td><code>sandbox</code> ou <code>live</code> — doit correspondre à la clé</td></tr>
+<tr><td><code>FEDAPAY_CALLBACK_URL</code></td><td><code>https://azo-backend.onrender.com/wallet/recharge/return</code> (page affichée à la fin du paiement ; le mobile intercepte cette adresse)</td></tr>
+<tr><td><code>FEDAPAY_WEBHOOK_SECRET</code></td><td>secret <code>wh_…</code> du webhook (propre à chaque mode) : active la vérification de signature. Webhook à créer vers <code>/wallet/recharge/callback</code></td></tr>
+</table>
+<p>Ces variables <b>ne sont pas encore sur Render</b> : elles existent seulement dans le <code>.env</code> local de Sergio (sandbox).</p>
+<h3>3.2 Correctifs et fonctions</h3>
+<ul>
+<li><b>Bug webhook corrigé :</b> le code lisait <code>id</code> au premier niveau du corps, qui est l'identifiant de l'<b>événement</b> FedaPay ; la transaction est dans <code>entity.id</code> (<code>fedaPayTransactionId()</code>). Les événements hors <code>transaction.*</code> sont ignorés (200). L'appel manuel <code>{ "id": … }</code> reste accepté.</li>
+<li><b>Signature :</b> si <code>FEDAPAY_WEBHOOK_SECRET</code> est défini, <code>X-FEDAPAY-SIGNATURE</code> est vérifié avec <code>Webhook.constructEvent</code> du SDK (401 sinon) ; <code>main.ts</code> conserve le corps brut (<code>verify</code> du parseur JSON → <code>req.rawBody</code>). Dans tous les cas le statut est relu auprès de FedaPay avant de créditer.</li>
+<li><b>Page de retour :</b> <code>GET /wallet/recharge/return</code> (HTML minimal, publique).</li>
+<li><b>Minimum de recharge : 300 FCFA</b> (<code>MIN_RECHARGE</code>, DTO + <code>initRecharge</code>, avant tout appel FedaPay).</li>
+<li><b>Crédit unique garanti :</b> <code>confirmPendingRecharge</code> fait <code>updateMany(status PENDING → CONFIRMED)</code> et l'incrément du solde dans la <b>même transaction</b> ; webhook et contrôle automatique peuvent arriver ensemble sans double crédit (l'ancienne version, non atomique, pouvait créditer deux fois).</li>
+<li><b>Contrôle automatique</b> <code>reconcilePendingRecharges</code> : appelé par <code>GET /wallet</code> et <code>GET /wallet/transactions</code>, il relit chez FedaPay les recharges <code>PENDING</code> (48 h, 5 maximum) : approuvée → crédit ; refusée / annulée / expirée → <code>FAILED</code>. Au plus un passage toutes les 1,5 s par utilisateur, ne lève jamais d'erreur. <b>Le solde se met donc à jour même si le webhook n'arrive jamais</b> (serveur en veille, adresse périmée).</li>
+</ul>
+
+<h2>4. Nouveaux modules et règles</h2>
+<h3>4.1 Fonctions « autour de la course » (<code>rides/ride-extras.service.ts</code>)</h3>
+<table>
+<tr><th>Route</th><th>Rôle</th><th>Notes</th></tr>
+<tr><td><code>GET /rides/earnings?period=day|week|month</code></td><td>DRIVER</td><td>Gains par jour local (<b>UTC+1</b>), totaux, commission, moyenne par jour travaillé, meilleur jour</td></tr>
+<tr><td><code>GET /rides/:id/receipt</code></td><td>client ou chauffeur de la course</td><td>Course terminée ; commission et net visibles du chauffeur seulement</td></tr>
+<tr><td><code>POST /rides/:id/sos</code> <code>{lat?, lng?}</code></td><td>participant</td><td>Course MATCHED/ARRIVED/IN_PROGRESS ; notifie tous les ADMIN et l'autre participant (push). Pas de table dédiée (notifications uniquement)</td></tr>
+<tr><td><code>POST /rides/:id/rate-client</code> <code>{stars}</code></td><td>DRIVER</td><td>Une fois, dans les 48 h après la fin</td></tr>
+<tr><td><code>GET /rides/standing</code></td><td>tous</td><td>Note récente et situation (voir §4.7)</td></tr>
+</table>
+<p><code>GET /rides/pending</code> ajoute <code>client.rating / ratedCount / rides</code> (calcul groupé, échec toléré : radar sans chiffres).</p>
+
+<h3>4.2 Adresses enregistrées (<code>places/saved-places.module.ts</code>)</h3>
+<p>Modèle <code>SavedPlace</code>. <code>GET /places/saved</code>, <code>PUT /places/saved/HOME|WORK</code> (remplace), <code>POST /places/saved</code> (autres, <b>10 maximum</b>), <code>DELETE /places/saved/:id</code>. <code>GET /places/suggestions</code> : destinations fréquentes des 90 derniers jours (courses annulées exclues, adresses déjà enregistrées ou à moins de 100 m exclues).</p>
+
+<h3>4.3 Assistance (<code>support/support.module.ts</code>)</h3>
+<p>Modèles <code>SupportTicket</code> (catégorie, sujet, statut OPEN / ANSWERED / CLOSED, course liée vérifiée) et <code>SupportMessage</code>. Utilisateur : <code>POST/GET /support/tickets</code>, <code>GET /support/tickets/:id</code>, <code>POST /support/tickets/:id/messages</code> (5 demandes ouvertes maximum). Admin : <code>GET /admin/support/tickets?status=</code>, <code>GET …/:id</code>, <code>POST …/:id/reply</code>, <code>POST …/:id/close</code>. Chaque événement notifie l'autre partie (push).</p>
+
+<h3>4.4 Courses programmées (<code>rides/schedule.ts</code>, <code>scheduled-rides.task.ts</code>)</h3>
+<ul>
+<li><code>POST /rides</code> accepte <code>scheduledAt</code> (ISO) : <b>30 min à 7 jours</b> d'avance. Colonnes <code>Ride.scheduledAt</code> et <code>scheduledReleasedAt</code>.</li>
+<li>Pas de diffusion à la création : la demande est <b>ouverte aux chauffeurs 15 min avant l'heure</b> (<code>releaseDueScheduledRides</code>, écriture conditionnelle à <code>scheduledReleasedAt: null</code> → jamais publiée deux fois).</li>
+<li>Tant qu'elle n'est pas ouverte : invisible du radar (<code>pending</code>, <code>pendingSummary</code>), <b>refus d'<code>accept</code></b>, jamais expirée. Après ouverture, le délai d'attente compte depuis l'ouverture (<code>withReleaseAsCreation</code>).</li>
+<li>Tâche toutes les 30 s (premier passage 5 s après le démarrage) <b>et balayage « paresseux »</b> (au plus toutes les 15 s) déclenché par <code>pending</code>, <code>pendingSummary</code> et <code>findOne</code> : filet de sécurité quand Render dormait. Sans appel et sans keep-alive, aucune notification ne part à l'heure exacte pendant la veille.</li>
+</ul>
+
+<h3>4.5 Location (<code>rental/rental.module.ts</code>) — <b>changement de contrat</b></h3>
+<p>Modèle <code>RentalVehicle</code> (2 véhicules d'origine insérés par la migration). Le prix est <b>calculé par le serveur</b> : <code>POST /rentals</code> attend maintenant <code>{ vehicleId, formula: "4h"|"day"|"week", days? }</code> et ignore tout prix envoyé. Une formule sans prix n'est pas proposée. <code>GET /rentals/catalog</code> renvoie les formules disponibles. Admin : <code>GET/POST /admin/rentals/vehicles</code>, <code>PUT /admin/rentals/vehicles/:id</code> (dont <code>active: false</code>). <b>Les anciennes versions de l'application (corps <code>{vehicleModel, formula, pricePerDay}</code>) ne peuvent plus réserver.</b> Pas de paiement ni de statut géré.</p>
+
+<h3>4.6 Notifications traduites (<code>notifications/notification-texts.ts</code>)</h3>
+<p><code>NotificationsService.push</code> lit <code>User.language</code> quand un message a <code>titleKey</code>/<code>bodyKey</code> et enregistre/pousse titre et corps <b>dans la langue de l'utilisateur</b> (fr, en, es, de ; 45 messages). Le français et les messages sans traduction gardent le texte de l'appelant ; <code>NOTIFICATION_CHAT_MESSAGE</code> n'est volontairement pas traduit. Nouvelles clés ajoutées : SOS, assistance, programmation, agences (rattachement, fin, activation, recharge/retrait). Syntaxe <code>{param}</code> et segments conditionnels <code>[[ … {param} ]]</code>. <b>Pas encore traduites :</b> les notifications sans clé (décisions de dossier prestataire, livraison, etc.).</p>
+
+<h3>4.7 Règle de notation (<code>rides/standing.ts</code>) — <b>seuils à valider</b></h3>
+<table>
+<tr><th>Paramètre</th><th>Valeur (modifiable dans <code>RATING_POLICY</code>)</th></tr>
+<tr><td>Fenêtre</td><td>30 derniers jours (compte rétabli tout seul quand les avis vieillissent)</td></tr>
+<tr><td>Minimum d'avis</td><td>5 (en dessous : aucune règle)</td></tr>
+<tr><td>Avertissement</td><td>moyenne &lt; 3,5</td></tr>
+<tr><td>Restriction</td><td>moyenne &lt; 3,0 : un <b>client</b> ne peut plus créer de course (<code>403 CLIENT_RATING_TOO_LOW</code>), un <b>chauffeur</b> ne peut plus en accepter (<code>403 DRIVER_RATING_TOO_LOW</code>)</td></tr>
+</table>
+<p>Clients : notes des chauffeurs (<code>Ride.clientRating</code>) ; chauffeurs : notes des clients (<code>Ride.rating</code>, via <code>completedAt</code>). Panne de calcul = on laisse passer. <b>Recours admin :</b> <code>POST /admin/users/:id/ratings-reset</code> (colonne <code>User.ratingResetAt</code> : les avis antérieurs sont ignorés).</p>
+
+<h2>5. Base de données</h2>
+<table>
+<tr><th>Migration</th><th>Contenu</th></tr>
+<tr><td><code>20261013100000_agency_levels_accounts</code></td><td>défaut <code>Agency.maxAccounts</code> = 10 ; mise à jour des agences existantes (10 / 25 / 100 / 1 000)</td></tr>
+<tr><td><code>20261013120000_places_support_rental_schedule</code></td><td>tables <code>SavedPlace</code>, <code>SupportTicket</code>, <code>SupportMessage</code>, <code>RentalVehicle</code> (+ 2 véhicules d'origine) ; colonnes <code>Ride.clientRating/clientRatedAt/scheduledAt/scheduledReleasedAt</code>, <code>RentalBooking.vehicleId/totalPrice</code></td></tr>
+<tr><td><code>20261013130000_rating_reset</code></td><td><code>User.ratingResetAt</code></td></tr>
+</table>
+<p>Toutes les instructions utilisent <code>IF NOT EXISTS</code> / garde <code>duplicate_object</code> (rejouables). Les trois migrations d'hier (<code>offer_seen</code>, <code>offer_history</code>, <code>stop_accepted</code>) sont aussi à appliquer sur toute base qui n'est pas Render.</p>
+
+<h2>6. Outils et tests</h2>
+<ul>
+<li><b>Scripts :</b> <code>scripts/create-admin.js &lt;numéro&gt; [--allow-remote]</code> (crée ou promeut un ADMIN ; refuse une base non locale sans l'option) ; <code>scripts/seed-agency-test.js</code> (agence de test Pro non activée + 2 conducteurs, base locale uniquement).</li>
+<li><b>Tests :</b> 23 suites, <b>271 tests</b> passent. Nouveaux : agences (propriétaire, transferts, idempotence), webhook (<code>entity.id</code>, signature, événements ignorés), recharge minimale, contrôle automatique et double crédit, gains / reçu / SOS, adresses et suggestions, assistance, location, courses programmées, note du client, règle de notation, catalogue de notifications (4 langues, mêmes paramètres). Les 7 tests qui échouaient depuis le début sont corrigés (grille Zem électrique, pseudo du client).</li>
+</ul>
+
+<h2>7. Déploiement</h2>
+<ul>
+<li>Render applique <code>prisma migrate deploy</code> à chaque démarrage (<code>render:start</code>) : les migrations passent seules.</li>
+<li>Compte <b>administrateur de production : non créé</b> par moi (la base de production n'est pas dans le <code>.env</code> local). Voir <code>scripts/create-admin.js</code> avec l'adresse externe de la base et <code>--allow-remote</code>, ou une création au démarrage pilotée par variable si vous la souhaitez.</li>
+<li>Le <b>mode live FedaPay</b> demande : clé live, <code>FEDAPAY_ENV=live</code>, <b>nouveau webhook et nouveau secret</b> dans le compte live (les secrets du mode test ne marchent pas en live).</li>
+</ul>
+
+<h2>8. Points d'attention et décisions pour Dorin</h2>
+<table>
+<tr><th>Sujet</th><th>Pourquoi</th></tr>
+<tr><td>Seuils de notation</td><td>Choisis par défaut (30 j, 5 avis, 3,5 / 3,0) : à valider avec le métier avant de s'y fier</td></tr>
+<tr><td>Paiement en espèces</td><td>Toujours absent : demande des règles de commission et de plafond de dette</td></tr>
+<tr><td>Keep-alive Render</td><td>Sans appel régulier (ou plan payant), les courses programmées ne partent à l'heure que si le serveur est réveillé</td></tr>
+<tr><td>Location</td><td>Sans paiement ; contrat changé (§4.5)</td></tr>
+<tr><td>SOS</td><td>Notification seulement (pas de table d'alertes ni d'écran admin dédié)</td></tr>
+<tr><td>Notifications</td><td>Une partie reste en français faute de clés</td></tr>
+<tr><td>Poste de dev</td><td><code>prisma generate</code> échoue (EPERM) tant que le serveur local tourne : arrêter le serveur avant de régénérer</td></tr>
+</table>
+
+<h2>9. Commits du jour</h2>
+<table>
+<tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>655f96e1</code></td><td>Grille d'agence, transferts agence ↔ chauffeurs, propriétaire hors flotte</td></tr>
+<tr><td><code>25b305ec</code></td><td>Webhook FedaPay corrigé et signé, minimum 300 F, page de retour, noms des niveaux</td></tr>
+<tr><td><code>5f313b4d</code></td><td>Gains, reçu, SOS, adresses, assistance, location, programmation, note du client, règle de notation, notifications traduites</td></tr>
+<tr><td><code>8099fae5</code></td><td>Contrôle automatique des recharges, crédit unique, script de création d'administrateur</td></tr>
+</table>
+<div class="foot">Rapport rédigé le 13 octobre 2026 à partir de l'historique Git et du travail de la journée. Le commit <code>a8e5aea5</code> (mobile) n'est pas détaillé ici.</div>
+</body></html>

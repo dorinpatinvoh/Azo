@@ -1,0 +1,52 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — travail de l'équipe avant reprise</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Tout ce que ton binôme a construit côté serveur (<code>azo-backend</code>) avant que Sergio ne reprenne le backend</p><span class="tag">30 septembre → 12 octobre 2026 · environ 70 commits</span></div>
+
+<h2>1. En résumé</h2>
+<p>Entre le 30 septembre et le 12 octobre 2026, le serveur est passé d'un projet vide à une plateforme complète : <b>connexion par code SMS</b>, <b>dossiers prestataires avec pièces d'identité</b>, <b>tarification</b> Zem et voitures, <b>mise en relation par proximité</b>, <b>suivi de course en temps réel</b>, <b>paiement et portefeuille</b> (dont FedaPay), <b>notifications poussées</b>, <b>langues</b>, <b>profil, messagerie et pourboire</b>. Il est hébergé sur Render avec une base PostgreSQL.</p>
+<p>Les commits sont signés de plusieurs identités (<code>dorinpatinvoh</code>, <code>PATINVOH</code>, <code>Esther.W</code>, <code>charafath</code>) : ils correspondent à l'équipe du binôme et sont regroupés ici sans distinction.</p>
+<div class="box warn"><b>Lecture :</b> ce rapport est reconstitué à partir de l'historique Git (messages de commits) et des rapports déjà présents dans le dépôt. Les correspondances avec les fichiers <code>DEMANDE_BACKEND_*.md</code> sont déduites des sujets de commits.</div>
+
+<h2>2. Chronologie</h2>
+<table>
+<tr><th>Période</th><th>Réalisations</th></tr>
+<tr><td>30 sept. – 2 oct.</td><td>Démarrage du projet. Côté chauffeur réel : course, GPS, paiement, annulation. Dossier prestataire (validation par l'administrateur, rôle accordé seulement après validation). Dépôt réel des photos (pièces obligatoires). Espaces Agence / Coursier / Admin. Numéros béninois à 10 chiffres. Grille officielle des agences. Données de démonstration réalistes de Cotonou. Préparation du déploiement Render et conservation des photos dans PostgreSQL.</td></tr>
+<tr><td>3 oct.</td><td>Inscription Agence enrichie (représentant, IFU 13 chiffres, RCCM, forme juridique, siège, MoMo Pro). « Volet 1 Sécurité » : chat dans l'application, anonymisation, code bouclier à 4 chiffres.</td></tr>
+<tr><td>5 – 6 oct.</td><td><b>Tarification</b> : gammes de véhicules, niveaux d'agence, profils prestataires ; filière Zem (essence / électrique) séparée des voitures ; paliers et bases propres à chaque type ; frais de retrait. Suppression des numéros de test sauf l'administrateur. Documentation des parcours et tarifs. Sonde <code>/health</code> pour vérifier la version déployée. <b>Mise en relation</b> : radar par proximité, expiration des demandes, notifications. Parcours d'arrivée du chauffeur avec notifications poussées.</td></tr>
+<tr><td>7 oct.</td><td>Confirmation du client avant le paiement final (règlement sécurisé, délai limite, confirmation sans double paiement). Arrivée du chauffeur rendue fiable. Module de tarification manquant ajouté. Géocodage des lieux avec repli local. Nombreux correctifs de déploiement Render (Prisma 5.22, Node 20, scripts de build et de démarrage).</td></tr>
+<tr><td>8 – 10 oct.</td><td>Rapport d'onboarding et rapport backend. Suivi cartographique OSM et position du chauffeur en direct. <b>Code d'arrivée</b> demandé par le Zem. Pseudo du client validé et affiché dans le radar du Zem. <b>Code SMS</b> valable 1 minute, 3 essais par heure et par numéro. Positions en direct du client et du Zem.</td></tr>
+<tr><td>11 oct.</td><td><b>Inscription client sécurisée</b>. <b>Tarification à la distance</b>, accord bilatéral d'arrêt de course et compteur kilométrique. Moto électrique : base 120 F et paliers 60/50/45 F/km.</td></tr>
+<tr><td>12 oct. (avant la reprise)</td><td>Intégration <b>FedaPay</b> et séparation du module portefeuille. Limitation de fréquence du gateway (400 ms) et cache de contexte de course. <b>Langue de l'utilisateur</b>, notifications et libellés de transactions traduits. Offres avec expiration, libellés de lieux, noms d'affichage. <b>Profil, messagerie de course, pourboire</b>. Radar classé du plus récent au plus ancien. Le code d'arrivée accepte les noms <code>pin</code> ou <code>code</code>.</td></tr>
+</table>
+
+<h2>3. Les demandes du mobile traitées par le binôme</h2>
+<p>Ces fichiers <code>DEMANDE_BACKEND_*.md</code> ont été écrits pour le binôme, qui les a livrés avant la reprise :</p>
+<table>
+<tr><th>Demande</th><th>Ce qui a été livré</th></tr>
+<tr><td>Inscription</td><td>Inscription client sécurisée ; correctifs d'inscription.</td></tr>
+<tr><td>Suivi de position / suivi en temps réel</td><td>Positions en direct des participants ; gateway temps réel avec limitation de fréquence et cache de contexte.</td></tr>
+<tr><td>Prix au kilomètre et cartes</td><td>Tarification à la distance, compteur kilométrique, arrêt d'un commun accord.</td></tr>
+<tr><td>Radar, profil du Zem et carte</td><td>Compteur radar, profil public du Zem, routes d'approbation / refus / retrait de la proposition, expiration des offres.</td></tr>
+<tr><td>Langue de l'utilisateur</td><td>Langue enregistrée côté serveur ; notifications et libellés de transactions traduits ; code d'erreur stable dans les réponses.</td></tr>
+<tr><td>Profil, messagerie et pourboire</td><td>Modification du profil, messages persistants, compteur de non-lus, pourboire avec clé d'idempotence, recharge FedaPay.</td></tr>
+</table>
+
+<h2>4. Ce que la plateforme faisait à la fin de cette phase</h2>
+<ul>
+<li><b>Comptes :</b> connexion par code SMS (1 minute de validité, 3 essais par heure et par numéro), blocage immédiat d'un compte suspendu.</li>
+<li><b>Prestataires :</b> dossier avec photos, validation par l'administrateur, journal d'audit de chaque étape, espaces Agence / Coursier / Admin.</li>
+<li><b>Tarifs :</b> une seule source (<code>tarification.json</code>) ; Zem essence et électrique, voitures Gazelle / Koala / Léopard ; commissions et frais de retrait par profil.</li>
+<li><b>Course :</b> demande, radar par proximité, acceptation, arrivée, code de départ, course, code d'arrivée, paiement du portefeuille vers le Zem, annulation, arrêt anticipé d'un commun accord.</li>
+<li><b>Temps réel :</b> position du Zem et du client, chat de course, mises à jour de statut.</li>
+<li><b>Argent :</b> portefeuille AZƆ̀ Pay, recharge FedaPay, historique des transactions.</li>
+<li><b>Exploitation :</b> déploiement Render, sonde <code>/health</code>, migrations appliquées au démarrage, données de démonstration.</li>
+</ul>
+
+<h2>5. Points laissés à la reprise</h2>
+<ul>
+<li>Le Zem pouvait rester bloqué sur « 0 s » quand la proposition se terminait (traité ensuite par Sergio).</li>
+<li>Le client n'était pas alerté en temps réel quand un Zem acceptait (traité ensuite par Sergio).</li>
+<li>7 tests automatiques échouaient (tarif électrique et pseudo du client) : corrigés ensuite.</li>
+<li>Aucune route <code>GET /pricing</code> côté serveur.</li>
+</ul>
+<div class="foot">Rapport établi le 12 octobre 2026 à partir de l'historique Git du dépôt.</div>
+</body></html>

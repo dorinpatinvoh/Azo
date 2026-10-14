@@ -102,23 +102,12 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
   const firstNameRef = useRef<TextInput | null>(null);
   const npiRef = useRef<TextInput | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
-  const npiBlockRef = useRef<View | null>(null);
 
-  // Le clavier recouvre le bas de l'écran : à la saisie du NPI on fait remonter le champ pour que
-  // ce qu'on tape reste visible. `measureLayout` donne la position du bloc dans le contenu défilant.
+  // Le clavier recouvre le bas de l'écran : à la saisie du NPI on fait défiler jusqu'en bas pour que ce qu'on tape reste
+  // visible (le NPI est le dernier champ du formulaire). On n'utilise plus `measureLayout` : sur cette version de React Native
+  // il exige une référence à un composant natif et affichait l'avertissement « ref.measureLayout must be called with a ref to a native component ».
   const scrollToNpi = () => {
-    const scroll = scrollRef.current;
-    const block = npiBlockRef.current;
-    const inner = scroll?.getInnerViewNode?.();
-    if (!scroll || !block || !inner) {
-      scroll?.scrollToEnd({ animated: true });
-      return;
-    }
-    block.measureLayout(
-      inner,
-      (_x, y) => scroll.scrollTo({ y: Math.max(0, y - spacing.lg), animated: true }),
-      () => scroll.scrollToEnd({ animated: true })
-    );
+    scrollRef.current?.scrollToEnd({ animated: true });
   };
   const [sending, setSending] = useState(false);
   const inputsRef = useRef<Array<TextInput | null>>([]);
@@ -543,7 +532,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
 
               {/* `collapsable={false}` : Android ne doit pas supprimer cette vue, sinon sa position
                   n'est pas mesurable pour la faire remonter au-dessus du clavier */}
-              <View ref={npiBlockRef} collapsable={false}>
+              <View>
                 <View style={[styles.labelRow, styles.fieldGap]}>
                   <Text style={styles.label}>{t("auth.field.npi")}</Text>
                   <Text style={styles.digitCount}>

@@ -1,0 +1,84 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 13 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">13 octobre 2026 · 5 commits poussés sur main</span></div>
+
+<h2>1. En résumé</h2>
+<p>Aujourd'hui, le mobile a gagné <b>l'espace agence complet</b>, la <b>recharge FedaPay intégrée à l'application</b> avec crédit automatique, <b>neuf fonctions issues de l'analyse des concurrents</b> (gains, reçu, SOS, adresses, support, courses programmées, location, notation du client, avertissements) et la <b>voix d'inscription en langues locales</b> (Fon, Yoruba). Tout compile (<code>tsc</code> sans erreur).</p>
+<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Pour voir les nouveautés il faut relancer Expo (ou reconstruire l'APK : le build EAS est bloqué jusqu'au 1<sup>er</sup> novembre et le build local bute sur le NDK, voir §8). Le backend local doit aussi être à jour (<code>prisma generate</code> puis <code>prisma migrate deploy</code>, voir le rapport backend).</div>
+
+<h2>2. Espace agence</h2>
+<ul>
+<li><b>Écran traduit</b> en français, anglais, espagnol, allemand (62 textes <code>ag.*</code>) ; les montants suivent la langue.</li>
+<li><b>Recharge et retrait des chauffeurs :</b> une icône portefeuille sur chaque ligne ouvre une fenêtre (Recharger / Retirer, montant). Le <b>solde de l'agence</b> et celui de <b>chaque chauffeur</b> s'affichent. Une clé d'idempotence évite le double envoi.</li>
+<li><b>Bouton Portefeuille</b> dans l'en-tête de l'agence (recharge FedaPay) et <b>bouton Assistance</b>. Le propriétaire n'est plus compté comme chauffeur.</li>
+<li><b>Inscription agence :</b> l'étape 1 propose directement les niveaux <b>Pro, Silver, Or, Diamant</b> (tarifs lus dans la grille partagée) à la place des anciens « types d'agence » ; la section « Formule officielle » devenue redondante est supprimée. L'écran admin affiche « Niveau d'agence ».</li>
+<li>Bouton <b>Réessayer</b> sur l'erreur de chargement.</li>
+</ul>
+
+<h2>3. Recharge FedaPay</h2>
+<table>
+<tr><th>Avant</th><th>Maintenant</th></tr>
+<tr><td>Montant fixe de 5 000 F</td><td>Fenêtre de choix : 500 / 1 000 / 2 000 / 5 000 / 10 000 F ou montant libre, <b>minimum 300 F</b> (config <code>config/wallet.ts</code>)</td></tr>
+<tr><td>Paiement dans le navigateur du téléphone</td><td>Page FedaPay <b>dans l'application</b> (<code>PaymentWebView</code>, sans cercle de chargement), fermeture automatique à la fin</td></tr>
+<tr><td>Solde jamais rafraîchi si le webhook n'arrivait pas</td><td>Suivi de <b>la transaction précise</b> (numéro FedaPay) toutes les 2 s ; le serveur contrôle FedaPay à chaque lecture. Au crédit : fenêtre fermée, popup « Compte rechargé +X FCFA », solde à jour</td></tr>
+<tr><td>Popup parfois trop tôt (comparaison de soldes)</td><td>Plus de comparaison de soldes : un autre crédit ne fausse plus le suivi. Paiement refusé/annulé : message clair</td></tr>
+<tr><td>Boutons sans action (Transfert, Sécurité, Gérer, Lier, Voir tout)</td><td>Retirés ; « Historique » fait défiler jusqu'à l'activité. Une recharge non confirmée s'affiche « (en attente) »</td></tr>
+</table>
+<p>L'accueil rafraîchit aussi le solde toutes les 15 s et au retour dans l'application.</p>
+
+<h2>4. Fonctions issues de l'analyse des concurrents</h2>
+<table>
+<tr><th>Fonction</th><th>Ce que voit l'utilisateur</th></tr>
+<tr><td>Gains du Zem</td><td>Carte « Mes gains » : jour / 7 jours / 30 jours, histogramme, moyenne par jour travaillé, meilleur jour, commission (<code>EarningsCard</code>)</td></tr>
+<tr><td>Reçu</td><td>Bouton « Reçu » sur chaque course terminée : texte partageable (WhatsApp, SMS…). Le client ne voit pas la commission, le chauffeur voit son net</td></tr>
+<tr><td>SOS complet</td><td>Trois actions : appeler les secours, <b>prévenir AZƆ̀ avec la position</b>, <b>SMS au contact d'urgence</b> avec la position (l'utilisateur appuie sur envoyer)</td></tr>
+<tr><td>Adresses et suggestions</td><td>Domicile/Travail <b>synchronisés avec le serveur</b> (suivent le client d'un téléphone à l'autre) ; « destinations fréquentes » d'après l'historique</td></tr>
+<tr><td>Course programmée</td><td>Choix « Maintenant / Programmer » (jour puis heure, 30 min à 7 jours) ; le suivi affiche « Course programmée le … » (<code>SchedulePicker</code>)</td></tr>
+<tr><td>Location</td><td>Catalogue et <b>prix venant du serveur</b> (formules 4 h / jour / semaine) ; fausses informations retirées</td></tr>
+<tr><td>Note du client</td><td>Après la course, le Zem note son client (1-5) ; le radar affiche la note moyenne, le nombre d'avis et de courses du client (<code>RateClientModal</code>)</td></tr>
+<tr><td>Avertissement / restriction</td><td>Bandeau orange (note récente basse) ou rouge (compte restreint) sur l'accueil client et l'espace Zem ; messages d'erreur traduits à la demande refusée</td></tr>
+<tr><td>Assistance</td><td>Écran de demandes (liste, nouvelle demande, conversation) pour client, Zem et agence ; écran admin « Support » (réponse, clôture) ; entrées depuis l'aide, l'espace Zem, l'espace agence et l'admin</td></tr>
+</table>
+
+<h2>5. Voix d'inscription en langues locales</h2>
+<ul>
+<li>Nouvelle section « <b>Voix en langue locale</b> » dans « Choisis ta langue » : Fɔ̀ngbè (Fon) et Yorùbá. <b>L'écran reste en français</b>, seule la voix change.</li>
+<li>Pas de synthèse vocale possible dans ces langues : la voix lit un <b>enregistrement</b> (6 messages). S'il manque, <b>repli en français</b> et l'écran le dit. Les alertes (texte variable) sont lues en français.</li>
+<li>Technique : <code>expo-audio</code> ajouté ; manifeste généré par <code>npm run voice:manifest</code> à partir de <code>assets/voice/&lt;langue&gt;/*.mp3</code> ; la langue de la voix est séparée de celle de l'écran (<code>voiceLang</code> dans le contexte i18n).</li>
+<li><b>À faire :</b> faire traduire puis enregistrer les 6 messages par un locuteur natif — texte et consignes dans <code>PROJECT_SUMMARY/SCRIPT_VOIX_LANGUES_LOCALES.md</code>. Aucune traduction n'a été proposée (qualité trop incertaine).</li>
+</ul>
+
+<h2>6. Environnement de test</h2>
+<ul>
+<li><b>Expo Go :</b> <code>exp://&lt;IP du PC&gt;:8081</code>, avec <code>EXPO_PUBLIC_API_URL</code> vers le backend local ou Render. Les notifications poussées ne marchent pas dans Expo Go.</li>
+<li><b>Comptes de test locaux :</b> admin <code>01 90 00 00 00</code> ; agence (gérant) <code>0197000100</code>, conducteurs <code>0197000101</code> et <code>0197000102</code> (script <code>seed-agency-test.js</code>, base locale seulement).</li>
+<li><b>Paiement de test FedaPay (sandbox) :</b> MTN Bénin <code>66000001</code> (succès) / <code>66000000</code> (échec), Moov <code>64000001</code> / <code>64000000</code>. Montant minimum 300 F.</li>
+</ul>
+
+<h2>7. Qualité et limites</h2>
+<ul>
+<li><b>Vérifié :</b> compilation TypeScript sans erreur ; clés de traduction identiques dans les 4 langues (type <code>Record&lt;MessageKey, string&gt;</code>).</li>
+<li><b>Non vérifié sur téléphone :</b> les nouveaux écrans, la fenêtre de paiement, la lecture audio des enregistrements (aucun fichier encore).</li>
+<li>Les libellés d'écrans anciens (Zem, admin) restent en grande partie en français en dur ; les nouvelles fonctions sont traduites.</li>
+<li>Le support n'affiche ni numéro ni e-mail de contact (aucun inventé).</li>
+</ul>
+
+<h2>8. Reste à faire côté front</h2>
+<table>
+<tr><th>Sujet</th><th>État</th></tr>
+<tr><td>Build APK</td><td>EAS : quota gratuit épuisé jusqu'au 1<sup>er</sup> novembre (plan Starter 19 $/mois sinon). Build local : le serveur <code>dl.google.com</code> est lent chez toi ; avec un miroir Maven (que tu as ajouté à la main dans <code>android/build.gradle</code>) il passe jusqu'au NDK : le projet réclame <code>27.1.12297006</code>, absent du poste (installés : 27.0.12077973 et 28.2.13676358)</td></tr>
+<tr><td>Enregistrements Fon / Yoruba</td><td>À produire par un locuteur natif, puis <code>npm run voice:manifest</code> et reconstruction</td></tr>
+<tr><td>Pré-remplir FedaPay</td><td>Nom, prénom, téléphone et e-mail du client (le reçu part aujourd'hui vers une adresse factice <code>…@azo.placeholder</code>)</td></tr>
+<tr><td>Traductions restantes</td><td>Écrans Zem et admin ; notifications sans clé côté serveur</td></tr>
+<tr><td>Décisions métier en attente</td><td>Paiement en espèces (commission, plafond de dette), transferts entre utilisateurs, codes promo et parrainage, cashback réel, paiement de la location</td></tr>
+</table>
+
+<h2>9. Commits du jour</h2>
+<table>
+<tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>a8e5aea5</code></td><td>Lot mobile consolidé : parcours Zem/client, 4 langues, profil/messages/pourboire, arrêt avec code, espace agence</td></tr>
+<tr><td><code>25b305ec</code></td><td>Recharge FedaPay dans l'app, minimum 300 F, niveaux d'agence à l'inscription</td></tr>
+<tr><td><code>5f313b4d</code></td><td>Gains, reçu, SOS, adresses, support, location, programmation, notation, avertissements</td></tr>
+<tr><td><code>8099fae5</code></td><td>Crédit automatique du solde, voix en langues locales, retrait du cercle de chargement</td></tr>
+</table>
+<div class="foot">Rapport rédigé le 13 octobre 2026 à partir de l'historique Git et du travail de la journée. Les commits de la matinée du 13 octobre (12 h) regroupent aussi des travaux commencés la veille.</div>
+</body></html>

@@ -1,0 +1,72 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport mobile — 12 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport mobile — AZƆ̀</h1><p>Travail réalisé par Sergio sur l'application mobile (<code>azo-mobile</code>)</p><span class="tag">12 octobre 2026</span></div>
+
+<h2>1. En résumé</h2>
+<p>Aujourd'hui, l'application a été rendue <b>multilingue</b>, le <b>parcours Zem ↔ client</b> a été refait de bout en bout (radar, carte, profil du Zem, popup de proposition, fin de proposition, arrêt anticipé avec code), et les écrans <b>Profil / Messages / Pourboire</b> ont été ajoutés. Plusieurs fonctions ont été écrites <b>avant</b> la livraison du serveur correspondant, puis raccordées au serveur quand il a été disponible.</p>
+<div class="box warn"><b>À savoir :</b> ce rapport décrit du code qui compile (<code>tsc</code> sans erreur). Il n'a <b>pas encore été testé sur deux téléphones réels</b>. Les changements mobiles ne sont pas encore commités dans Git. Le dernier APK n'a pas pu être construit : le quota gratuit EAS est épuisé jusqu'au 1<sup>er</sup> novembre 2026.</div>
+
+<h2>2. Langues et accessibilité</h2>
+<ul>
+<li><b>4 langues</b> : français, anglais, espagnol, allemand — plus de <b>530 textes</b> par langue, avec vérification automatique qu'aucune clé ne manque.</li>
+<li>Tout le parcours client est traduit : commande de course, suivi en direct, courses, portefeuille, notifications, chat, aide, SOS, partage de trajet, lieux favoris.</li>
+<li>Les messages d'erreur du serveur sont traduits à partir de leur code stable ; la langue choisie est envoyée au serveur (en-tête <code>Accept-Language</code> et <code>PATCH /users/me/language</code>).</li>
+<li><b>Assistance vocale</b> à l'inscription : l'utilisateur peut la <b>mettre en pause</b>.</li>
+</ul>
+
+<h2>3. Profil, messages et petites fonctions</h2>
+<ul>
+<li><b>Profil redesigné</b> : toucher le profil, la photo ou l'avatar ouvre un panneau pour modifier l'application (avatar, langue, informations).</li>
+<li><b>Informations personnelles</b> modifiables (nom, e-mail, contact d'urgence, changement de téléphone avec confirmation, correction d'identité dans le délai autorisé).</li>
+<li><b>Onglet Messages</b> : conversations de courses, compteur de non-lus, messages persistants.</li>
+<li><b>Pourboire</b> après la course (montants proposés, envoi protégé contre les doubles envois).</li>
+<li><b>Barre du bas</b> réduite (5 onglets, plus compacte).</li>
+<li>Petites fonctions inspirées de l'analyse Yango / Gozem réalisables sans serveur (SOS, partage, lieux enregistrés, aide).</li>
+<li><b>Recharge FedaPay</b> raccordée au lien de paiement fourni par le serveur.</li>
+</ul>
+
+<h2>4. « Itinéraire routier indisponible » : cause et correction</h2>
+<p><b>Cause :</b> un seul serveur de calcul d'itinéraire (le serveur de démonstration OSRM, limité en débit) ; quand il tombait, l'écran affichait « itinéraire indisponible ». <b>Correction :</b> plusieurs serveurs essayés dans l'ordre, cache des itinéraires et calcul de repli.</p>
+
+<h2>5. Parcours du Zem</h2>
+<table>
+<tr><th>Fonction</th><th>Ce que voit l'utilisateur</th></tr>
+<tr><td>Radar</td><td>Nombre de clients disponibles autour (jusqu'à 10 km), carte des clients proches, demandes classées de la plus récente à la plus ancienne.</td></tr>
+<tr><td>Profil avant engagement</td><td>Le client voit le profil du Zem avant de le choisir.</td></tr>
+<tr><td>Carte de course</td><td>Trois points : Zem, client, destination, avec le trajet.</td></tr>
+<tr><td>Attente de décision</td><td>Carte d'attente avec compte à rebours ; « En attente que le client ouvre l'application », puis « le client regarde ton profil ».</td></tr>
+<tr><td>Fin de proposition</td><td>Le Zem n'est plus bloqué à « 0 s » : message précis (refusé, expiré, retiré, annulé) et retour au radar.</td></tr>
+<tr><td>Reprise après redémarrage</td><td>La proposition en cours est restaurée avec son compte à rebours ; sinon l'issue de la dernière est expliquée une fois.</td></tr>
+</table>
+
+<h2>6. Popup de proposition côté client</h2>
+<ul>
+<li>Quand un Zem accepte, le client reçoit une <b>popup par-dessus n'importe quel écran</b> : profil du Zem, prix, trajet, compte à rebours basé sur l'heure du serveur, boutons « Choisir ce Zem » / « Refuser ».</li>
+<li>Déclencheurs : événement temps réel <code>ride:offered</code>, notification poussée (canal Android dédié « Propositions de Zem », son et vibration forts), rattrapage <code>GET /rides/offers/pending</code> au retour dans l'application, relecture toutes les 3 s en filet de sécurité.</li>
+<li>La popup prévient le Zem qu'elle a été ouverte (<code>offer-seen</code>).</li>
+</ul>
+
+<h2>7. Arrêt anticipé avec code d'arrivée</h2>
+<p>Quand le Zem et le client se mettent d'accord pour arrêter la course après quelques mètres :</p>
+<ol>
+<li>L'un demande l'arrêt, l'autre accepte (le prix est calculé par le serveur : base + mètres parcourus).</li>
+<li>Le client voit un <b>code d'arrivée</b> ; il le donne au Zem.</li>
+<li>Le Zem saisit le code : <b>le client est débité et le Zem crédité</b> à ce moment seulement.</li>
+</ol>
+<p>L'écran de saisie du Zem s'ouvre tout seul après l'acceptation ; les textes sont traduits en 4 langues.</p>
+
+<h2>8. Builds APK et documents</h2>
+<ul>
+<li>Plusieurs APK de prévisualisation lancés à ta demande ; le dernier build abouti inclut la popup et la reprise après redémarrage.</li>
+<li>Le build lancé après le flux « arrêt avec code » a été <b>refusé par EAS</b> (quota du plan gratuit atteint).</li>
+<li>Documents produits : guide commercial PDF, analyse concurrents, et une dizaine de fichiers <code>DEMANDE_BACKEND_*.md</code> décrivant ce que le serveur doit fournir.</li>
+</ul>
+
+<h2>9. Reste à faire</h2>
+<ul>
+<li>Débloquer le quota EAS, puis tester sur deux téléphones (client + Zem) : popup, fin de proposition, arrêt avec code, notifications.</li>
+<li>Commiter le code mobile.</li>
+<li>Traduire les libellés de notifications et de transactions fournis par le serveur (<code>titleKey</code> / <code>labelKey</code>) et la clé <code>err.REGISTRATION_REQUIRED</code>.</li>
+<li>Le serveur n'a pas de route <code>GET /pricing</code> : le mobile utilise le barème embarqué (synchronisé par <code>npm run sync:tarification</code>).</li>
+</ul>
+<div class="foot">Rapport rédigé le 12 octobre 2026 à partir de l'historique de travail de la journée.</div>
+</body></html>
