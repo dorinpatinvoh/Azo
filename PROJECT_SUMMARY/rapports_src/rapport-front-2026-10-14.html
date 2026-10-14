@@ -1,0 +1,98 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 14 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">14 octobre 2026 · 4 commits poussés sur main · reste du travail à commiter (§9)</span></div>
+
+<h2>1. En résumé</h2>
+<p>Aujourd'hui, le mobile a gagné <b>une vraie navigation</b> (bouton retour, reprise de la dernière page), <b>un GPS du Zem beaucoup plus précis</b>, <b>les alertes d'annulation des deux côtés</b>, <b>une barre du bas pour les espaces Zem et coursier</b>, la <b>simplification des pièces demandées à l'inscription</b> (Zem, coursier, agence) et la <b>correction du blocage de la caméra</b> lors de l'envoi des photos. Tout compile (<code>tsc</code> sans erreur).</p>
+<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>17:45</b>) contient tout, y compris ce qui n'est pas encore commité. <b>Le test de la caméra et de la barre du bas Zem est la priorité</b> : ce sont les deux sujets les plus récents et les plus sensibles.</div>
+
+<h2>2. Navigation</h2>
+<ul>
+<li><b>Bouton retour</b> dans la barre du haut de Courses, Profil et Messages (nouveau composant <code>BackButton</code>) ; toutes les autres pages (portefeuille, aide, assistance, notifications, location, livraison, marketplace, inscription prestataire…) reviennent à <b>la page d'où l'on vient</b>, pas à un écran fixe. App.tsx garde un historique.</li>
+<li><b>Bouton retour du téléphone</b> : même comportement ; sur l'accueil et les espaces pro, l'application se ferme normalement.</li>
+<li><b>Reprise après reconnexion</b> : le client retrouve la dernière page où il était (même numéro de compte). Un autre compte, ou une page qui demande un état en mémoire (course en cours), ramène à l'accueil.</li>
+<li><b>Boutons Quitter / Continuer</b> de « Devenir prestataire » relevés au-dessus de la barre Android, plus compacts sur petit écran. La même zone sûre est appliquée à une quinzaine d'écrans (espaces Zem, coursier, agence, admin, support, portefeuille, notifications, livraison, location, marketplace…).</li>
+</ul>
+
+<h2>3. Carte et GPS du Zem</h2>
+<table>
+<tr><th>Avant</th><th>Maintenant</th></tr>
+<tr><td>GPS en précision moyenne sans course (point toutes les 10 s)</td><td>Haute précision : un point toutes les 3 s ou 5 m ; pendant une course, toutes les secondes ou chaque mètre</td></tr>
+<tr><td>Carte vide jusqu'au premier point</td><td>Dernier point connu affiché tout de suite, puis un vrai point précis</td></tr>
+<tr><td>Points vagues ou sauts GPS affichés tels quels, curseur qui tremble à l'arrêt</td><td>Filtre (<code>utils/gpsFilter.ts</code>) : points de plus de 60 m d'imprécision et vitesses impossibles (&gt; 144 km/h) ignorés, position gardée à l'arrêt, lissage en mouvement. La position envoyée au client est la position filtrée</td></tr>
+<tr><td>Curseur « flottant » à côté de la route</td><td>Pendant une course, accrochage au tracé s'il est à moins de 25 m</td></tr>
+<tr><td>Pas d'indication de fiabilité</td><td>Cercle de précision bleu autour de « Moi » (5 à 120 m)</td></tr>
+<tr><td>Carte radar quasi statique</td><td>Centrée sur le Zem en zoom 16 ; garde Zem et client visibles s'il y a un client à moins de 3 km ; tuiles plus nettes</td></tr>
+</table>
+
+<h2>4. Course : commande et annulations</h2>
+<ul>
+<li><b>Bouton « Confirmer » bloqué</b> après être passé de « Programmer » à « Maintenant » : corrigé (le mode programmé restait actif sans heure choisie).</li>
+<li><b>Le client annule</b> une course déjà acceptée : le Zem reçoit <b>tout de suite</b> l'alerte « Le client a annulé la course » (événement temps réel du serveur + relecture toutes les 3 s à tous les stades, au lieu de l'étape « en cours » seulement). Sa carte se vide et il peut prendre une autre demande.</li>
+<li><b>Le Zem annule</b> : le client voit l'alerte « Ton Zem a annulé… nous cherchons un nouveau Zem », traduite en français, anglais, espagnol et allemand ; la recherche reprend.</li>
+</ul>
+
+<h2>5. Inscription prestataire : pièces demandées</h2>
+<p>La liste des pièces vient du serveur ; l'écran l'affiche telle quelle (voir le rapport backend pour le détail).</p>
+<table>
+<tr><th>Activité</th><th>Pièces obligatoires</th><th>Facultatives</th></tr>
+<tr><td>Zem, conducteur</td><td>Carte d'identité ou CIP, selfie, <b>photo de profil</b>, carte grise, assurance, photo du véhicule</td><td>Extrait de casier</td></tr>
+<tr><td>Coursier, livreur</td><td>Carte d'identité ou CIP, selfie, <b>photo de profil</b>, permis, photo du véhicule</td><td>Carte grise, assurance, extrait de casier</td></tr>
+<tr><td>Agence</td><td>Carte d'identité ou CIP, <b>logo</b>, RCCM, IFU, statuts de la société</td><td>Extrait de casier (en dernier)</td></tr>
+</table>
+<p>Permis de conduire et visite technique sont retirés pour les Zem et conducteurs ; selfie et photo de véhicule sont retirés pour les agences. Le texte d'introduction de l'étape « Pièces » a été adapté.</p>
+
+<h2>6. Barre du bas des espaces pro</h2>
+<ul>
+<li><b>Zem et conducteur</b> (5 onglets) : Accueil (radar, course en cours, propositions), Gains, Activité, AZƆ̀ Pay (ouvre le portefeuille), Profil (véhicule, dossier, assistance, déconnexion).</li>
+<li><b>Coursier et livreur</b> (3 onglets) : Missions, AZƆ̀ Pay, Profil.</li>
+<li>Nouveau composant <code>PillTabBar</code>, même aspect que la barre du client. Corrections après tes retours : l'accueil reste monté (la carte ne se recharge plus à chaque changement d'onglet), chaque onglet repart en haut, le retour du téléphone ramène d'abord à l'accueil, la barre se masque quand le clavier est ouvert, et <b>largeurs proportionnelles</b> (le « Profil » ne déborde plus, écarts resserrés).</li>
+<li><b>Non fait</b> : l'espace agence n'a pas de barre du bas.</li>
+</ul>
+
+<h2>7. Portefeuille</h2>
+<p>Le Zem, le conducteur et le coursier <b>ne peuvent plus recharger AZƆ̀ Pay</b> : le bouton « Recharger » et la liste des moyens de paiement sont masqués ; le serveur refuse aussi la demande (403). Ils gardent le solde et l'historique. Le client et l'agence ne sont pas touchés.</p>
+
+<h2>8. Caméra : « Envoi impossible » à la prise de photo</h2>
+<ul>
+<li><b>Symptôme :</b> « Call to function 'ExponentImagePicker.launchCameraAsync' has been rejected » (étape Pièces, Zem puis agence).</li>
+<li><b>Diagnostic</b> (APK dédié) : sur ton téléphone, Android répond « Missing android.support.FILE_PROVIDER_PATHS meta-data » pour le composant qui donne à l'appareil photo l'accès au fichier, alors que sa configuration est bien dans l'APK. Cause exacte côté téléphone non élucidée.</li>
+<li><b>Contournement posé</b> : si ce composant échoue, la photo passe par une entrée temporaire de la galerie (dossier « AZO »), supprimée juste après la lecture ou si la prise de vue est annulée. Appliqué par un <b>patch</b> de <code>expo-image-picker</code> (<code>patches/expo-image-picker+57.0.20.patch</code>, <code>patch-package</code> lancé à l'installation, bibliothèque compilée depuis ses sources).</li>
+<li><b>À vérifier :</b> la caméra sur le téléphone ; qu'aucune photo ne reste dans la galerie ; que le patch s'applique sur un build EAS (non vérifié, le quota EAS est épuisé jusqu'au 1<sup>er</sup> novembre).</li>
+</ul>
+
+<h2>9. Ce qui n'est pas encore commité</h2>
+<table>
+<tr><th>Élément</th><th>Fichiers</th></tr>
+<tr><td>Correctif de la caméra</td><td><code>patches/</code>, <code>package.json</code>, <code>package-lock.json</code></td></tr>
+<tr><td>Largeurs de la barre du bas Zem / coursier</td><td><code>components/PillTabBar.tsx</code></td></tr>
+</table>
+<p>Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
+
+<h2>10. APK et environnement</h2>
+<ul>
+<li>Build local (Gradle hors ligne), signé avec la clé de debug : plusieurs APK générés dans la journée ; le dernier à <b>17:45</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code>. Désinstaller l'ancienne version si l'installation est refusée.</li>
+<li>PostgreSQL local a eu une coupure passagère à 17:08 (le backend local affichait « Can't reach database server ») : base de nouveau joignable ; si besoin, relancer le backend local. Rien à voir avec Render.</li>
+<li><b>Plan de tests internes Zem ↔ Client</b> : <code>PLAN_TESTS_INTERNES_ZEM_CLIENT.pdf</code> (79 points, 11 niveaux) pour l'envoyer au patron.</li>
+</ul>
+
+<h2>11. Reste à faire côté front</h2>
+<table>
+<tr><th>Sujet</th><th>État</th></tr>
+<tr><td>Test réel des deux sujets récents</td><td>Caméra et barre Zem / coursier sur téléphone</td></tr>
+<tr><td>Barre du bas pour l'espace agence</td><td>Non faite</td></tr>
+<tr><td>Photo de profil visible par les clients</td><td>Aujourd'hui c'est une pièce du dossier : elle n'est pas encore affichée sur la fiche du Zem côté client (besoin d'une décision et d'une route côté serveur)</td></tr>
+<tr><td>Libellés des écrans Zem et coursier</td><td>En français seulement</td></tr>
+<tr><td>Enregistrements Fon / Yoruba</td><td>Toujours à produire par un locuteur natif</td></tr>
+<tr><td>Décisions métier en attente</td><td>Paiement en espèces, transferts entre utilisateurs, codes promo et parrainage, retrait du Zem (limites)</td></tr>
+</table>
+
+<h2>12. Commits du jour</h2>
+<table>
+<tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>2c5a589c</code></td><td>Navigation avec retour, reprise après reconnexion, GPS Zem précis, alertes d'annulation</td></tr>
+<tr><td><code>24f83569</code></td><td>Pièces du dossier (photo de profil, logo, CIP), boutons du bas au-dessus de la barre Android, plan de tests</td></tr>
+<tr><td><code>dab0dd09</code></td><td>Barre du bas Zem et coursier ; pièces simplifiées pour les agences</td></tr>
+<tr><td><code>a0d08067</code></td><td>Barre du bas corrigée, recharge interdite aux Zem, statuts obligatoires pour les agences</td></tr>
+</table>
+<div class="foot">Rapport rédigé le 14 octobre 2026 à partir de l'historique Git et du travail de la journée. Le commit <code>287af38b</code> (08:33) clôt le travail du 13 octobre et n'est pas compté ici.</div>
+</body></html>

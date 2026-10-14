@@ -1,0 +1,104 @@
+diff --git a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt
+index cdb023c..942ec64 100644
+--- a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt
++++ b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt
+@@ -1,13 +1,17 @@
+ package expo.modules.imagepicker
+ 
+ import android.content.ClipData
++import android.content.ContentValues
+ import android.content.ContentResolver
+ import android.content.Context
+ import android.content.Intent
+ import android.graphics.Bitmap
+ import android.media.MediaMetadataRetriever
+ import android.net.Uri
++import android.os.Build
++import android.os.Environment
+ import android.provider.DocumentsContract
++import android.provider.MediaStore
+ import android.util.Log
+ import android.webkit.MimeTypeMap
+ import androidx.core.content.FileProvider
+@@ -75,10 +79,38 @@ internal fun File.toContentUri(context: Context): Uri {
+   return try {
+     this.getContentUri(context)
+   } catch (e: Exception) {
+-    Uri.fromFile(this)
++    // AZO : sur certains téléphones le FileProvider est inutilisable (« Missing android.support.FILE_PROVIDER_PATHS meta-data »).
++    // Repli : une entrée MediaStore temporaire, supprimée après lecture de la photo (voir `discardTemporaryMediaStoreUri`).
++    Log.w(TAG, "FileProvider indisponible, repli MediaStore : " + e.message)
++    this.toMediaStoreUri(context) ?: Uri.fromFile(this)
+   }
+ }
+ 
++// URI MediaStore créées par le repli ci-dessus : seules celles-ci sont supprimées après usage (jamais une photo choisie par l'utilisateur).
++private val temporaryMediaStoreUris: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
++
++private fun File.toMediaStoreUri(context: Context): Uri? = runCatching {
++  val isVideo = extension.equals("mp4", ignoreCase = true)
++  val values = ContentValues().apply {
++    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
++    put(
++      MediaStore.MediaColumns.MIME_TYPE,
++      if (isVideo) "video/mp4" else if (extension.equals("png", ignoreCase = true)) "image/png" else "image/jpeg"
++    )
++    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++      put(MediaStore.MediaColumns.RELATIVE_PATH, (if (isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES) + "/AZO")
++    }
++  }
++  val collection = if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
++  context.contentResolver.insert(collection, values)?.also { temporaryMediaStoreUris.add(it.toString()) }
++}.getOrNull()
++
++/** Supprime l'entrée MediaStore temporaire (pièce d'identité…) pour qu'elle ne reste pas dans la galerie. */
++internal fun discardTemporaryMediaStoreUri(context: Context, uri: Uri) {
++  if (temporaryMediaStoreUris.remove(uri.toString())) {
++    runCatching { context.contentResolver.delete(uri, null, null) }
++  }
++}
+ internal fun File.toBitmapCompressFormat(): Bitmap.CompressFormat = when {
+   this.extension.endsWith("png", ignoreCase = true) -> Bitmap.CompressFormat.PNG
+   else -> Bitmap.CompressFormat.JPEG
+diff --git a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/MediaHandler.kt b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/MediaHandler.kt
+index 22076ad..7301259 100644
+--- a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/MediaHandler.kt
++++ b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/MediaHandler.kt
+@@ -64,7 +64,7 @@ internal class MediaHandler(
+ 
+     val fileData = getAdditionalFileData(sourceUri)
+ 
+-    return ImagePickerAsset(
++    val asset = ImagePickerAsset(
+       type = MediaType.IMAGE,
+       uri = Uri.fromFile(outputFile).toString(),
+       width = exportedImage.width,
+@@ -76,6 +76,8 @@ internal class MediaHandler(
+       exif = exif,
+       assetId = sourceUri.getMediaStoreAssetId()
+     )
++    discardTemporaryMediaStoreUri(context, sourceUri)
++    return asset
+   }
+ 
+   private fun getAdditionalFileData(uri: Uri): AdditionalFileData? {
+diff --git a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/contracts/CameraContract.kt b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/contracts/CameraContract.kt
+index 6d11883..3702b98 100644
+--- a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/contracts/CameraContract.kt
++++ b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/contracts/CameraContract.kt
+@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContract
+ import androidx.core.net.toUri
+ import expo.modules.imagepicker.ImagePickerOptions
+ import expo.modules.imagepicker.CameraType
++import expo.modules.imagepicker.discardTemporaryMediaStoreUri
+ import expo.modules.imagepicker.toMediaType
+ import expo.modules.kotlin.activityresult.AppContextActivityResultContract
+ import expo.modules.kotlin.providers.AppContextProvider
+@@ -49,6 +50,7 @@ internal class CameraContract(
+ 
+   override fun parseResult(input: CameraContractOptions, resultCode: Int, intent: Intent?): ImagePickerContractResult =
+     if (resultCode == Activity.RESULT_CANCELED) {
++      runCatching { discardTemporaryMediaStoreUri(appContextProvider.appContext.reactContext!!, Uri.parse(input.uri)) }
+       ImagePickerContractResult.Cancelled
+     } else {
+       val uri = Uri.parse(input.uri)

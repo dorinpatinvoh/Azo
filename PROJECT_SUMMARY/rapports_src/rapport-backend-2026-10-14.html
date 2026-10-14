@@ -1,0 +1,70 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 14 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">14 octobre 2026 · 4 commits sur main · 23 suites / 271 tests</span></div>
+
+<h2>1. En résumé</h2>
+<p>Quatre changements côté serveur : un <b>nouvel événement temps réel</b> quand le client annule (le Zem est prévenu), de <b>nouvelles pièces de dossier</b> (photo de profil, logo) avec une <b>migration</b>, une <b>liste de pièces revue</b> pour Zem, coursier et agence, et l'<b>interdiction de recharger AZƆ̀ Pay</b> pour les Zem. Tout est sur <code>main</code> ; je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>a0d08067</code>).</p>
+<div class="box warn"><b>À vérifier en premier :</b> (1) la <b>migration</b> <code>20261014120000</code> au déploiement (§3) ; (2) l'effet de la nouvelle liste de pièces sur les <b>comptes déjà approuvés</b> (§4) ; (3) la règle « pas de recharge pour le rôle DRIVER » (§5), qui s'applique aussi aux chauffeurs d'agence.</div>
+
+<h2>2. Annulation par le client : le Zem est prévenu (<code>rides/</code>)</h2>
+<ul>
+<li><b>Nouvel événement socket</b> <code>ride:cancelled</code> (<code>{ rideId, at }</code>), émis dans la room personnelle <code>user:&lt;driverId&gt;</code> par <code>RidesGateway.emitRideCancelled</code>, appelé dans <code>RidesService.cancel</code> quand <b>le client</b> annule une course qui a un chauffeur assigné (MATCHED / ARRIVED). Le chauffeur n'a donc pas besoin d'avoir rejoint la room de la course.</li>
+<li>La notification push existante (<code>NOTIFICATION_RIDE_CANCELLED_BY_CLIENT_BODY</code>) et l'événement <code>ride:status</code> restent inchangés.</li>
+<li>Côté Zem → client, rien de nouveau : la course repasse en <code>PENDING</code> (nouveau code de prise en charge) ; <code>ride:status</code> et la notification existaient déjà, le mobile affiche maintenant une alerte.</li>
+<li>Tests : les faux gateways de <code>rides-arrival.spec.ts</code> et <code>rides-offer-popup.spec.ts</code> ont reçu <code>emitRideCancelled</code>. Pas de test dédié à l'événement.</li>
+</ul>
+
+<h2>3. Pièces de dossier : nouvelles valeurs et migration (<code>providers/</code>, Prisma)</h2>
+<ul>
+<li><b>Enum <code>DocumentKind</code></b> : ajout de <code>PROFILE_PHOTO</code> (photo de profil du Zem / conducteur / coursier) et <code>LOGO</code> (logo de l'agence).</li>
+<li><b>Migration</b> <code>20261014120000_document_profile_photo_logo</code> : deux <code>ALTER TYPE "DocumentKind" ADD VALUE IF NOT EXISTS</code>. Appliquée par <code>render:start</code> (<code>prisma migrate deploy</code>) au déploiement. En local : <code>npx prisma migrate deploy</code> puis <code>npx prisma generate</code> (backend arrêté, sinon EPERM sous Windows). Les nouvelles valeurs ne sont utilisées dans aucune donnée de la migration, donc pas de souci de transaction avec PostgreSQL 12+.</li>
+<li>Libellés (<code>DOCUMENT_LABELS</code>) : <code>CNI</code> devient « carte d'identité ou CIP » ; <code>PROFILE_PHOTO</code> : « photo de profil » ; <code>LOGO</code> : « logo de l'agence ». Ils apparaissent dans la checklist, l'admin et les messages de dossier incomplet.</li>
+</ul>
+
+<h2>4. Nouvelle liste de pièces par type (<code>REQUIRED_DOCUMENTS</code>, <code>OPTIONAL_DOCUMENTS</code>, <code>PHOTO_DOCUMENTS</code>)</h2>
+<table>
+<tr><th>Type</th><th>Obligatoires</th><th>Facultatives</th><th>Fichier (photo) exigé</th></tr>
+<tr><td>DRIVER (Zem, voiture)</td><td>CNI, SELFIE, <b>PROFILE_PHOTO</b>, CARTE_GRISE, ASSURANCE, PHOTO_VEHICULE <i>(permis retiré)</i></td><td>EXTRAIT_CASIER <i>(visite technique retirée)</i></td><td>SELFIE, CNI, PROFILE_PHOTO</td></tr>
+<tr><td>COURIER</td><td>CNI, SELFIE, <b>PROFILE_PHOTO</b>, PERMIS, PHOTO_VEHICULE</td><td>CARTE_GRISE, ASSURANCE, EXTRAIT_CASIER (inchangé)</td><td>SELFIE, CNI, PROFILE_PHOTO</td></tr>
+<tr><td>AGENCY</td><td>CNI, <b>LOGO</b>, RCCM, IFU, STATUTS <i>(selfie retiré)</i></td><td>EXTRAIT_CASIER <i>(photo de véhicule retirée)</i></td><td>CNI, LOGO</td></tr>
+<tr><td>ARTISAN</td><td>CNI, SELFIE (inchangé)</td><td>EXTRAIT_CASIER</td><td>SELFIE, CNI</td></tr>
+</table>
+<ul>
+<li>Effet immédiat côté mobile : l'écran « Pièces » affiche la checklist renvoyée par le serveur, sans nouvelle version de l'application pour les libellés et les listes.</li>
+<li>Une pièce qui n'est plus demandée pour un type est <b>refusée à l'envoi</b> (« La pièce … n'est pas demandée pour un dossier … »). Les fichiers déjà déposés (permis, visite technique…) restent en base et ne sont pas supprimés.</li>
+<li><b>Comptes déjà approuvés :</b> leur dossier n'a pas la photo de profil ou le logo. Le score KYC (<code>kycScore</code>, calculé sur la liste obligatoire) et les messages de pièces manquantes en tiennent compte : à surveiller dans la file admin. Aucune suspension automatique n'est déclenchée par ce changement, mais à confirmer sur les chemins d'expiration / décision (<code>DECIDABLE_STATUSES</code>).</li>
+<li>La photo de profil est <b>stockée comme pièce du dossier</b> (téléchargement protégé par propriétaire). Elle n'est pas exposée aux clients : il n'existe pas de champ « photo de profil » sur <code>User</code>.</li>
+</ul>
+
+<h2>5. Recharge AZƆ̀ Pay interdite aux Zem (<code>wallet/</code>)</h2>
+<ul>
+<li><code>POST /wallet/recharge</code> renvoie <b>403</b> (« Les Zem et conducteurs ne peuvent pas recharger leur compte AZƆ̀ Pay. ») quand <code>user.role === "DRIVER"</code>. Le rôle <code>DRIVER</code> couvre aussi les coursiers et les <b>chauffeurs d'agence</b>.</li>
+<li>Non touchés : le client et l'agence (recharge normale), <code>POST /agencies/drivers/:userId/fund</code> et <code>/withdraw</code> (agence ↔ chauffeur, par un autre chemin), la lecture du solde et de l'historique, le retrait Express MoMo du Zem.</li>
+<li>Pas de test dédié ; le garde se trouve dans le contrôleur, avant <code>initRecharge</code>.</li>
+</ul>
+
+<h2>6. Qualité et limites</h2>
+<ul>
+<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; 23 suites / 271 tests verts (après ajout de <code>emitRideCancelled</code> aux faux gateways).</li>
+<li><b>Non vérifié :</b> la migration sur la base Render, l'événement <code>ride:cancelled</code> en conditions réelles, et le 403 de recharge avec un vrai compte Zem.</li>
+<li><b>Pas de tests ajoutés</b> pour : <code>ride:cancelled</code>, le 403 de recharge, la nouvelle liste de pièces. À ajouter.</li>
+</ul>
+
+<h2>7. Questions pour toi</h2>
+<table>
+<tr><th>Sujet</th><th>Question</th></tr>
+<tr><td>Photo de profil</td><td>Faut-il l'exposer aux clients (fiche du Zem dans la popup de proposition) ? Si oui : champ sur <code>User</code> ou route dédiée, reprise automatique à l'approbation.</td></tr>
+<tr><td>Coursier</td><td>Le permis reste exigé (décision de ce jour : seuls Zem et conducteurs en sont dispensés). À confirmer.</td></tr>
+<tr><td>Comptes déjà approuvés</td><td>Faut-il leur demander la photo de profil ou le logo (statut <code>NEED_INFO</code>) ou les laisser ?</td></tr>
+<tr><td>Retrait Express MoMo du Zem</td><td>Limites, frais et délai à fixer ; aujourd'hui rien n'a été changé.</td></tr>
+</table>
+
+<h2>8. Commits du jour</h2>
+<table>
+<tr><th>Commit</th><th>Contenu côté backend</th></tr>
+<tr><td><code>2c5a589c</code></td><td><code>ride:cancelled</code> (gateway + service) ; tests mis à jour</td></tr>
+<tr><td><code>24f83569</code></td><td>Enum <code>PROFILE_PHOTO</code> / <code>LOGO</code> + migration ; nouvelle liste de pièces ; libellé « carte d'identité ou CIP »</td></tr>
+<tr><td><code>dab0dd09</code></td><td>Agence : selfie, statuts, photo de véhicule et casier retirés (liste intermédiaire)</td></tr>
+<tr><td><code>a0d08067</code></td><td>403 de recharge pour le rôle DRIVER ; agence : statuts obligatoires, casier facultatif en dernier</td></tr>
+</table>
+<div class="foot">Rapport rédigé le 14 octobre 2026 à partir de l'historique Git et du travail de la journée. Le commit <code>287af38b</code> (08:33) clôt le travail du 13 octobre et n'est pas compté ici.</div>
+</body></html>

@@ -42,7 +42,7 @@ export default function PillTabBar<T extends string>({ items, active, onNavigate
               accessibilityLabel={item.label}
             >
               <Ionicons name={isActive ? item.iconActive : item.icon} size={19} color={isActive ? colors.primary : colors.onPrimary} />
-              <Text style={isActive ? styles.labelActive : styles.label} numberOfLines={1}>
+              <Text style={isActive ? styles.labelActive : styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} allowFontScaling={false}>
                 {item.label}
               </Text>
             </Pressable>
@@ -68,15 +68,18 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
   },
-  item: { flex: 1, alignItems: "center", justifyContent: "center", gap: 1 },
+  // Largeurs proportionnelles (l'onglet actif pèse 2,2 fois un onglet inactif) : la barre ne déborde jamais, même avec 5 onglets ou une grande police
+  item: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", gap: 1 },
   label: { ...typography.labelSm, fontSize: 9, color: colors.onPrimary, opacity: 0.9 },
   itemActive: {
+    flex: 2.2,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 5,
     height: 40,
-    paddingHorizontal: spacing.sm + 4,
+    paddingHorizontal: 6,
     borderRadius: radius.full,
     backgroundColor: colors.onPrimary,
   },

@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "patch-package": "^8.0.1",
     "typescript": "~5.8.3"
   },
   "scripts": {
@@ -40,7 +41,15 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "voice:manifest": "node scripts/gen-voice-manifest.js",
-    "sync:tarification": "node scripts/sync-tarification.js"
+    "sync:tarification": "node scripts/sync-tarification.js",
+    "postinstall": "patch-package"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "buildFromSource": [
+        "expo-image-picker"
+      ]
+    }
+  }
 }
