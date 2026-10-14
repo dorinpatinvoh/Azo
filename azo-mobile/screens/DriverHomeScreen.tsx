@@ -3,7 +3,8 @@ import {
   View, Text, TextInput, StyleSheet, Pressable, ScrollView, Switch,
   ActivityIndicator, RefreshControl, Alert, Linking, useWindowDimensions, BackHandler,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { io, Socket } from "socket.io-client";
@@ -22,16 +23,33 @@ import RideStopPanel from "../components/RideStopPanel";
 import EarningsCard from "../components/EarningsCard";
 import StandingBanner from "../components/StandingBanner";
 import PillTabBar, { type PillTabItem } from "../components/PillTabBar";
+import Avatar from "../components/Avatar";
+import AvatarSheet from "../components/AvatarSheet";
+import LanguageSheet from "../components/LanguageSheet";
+import { useAvatar } from "../utils/avatar";
+import { formatBeninPhoneDisplay } from "../utils/phone";
+import { displayName, initials } from "./ProfileScreen";
 import RateClientModal from "../components/RateClientModal";
-import { tr } from "../i18n";
+import { tr, languageInfo, useI18n } from "../i18n";
 import { getRideRoute, getTripRoute } from "../services/routing";
 import NearbyClientsMap, { clientLabel } from "../components/NearbyClientsMap";
 import DriverOfferWaiting from "../components/DriverOfferWaiting";
 import { nearbyRadiusKm } from "../config/radar";
-import { ApiError } from "../services/api";
+import { ApiError, userApi, type UserProfile } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 
-type Props = { onLogout: () => void; onOpenDossier?: () => void; onOpenSupport?: () => void; onOpenWallet?: () => void };
+type Props = {
+  onLogout: () => void;
+  onOpenDossier?: () => void;
+  onOpenSupport?: () => void;
+  onOpenWallet?: () => void;
+  /** Informations personnelles : nom, e-mail, contact d'urgence, numéro, photo, langue (écran partagé avec le client). */
+  onOpenInfo?: () => void;
+  onOpenNotifications?: () => void;
+};
+
+// Mémorise l'état de l'espace Zem quand on ouvre une autre page (portefeuille, informations…) : au retour il reste en ligne, sur le même onglet.
+const rememberedZem: { online: boolean; tab: "home" | "gains" | "activity" | "wallet" | "profile" } = { online: false, tab: "home" };
 
 // Barre du bas de l'espace Zem : « Portefeuille » ouvre l'écran AZƆ̀ Pay, les autres onglets restent dans cet écran.
 type ZemTab = "home" | "gains" | "activity" | "wallet" | "profile";
@@ -59,8 +77,20 @@ const isToday = (iso: string) => {
 // Issues de proposition déjà annoncées au Zem (évite de répéter l'alerte à chaque réouverture).
 const announcedEndings = new Set<string>();
 
-export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet }: Props) {
-  const [tab, setTab] = useState<ZemTab>("home");
+export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet, onOpenInfo, onOpenNotifications }: Props) {
+  const insets = useSafeAreaInsets();
+  const { lang } = useI18n();
+  const avatarUri = useAvatar();
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [langOpen, setLangOpen] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  useEffect(() => {
+    userApi.me().then(setUser).catch(() => undefined);
+  }, []);
+  const [tab, setTab] = useState<ZemTab>(rememberedZem.tab === "wallet" ? "home" : (rememberedZem.tab as ZemTab));
+  useEffect(() => {
+    rememberedZem.tab = tab;
+  }, [tab]);
   const scrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -74,7 +104,10 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     });
     return () => sub.remove();
   }, [tab]);
-  const [online, setOnline] = useState(false);
+  const [online, setOnline] = useState(rememberedZem.online);
+  useEffect(() => {
+    rememberedZem.online = online;
+  }, [online]);
   // Course terminée : le Zem note son client (null = rien à noter)
   const [rateTarget, setRateTarget] = useState<{ rideId: string; name: string } | null>(null);
   const [pending, setPending] = useState<Ride[]>([]);
@@ -902,7 +935,15 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   function handleLogout() {
     Alert.alert("Déconnexion", "Quitter ton espace conducteur ?", [
       { text: "Annuler", style: "cancel" },
-      { text: "Se déconnecter", style: "destructive", onPress: onLogout },
+      {
+        text: "Se déconnecter",
+        style: "destructive",
+        onPress: () => {
+          rememberedZem.online = false;
+          rememberedZem.tab = "home";
+          onLogout();
+        },
+      },
     ]);
   }
 
@@ -912,9 +953,26 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     : null;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{ZEM_TITLES[tab]}</Text>
+    <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      {/* Barre d'application du Zem : photo, titre de l'onglet, état en ligne, notifications */}
+      <View style={[styles.appBar, { paddingTop: insets.top + spacing.sm }]}>
+        <Pressable onPress={() => setTab("profile")} accessibilityRole="button" accessibilityLabel="Mon profil">
+          <Avatar uri={avatarUri} initials={initials(user)} size={44} fontSize={16} />
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.appBarTitle} numberOfLines={1}>
+            {tab === "home" && user?.firstName ? `Bonjour, ${user.firstName}` : ZEM_TITLES[tab]}
+          </Text>
+          <View style={styles.appBarStatus}>
+            <View style={[styles.statusDot, { backgroundColor: online ? colors.primary : colors.outline }]} />
+            <Text style={styles.appBarStatusText}>{online ? "En ligne · radar actif" : "Hors ligne"}</Text>
+          </View>
+        </View>
+        {onOpenNotifications ? (
+          <Pressable onPress={onOpenNotifications} style={styles.appBarBtn} accessibilityRole="button" accessibilityLabel="Notifications">
+            <MaterialIcons name="notifications-none" size={22} color={colors.primary} />
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView
@@ -1330,45 +1388,100 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         )}
 
         {tab === "profile" && (
-          <View style={{ gap: spacing.sm }}>
-            {myVehicle ? (
-              <View style={styles.profileRow}>
-                <MaterialIcons name={VEHICLE_ICON[myVehicle]} size={22} color={colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.profileRowTitle}>Mon véhicule</Text>
-                  <Text style={styles.profileRowSub}>{VEHICLE_LABEL[myVehicle]}</Text>
+          <View style={{ gap: spacing.md }}>
+            {/* Identité : toucher la photo pour la changer */}
+            <View style={styles.pfIdentity}>
+              <Pressable onPress={() => setAvatarOpen(true)} accessibilityRole="button" accessibilityLabel="Changer la photo">
+                <LinearGradient colors={[colors.primary, colors.secondaryContainer]} style={styles.pfRing}>
+                  <View style={styles.pfAvatar}>
+                    <Avatar uri={avatarUri} initials={initials(user)} size={70} />
+                  </View>
+                </LinearGradient>
+                <View style={styles.pfBadge}>
+                  <MaterialIcons name="photo-camera" size={14} color={colors.onPrimary} />
                 </View>
-              </View>
-            ) : null}
-            {onOpenDossier ? (
-              <Pressable style={styles.profileRow} onPress={onOpenDossier} accessibilityRole="button">
-                <MaterialIcons name="verified-user" size={22} color={colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.profileRowTitle}>Mon dossier</Text>
-                  <Text style={styles.profileRowSub}>Pièces, statut de validation</Text>
-                </View>
-                <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
               </Pressable>
-            ) : null}
-            {onOpenSupport ? (
-              <Pressable style={styles.profileRow} onPress={onOpenSupport} accessibilityRole="button">
-                <MaterialIcons name="support-agent" size={22} color={colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.profileRowTitle}>Assistance</Text>
-                  <Text style={styles.profileRowSub}>Écrire à l'équipe AZƆ̀</Text>
-                </View>
-                <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
-              </Pressable>
-            ) : null}
-            <Pressable style={styles.profileRow} onPress={handleLogout} accessibilityRole="button">
-              <MaterialIcons name="logout" size={22} color={colors.error} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.profileRowTitle, { color: colors.error }]}>Se déconnecter</Text>
+                <Text style={styles.pfName} numberOfLines={2}>{displayName(user) || "Zem AZƆ̀"}</Text>
+                <Text style={styles.pfPhone}>{user ? formatBeninPhoneDisplay(user.phone) : ""}</Text>
+                <View style={styles.pfPills}>
+                  {myVehicle ? (
+                    <View style={styles.pfPill}>
+                      <MaterialIcons name={VEHICLE_ICON[myVehicle]} size={13} color={colors.primary} />
+                      <Text style={styles.pfPillText}>{VEHICLE_LABEL[myVehicle]}</Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.pfPill}>
+                    <MaterialIcons name="star" size={13} color={colors.primary} />
+                    <Text style={styles.pfPillText}>{stats.rating ? stats.rating.toFixed(2) : "—"}</Text>
+                  </View>
+                </View>
               </View>
+            </View>
+
+            <View style={styles.pfStats}>
+              <View style={styles.pfStat}>
+                <Text style={styles.pfStatValue}>{history.filter((r) => r.status === "COMPLETED").length}</Text>
+                <Text style={styles.pfStatLabel}>Courses terminées</Text>
+              </View>
+              <View style={styles.pfStat}>
+                <Text style={styles.pfStatValue} numberOfLines={1} adjustsFontSizeToFit>{balance !== null ? fcfa(balance) : "—"}</Text>
+                <Text style={styles.pfStatLabel}>Solde AZƆ̀ Pay</Text>
+              </View>
+            </View>
+
+            {/* Modifier mon profil : informations personnelles, photo, langue, dossier */}
+            <View style={styles.pfMenu}>
+              {onOpenInfo ? (
+                <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={onOpenInfo} accessibilityRole="button">
+                  <View style={styles.pfIcon}><MaterialIcons name="badge" size={20} color={colors.primary} /></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pfLabel}>Modifier mes informations</Text>
+                    <Text style={styles.pfHint}>Nom, e-mail, contact d'urgence, numéro</Text>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                </Pressable>
+              ) : null}
+              <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={() => setAvatarOpen(true)} accessibilityRole="button">
+                <View style={styles.pfIcon}><MaterialIcons name="photo-camera" size={20} color={colors.primary} /></View>
+                <Text style={styles.pfLabel}>Photo de profil</Text>
+                <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+              </Pressable>
+              {onOpenDossier ? (
+                <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={onOpenDossier} accessibilityRole="button">
+                  <View style={styles.pfIcon}><MaterialIcons name="verified-user" size={20} color={colors.primary} /></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pfLabel}>Mon dossier</Text>
+                    <Text style={styles.pfHint}>Pièces, véhicule, statut de validation</Text>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                </Pressable>
+              ) : null}
+              <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={() => setLangOpen(true)} accessibilityRole="button">
+                <View style={styles.pfIcon}><MaterialIcons name="translate" size={20} color={colors.primary} /></View>
+                <Text style={styles.pfLabel}>Langue</Text>
+                <Text style={styles.pfMeta} numberOfLines={1}>{languageInfo(lang).flag} {languageInfo(lang).native}</Text>
+                <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+              </Pressable>
+              {onOpenSupport ? (
+                <Pressable style={styles.pfRow} onPress={onOpenSupport} accessibilityRole="button">
+                  <View style={styles.pfIcon}><MaterialIcons name="support-agent" size={20} color={colors.primary} /></View>
+                  <Text style={styles.pfLabel}>Assistance</Text>
+                  <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <Pressable style={styles.pfLogout} onPress={handleLogout} accessibilityRole="button">
+              <MaterialIcons name="logout" size={20} color={colors.error} />
+              <Text style={styles.pfLogoutText}>Se déconnecter</Text>
             </Pressable>
           </View>
         )}
       </ScrollView>
+
+      <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
+      <AvatarSheet visible={avatarOpen} onClose={() => setAvatarOpen(false)} />
 
       <PillTabBar
         items={ZEM_TABS}
@@ -1495,6 +1608,48 @@ const styles = StyleSheet.create({
   acceptBtn: { backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: 16, paddingVertical: 10 },
   acceptBtnDisabled: { opacity: 0.5 },
   acceptBtnText: { ...typography.labelMd, color: "#fff", fontWeight: "800" },
+  appBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm + 2,
+    backgroundColor: `${colors.primaryFixed}99`,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    elevation: 2,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  appBarTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  appBarStatus: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  appBarStatusText: { ...typography.labelSm, color: colors.onSurfaceVariant },
+  appBarBtn: { width: 42, height: 42, borderRadius: radius.full, backgroundColor: colors.surfaceContainerLowest, alignItems: "center", justifyContent: "center" },
+  pfIdentity: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, borderWidth: 1, borderColor: colors.surfaceContainer },
+  pfRing: { width: 84, height: 84, borderRadius: 42, alignItems: "center", justifyContent: "center" },
+  pfAvatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: colors.surfaceContainerLowest, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  pfBadge: { position: "absolute", right: -2, bottom: -2, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surfaceContainerLowest },
+  pfName: { ...typography.headlineSm, color: colors.onSurface },
+  pfPhone: { ...typography.bodyMd, color: colors.onSurfaceVariant, marginTop: 2 },
+  pfPills: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.xs },
+  pfPill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 },
+  pfPillText: { ...typography.labelSm, color: colors.primary, fontWeight: "700" },
+  pfStats: { flexDirection: "row", gap: spacing.sm },
+  pfStat: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, borderWidth: 1, borderColor: colors.surfaceContainer },
+  pfStatValue: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  pfStatLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
+  pfMenu: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.surfaceContainer, overflow: "hidden" },
+  pfRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm + 2, paddingHorizontal: spacing.md, minHeight: 60 },
+  pfDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceContainer },
+  pfIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
+  pfLabel: { ...typography.bodyLg, color: colors.onSurface, flex: 1 },
+  pfHint: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  pfMeta: { ...typography.labelMd, color: colors.onSurfaceVariant, maxWidth: 130 },
+  pfLogout: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 52, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.error },
+  pfLogoutText: { ...typography.labelLg, color: colors.error, fontWeight: "700" },
   profileRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.md, padding: spacing.md },
   profileRowTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
   profileRowSub: { ...typography.bodySm, color: colors.onSurfaceVariant },
