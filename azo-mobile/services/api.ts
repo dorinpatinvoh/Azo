@@ -7,6 +7,7 @@
 //   - Émulateur Android         : http://10.0.2.2:3000
 //   - Navigateur (expo web)     : http://localhost:3000
 
+import * as SecureStore from "expo-secure-store";
 import { getLanguage, hasMessage, tr, type MessageKey } from "../i18n";
 
 export const DEFAULT_API_URL =
@@ -95,6 +96,14 @@ async function request<T>(
       },
       signal: controller.signal,
     });
+
+    // Session glissante : le serveur renvoie un jeton neuf quand l'ancien vieillit. On le garde (mémoire + stockage sécurisé),
+    // l'utilisateur reste connecté jusqu'à sa déconnexion.
+    const refreshed = res.headers.get("x-refreshed-token");
+    if (refreshed && authToken) {
+      authToken = refreshed;
+      SecureStore.setItemAsync("userToken", refreshed).catch(() => undefined);
+    }
 
     return await handleResponse<T>(res);
   } catch (e) {

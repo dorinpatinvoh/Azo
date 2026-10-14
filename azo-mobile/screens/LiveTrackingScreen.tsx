@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Alert, Linking, Share } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Alert, Linking, Share, ScrollView, useWindowDimensions } from "react-native";
+import BackButton from "../components/BackButton";
 import OSMMapView, { OSMMarker, type LatLng } from "../components/OSMMapView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -61,6 +62,9 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const [failures, setFailures] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  // « Réduire » : la carte blanche du bas disparaît et la carte occupe tout l'écran ; un bouton la ramène
+  const [sheetHidden, setSheetHidden] = useState(false);
+  const { height: windowHeight } = useWindowDimensions();
   const [chatOpen, setChatOpen] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletRefreshError, setWalletRefreshError] = useState<string | null>(null);
@@ -136,6 +140,10 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
       Alert.alert(t("live.driverCancelled.title"), t("live.driverCancelled.body"));
     }
   }, [ride?.status, t]);
+
+  useEffect(() => {
+    setSheetHidden(false);
+  }, [ride?.status]);
 
   useEffect(() => {
     if (ride?.status !== "COMPLETED") return;
@@ -482,7 +490,34 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
           <Text style={styles.sosText}>{t("sos.button")}</Text>
         </Pressable>
       )}
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
+      {sheetHidden ? (
+        <>
+        <View style={{ position: "absolute", left: 16, top: insets.top + 8 }}>
+          <BackButton onPress={onClose} />
+        </View>
+        {ride.driver && !offered ? (
+          <Pressable
+            style={[styles.mapFab, { bottom: insets.bottom + spacing.md + 64 }]}
+            onPress={() => setChatOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t("live.chatA11y")}
+          >
+            <MaterialIcons name="chat-bubble-outline" size={24} color={colors.primary} />
+          </Pressable>
+        ) : null}
+        <Pressable
+          style={[styles.mapFab, { bottom: insets.bottom + spacing.md }]}
+          onPress={() => setSheetHidden(false)}
+          accessibilityRole="button"
+          accessibilityLabel={t("live.show")}
+        >
+          <MaterialIcons name="fullscreen-exit" size={28} color={colors.primary} />
+        </Pressable>
+        </>
+      ) : (
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md, maxHeight: Math.round(windowHeight * 0.62) }]}>
+        {/* Défilante : pendant le trajet la carte contient davantage (distance, arrêt, message…), rien ne doit sortir de l'écran */}
+        <ScrollView contentContainerStyle={{ gap: 12 }} showsVerticalScrollIndicator={false} bounces={false}>
         <Text style={styles.status}>{t(`live.status.${ride.status}` as MessageKey)}</Text>
         {!driverPos && (ride.status === "MATCHED" || ride.status === "ARRIVED" || ride.status === "IN_PROGRESS") && (
           <Text style={styles.muted}>{t("live.driverPos")}</Text>
@@ -553,8 +588,10 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
             </View>
           )}
         </View>}
-        {finished ? <Pressable style={styles.primaryBtn} onPress={done ? (onFinish ?? onClose) : onClose}><Text style={styles.primaryText}>{done ? t("live.finish") : ride.expired ? t("live.relaunch") : t("common.close")}</Text></Pressable> : <><>{cancellable && <Pressable style={styles.cancelBtn} onPress={handleCancelRide} disabled={cancelling}>{cancelling ? <ActivityIndicator size="small" color={ERROR_COLOR} /> : <Text style={styles.cancelText}>{t("live.cancel.confirm")}</Text>}</Pressable>}</><Pressable style={styles.secondaryBtn} onPress={onClose}><Text style={styles.secondaryText}>{t("live.minimize")}</Text></Pressable></>}
+        {finished ? <Pressable style={styles.primaryBtn} onPress={done ? (onFinish ?? onClose) : onClose}><Text style={styles.primaryText}>{done ? t("live.finish") : ride.expired ? t("live.relaunch") : t("common.close")}</Text></Pressable> : <><>{cancellable && <Pressable style={styles.cancelBtn} onPress={handleCancelRide} disabled={cancelling}>{cancelling ? <ActivityIndicator size="small" color={ERROR_COLOR} /> : <Text style={styles.cancelText}>{t("live.cancel.confirm")}</Text>}</Pressable>}</><Pressable style={styles.secondaryBtn} onPress={() => setSheetHidden(true)}><Text style={styles.secondaryText}>{t("live.minimize")}</Text></Pressable></>}
+        </ScrollView>
       </View>
+      )}
       <RideChatModal visible={chatOpen} rideId={ride.id} myRole="CLIENT" peerName={ride.driver?.fullName} peerPhone={ride.driver?.phone} locked={finished} onClose={() => setChatOpen(false)} />
     </View>
   );
@@ -600,6 +637,9 @@ const styles = StyleSheet.create({
   price: { ...typography.bodyMd, color: colors.onSurface, fontWeight: "700" },
   primaryBtn: { backgroundColor: colors.primary, borderRadius: radius.full, paddingVertical: 14, alignItems: "center" },
   primaryText: { ...typography.labelMd, color: "#fff", fontWeight: "800", fontSize: 16 },
+  mapFab: { position: "absolute", right: 16, width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceContainerLowest, elevation: 10, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 8 },
+  showSheet: { position: "absolute", alignSelf: "center", left: "25%", right: "25%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.full, paddingVertical: 12, elevation: 10, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 8 },
+  showSheetText: { color: colors.primary, fontWeight: "800", fontSize: 14 },
   secondaryBtn: { borderRadius: radius.full, paddingVertical: 12, paddingHorizontal: 24, alignItems: "center", borderWidth: 1.5, borderColor: colors.outline },
   secondaryText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
   cancelBtn: { borderRadius: radius.full, paddingVertical: 12, alignItems: "center", borderWidth: 1.5, borderColor: ERROR_COLOR },

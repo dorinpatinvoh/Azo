@@ -78,6 +78,7 @@ const RESTORABLE_ROUTES = new Set<Route>(["provider-onboarding", "provider-statu
 const clientRoutesSet = new Set<Route>(["home", "courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "ride-tracking", "ride-rating", "delivery", "rental", "marketplace", "provider-onboarding", "provider-status"]);
 const LAST_ROUTE_KEY = "lastRoute";
 const LAST_PHONE_KEY = "lastLoginPhone";
+const SIGNUP_TYPE_KEY = "signupProviderType";
 
 function routeFor(
   role: string,
@@ -170,6 +171,13 @@ function AppInner() {
   const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "rental"];
   const offerWatcher = useOfferWatcher(!!sessionToken && clientRoutes.includes(route), route === "ride-tracking");
   // Session ouverte mais inscription (nom, prénom, sexe, NPI) pas terminée : on rouvre le formulaire.
+  // Activité choisie à l'inscription (Zem, coursier, agence) : le parcours dédié reste imposé jusqu'au dépôt du dossier
+  const [signupType, setSignupType] = useState<ProviderType | null>(null);
+  useEffect(() => {
+    SecureStore.getItemAsync(SIGNUP_TYPE_KEY)
+      .then((v) => setSignupType(v === "DRIVER" || v === "COURIER" || v === "AGENCY" ? v : null))
+      .catch(() => undefined);
+  }, []);
   const [resumeRegistration, setResumeRegistration] = useState(false);
   const pushTokenRef = useRef<string | null>(null);
   const pendingRideNotificationRef = useRef<string | null>(null);
@@ -369,6 +377,9 @@ function AppInner() {
       await notificationsApi.unregisterPushToken(pushToken, platform).catch(() => undefined);
     }
     setToken(null);
+    // L'inscription professionnelle en cours est propre au compte qui se déconnecte
+    setSignupType(null);
+    SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
     try {
       await SecureStore.deleteItemAsync("userRole");
       await SecureStore.deleteItemAsync("userToken");
@@ -477,10 +488,16 @@ function AppInner() {
         {route === "otp" && (
           <OtpLoginScreen
             resumeRegistration={resumeRegistration}
-            onVerified={(role?: string | null, provider?: ProviderRef | null) => {
+            onVerified={(role?: string | null, provider?: ProviderRef | null, startType?: ProviderType | null) => {
               setResumeRegistration(false);
               setSessionToken(getToken());
-              void resolveStartRoute(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null)).then(goTo);
+              // Inscription avec une activité (Zem, coursier, agence) : on enchaîne sur le dossier dédié (mémorisé jusqu'au dépôt)
+              if (startType) {
+                setSignupType(startType);
+                SecureStore.setItemAsync(SIGNUP_TYPE_KEY, startType).catch(() => undefined);
+                goTo("provider-onboarding");
+                return;
+              }              void resolveStartRoute(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null)).then(goTo);
             }}
             onBack={() => goTo("splash")}
           />
@@ -577,7 +594,13 @@ function AppInner() {
 
         {route === "provider-onboarding" && (
           <ProviderOnboardingScreen
-            onSubmitted={() => goTo("provider-status")}
+            signupType={signupType ?? undefined}
+            initialType={signupType ?? undefined}
+            onSubmitted={() => {
+              setSignupType(null);
+              SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
+              goTo("provider-status");
+            }}
             onBack={() => goBack()}
           />
         )}

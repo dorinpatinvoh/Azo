@@ -35,6 +35,8 @@ type Props = {
   onSubmitted: () => void; // -> écran « Dossier en cours »
   onBack: () => void;
   initialType?: ProviderType;
+  /** Activité choisie à la création du compte : le parcours d'inscription dédié ne propose qu'elle (seule porte d'entrée vers une agence). */
+  signupType?: ProviderType;
   initialVehicle?: VehicleType;
 };
 
@@ -193,7 +195,7 @@ function isoToFr(iso: string | null): string {
   return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
 }
 
-export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialType, initialVehicle }: Props) {
+export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialType, initialVehicle, signupType }: Props) {
   // Le bas de l'écran reste au-dessus de la barre de navigation Android ; boutons plus compacts sur petit écran
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -243,6 +245,13 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     });
   }, [req]);
 
+  // Activité imposée : celle choisie à l'inscription, ou celle du dossier d'agence déjà commencé.
+  // Sans activité imposée (client qui devient prestataire plus tard), l'agence n'est pas proposée : elle se crée à l'inscription.
+  const lockedType: ProviderType | null = signupType ?? (dossier?.type === "AGENCY" ? "AGENCY" : null);
+  const choosableTypes = useMemo(
+    () => availableTypes.filter((t) => (lockedType ? t.type === lockedType : t.type !== "AGENCY")),
+    [availableTypes, lockedType]
+  );
   const currentType = (form.type ?? dossier?.type ?? null) as ProviderType | null;
   const isAgency = currentType === "AGENCY";
   const isCourier = currentType === "COURIER";
@@ -628,11 +637,14 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
           <View style={{ gap: spacing.md }}>
             <Text style={styles.title}>Que veux-tu faire sur AZƆ̀ ?</Text>
             <Text style={styles.muted}>
-              Choisis ton profil professionnel : Zem / Conducteur indépendant, Coursier / Coursier
-              personnel / Livreur, ou Agence de flotte.
+              {lockedType === "AGENCY"
+                ? "Inscription de ton agence de flotte (Zem, voitures ou livreurs)."
+                : lockedType
+                  ? "Voici le parcours d'inscription dédié à ton activité."
+                  : "Choisis ton profil professionnel : Zem / Conducteur indépendant, ou Coursier / Coursier personnel / Livreur."}
             </Text>
 
-            {availableTypes.map((t) => {
+            {choosableTypes.map((t) => {
               const selected = currentType === t.type;
               return (
                 <Pressable

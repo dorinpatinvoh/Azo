@@ -19,12 +19,14 @@ import * as SecureStore from "expo-secure-store";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
+import AccountKindPicker, { type AccountKind } from "../components/AccountKindPicker";
 import { useI18n, type MessageKey } from "../i18n";
 import { speakKey, speakText, stopSpeaking, type VoiceKey } from "../i18n/voice";
 import {
   ApiError,
   DEFAULT_API_URL,
   ProviderRef,
+  type ProviderType,
   authApi,
   needsRegistration,
   errorMessage,
@@ -54,7 +56,7 @@ import {
 type Step = "phone" | "code" | "register";
 
 type Props = {
-  onVerified: (role: string, provider?: ProviderRef | null) => void;
+  onVerified: (role: string, provider?: ProviderRef | null, startType?: ProviderType | null) => void;
   onBack: () => void;
   /** Application rouverte alors que l'inscription n'était pas terminée (session déjà ouverte). */
   resumeRegistration?: boolean;
@@ -68,6 +70,8 @@ const SMS_BANNER_DURATION_SEC = 5;
 
 export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration = false }: Props) {
   const [step, setStep] = useState<Step>(resumeRegistration ? "register" : "phone");
+  // Type de compte choisi à l'inscription : « Agence » ouvre ensuite le dossier d'agence (seul endroit où l'on peut en créer une)
+  const [accountKind, setAccountKind] = useState<AccountKind>("CLIENT");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState(["", "", "", ""]);
   // Inscription (après l'OTP) : nom, prénom, sexe et NPI
@@ -248,7 +252,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
       spokenDone.current = true;
       if (talk) speakKey("voice.done", voiceLang);
       await SecureStore.setItemAsync("lastLoginPhone", digits).catch(() => undefined);
-      onVerified("CLIENT", null);
+      onVerified("CLIENT", null, accountKind === "CLIENT" ? null : accountKind);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         notify(t("auth.alert.outdatedTitle"), t("auth.alert.outdatedBody"));
@@ -476,7 +480,11 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
             </View>
           ) : (
             <View style={styles.card}>
-              <Text style={styles.label}>{t("auth.field.lastName")}</Text>
+              <Text style={styles.label}>{t("auth.kind.title")}</Text>
+              <AccountKindPicker value={accountKind} onChange={setAccountKind} />
+              {accountKind !== "CLIENT" ? <Text style={styles.nameHint}>{t("auth.kind.hint")}</Text> : null}
+
+              <Text style={[styles.label, styles.fieldGap]}>{t("auth.field.lastName")}</Text>
               <TextInput
                 style={[styles.nameInput, !!lastName && !isValidName(lastName) && styles.inputInvalid]}
                 value={lastName}
