@@ -77,7 +77,7 @@ export default function AdminSupportScreen({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={back} style={styles.iconButton} accessibilityLabel={t("common.back")}>
           <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />

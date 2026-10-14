@@ -222,7 +222,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Coursier & Livreur AZƆ̀</Text>

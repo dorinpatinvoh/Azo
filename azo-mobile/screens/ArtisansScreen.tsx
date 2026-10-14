@@ -39,7 +39,7 @@ export default function ArtisansScreen({ onBack, onRequestArtisan }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={onBack} style={styles.iconButton}>
           <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />

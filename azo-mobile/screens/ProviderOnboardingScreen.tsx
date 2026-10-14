@@ -1043,8 +1043,9 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
           <View style={{ gap: spacing.md }}>
             <Text style={styles.title}>Tes pièces justificatives</Text>
             <Text style={styles.muted}>
-              Le selfie et la pièce d'identité sont obligatoires en photo. Assure-toi que le texte
-              est bien lisible avant d'envoyer.
+              Les pièces marquées d'une étoile sont obligatoires en photo (carte d'identité ou CIP,
+              selfie, photo de profil ou logo selon ton activité). Assure-toi que le texte est bien
+              lisible avant d'envoyer.
             </Text>
 
             {(dossier?.checklist ?? []).map((item) => (

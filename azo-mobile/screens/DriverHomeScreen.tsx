@@ -881,7 +881,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     : null;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
         {onOpenDossier ? (
           <Pressable onPress={onOpenDossier} style={styles.iconButton} accessibilityLabel="Mon dossier">

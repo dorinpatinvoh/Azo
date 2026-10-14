@@ -66,6 +66,8 @@ enum DocumentKind {
   STATUTS
   DIPLOME
   EXTRAIT_CASIER
+  PROFILE_PHOTO // photo de profil du Zem / conducteur / coursier
+  LOGO // logo de l'agence
 }
 
 enum DocumentStatus {

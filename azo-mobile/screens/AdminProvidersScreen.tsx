@@ -307,7 +307,7 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
 
   if (!selectedId) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <View style={styles.header}>
           <Pressable onPress={confirmExit} style={styles.iconBtn} accessibilityLabel="Menu ou déconnexion">
             <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />
@@ -475,7 +475,7 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
   const decidable = ["SUBMITTED", "UNDER_REVIEW", "NEED_INFO"].includes(d.status);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={() => setDetail(null)} style={styles.iconBtn} accessibilityLabel="Retour à la liste">
           <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />

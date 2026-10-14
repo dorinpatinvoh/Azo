@@ -1,0 +1,196 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Plan de tests internes — Zem et Client</title><link rel="stylesheet" href="rapport.css">
+<style>
+td.n{width:30px;font-weight:700;color:#7100af}
+td.w{width:48px;font-size:8.6pt;color:#5d5662}
+td.ok{width:52px;text-align:center;font-size:12pt;letter-spacing:2px}
+td.rem{width:110px}
+.sm{font-size:9.2pt}
+.lvl{display:inline-block;background:#7100af;color:#fff;border-radius:99px;padding:1px 10px;font-size:9pt;font-weight:700;margin-right:6px}
+</style></head><body>
+<div class="cover"><h1>Plan de tests internes — AZƆ̀</h1><p>Parcours complet entre le <b>Client</b> et le <b>Zem</b>, niveau par niveau</p><span class="tag">Version du 14 octobre 2026 · à jouer avec 2 téléphones</span></div>
+
+<h2>1. Objectif et mode d'emploi</h2>
+<p>Valider, avant toute démonstration, que le client et le Zem peuvent faire ensemble <b>une course de bout en bout</b> : commande, proposition, prise en charge, trajet, paiement, notation, et que les cas particuliers (annulation, refus, coupure) se passent correctement. Chaque ligne du tableau est un <b>point de contrôle</b> : on fait l'action, on compare avec le résultat attendu, puis on coche <b>OK</b> ou <b>KO</b> et on note ce qu'on a vu.</p>
+<ul>
+<li>« Qui » indique le téléphone concerné : <b>C</b> = Client, <b>Z</b> = Zem, <b>A</b> = Admin.</li>
+<li>Faire les niveaux dans l'ordre : chacun suppose que le précédent est validé.</li>
+<li>Pour chaque KO : une capture d'écran, l'heure, le niveau et le numéro du point. Gravité : <b>Bloquant</b> (la course ne peut pas se faire), <b>Majeur</b> (gênant, contournable), <b>Mineur</b> (confort, texte, aspect).</li>
+</ul>
+
+<h2>2. Niveau 0 — Préparation</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">0.1</td><td>Installer le dernier APK (désinstaller l'ancien si l'installation est refusée)</td><td>L'application s'ouvre, version à jour</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">0.2</td><td>Réveiller le serveur : ouvrir l'adresse <code>/health</code> du backend dans un navigateur</td><td>Réponse « ok » ; le serveur gratuit s'endort, le premier appel peut prendre ~1 min</td><td class="w">tous</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">0.3</td><td>Données mobiles ou Wi-Fi actifs sur les deux téléphones ; <b>localisation (GPS) activée</b> ; notifications autorisées</td><td>Aucune fenêtre d'autorisation ne reste en attente</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">0.4</td><td>Prévoir un <b>compte Client</b>, un <b>compte Zem validé</b> et le <b>compte Admin</b> (voir §3)</td><td>Trois numéros distincts disponibles</td><td class="w">A</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">0.5</td><td>Choisir un lieu de test réel : le client et le Zem à <b>200 à 500 m</b> l'un de l'autre, destination à <b>1 à 3 km</b></td><td>Distance suffisante pour voir le déplacement sur la carte</td><td class="w">tous</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>3. Niveau 1 — Comptes et connexion</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">1.1</td><td>Créer le compte client : saisir le numéro, recevoir le code (OTP), le saisir</td><td>Connexion réussie, arrivée sur l'accueil du client</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">1.2</td><td>Saisir un mauvais code OTP</td><td>Message d'erreur clair, pas de connexion</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">1.3</td><td>Se déconnecter (Profil) puis se reconnecter avec le même numéro</td><td>Le client retrouve <b>la dernière page où il était</b> (pas toujours l'accueil)</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">1.4</td><td>Sur chaque page client autre que l'accueil (Courses, Portefeuille, Profil, Messages, Aide…) : appuyer sur la flèche retour de la barre du haut, puis sur le bouton retour du téléphone</td><td>Retour à la page d'où l'on vient, jamais un écran au hasard</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">1.5</td><td>Changer la langue de l'application (français, anglais, espagnol, allemand)</td><td>Les écrans client changent de langue, les montants restent corrects</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>4. Niveau 2 — Inscription et validation du Zem</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">2.1</td><td>Depuis un compte client : « Devenir prestataire » → choisir Zem, remplir le dossier (identité, véhicule, photos, consentement)</td><td>Les boutons <b>Quitter / Continuer</b> sont entièrement visibles au-dessus de la barre Android ; le dossier se dépose</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">2.2</td><td>Écran de suivi du dossier</td><td>Statut « en attente de validation » avec le délai annoncé ; le client peut continuer à utiliser l'app</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">2.3</td><td>L'administrateur ouvre la liste des dossiers et valide celui du Zem</td><td>Le dossier passe à « approuvé »</td><td class="w">A</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">2.4</td><td>Le Zem se reconnecte</td><td>Il arrive sur son <b>espace Zem</b> (et non sur l'espace client)</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">2.5</td><td>Le Zem passe <b>En ligne</b></td><td>Statut « en ligne », carte radar avec sa position (point bleu + cercle de précision), nombre de clients autour</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>5. Niveau 3 — Portefeuille et recharge</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">3.1</td><td>Client : Portefeuille → Recharger, essayer <b>200 F</b></td><td>Refus : minimum 300 F</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">3.2</td><td>Recharger 1 000 F avec le numéro de test (MTN 66000001) — mode test FedaPay</td><td>La page de paiement s'ouvre <b>dans l'application</b> ; à la fin elle se ferme seule</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">3.3</td><td>Après paiement</td><td>Popup « Compte rechargé +1 000 FCFA » et solde mis à jour <b>sans action</b> (quelques secondes)</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">3.4</td><td>Recharger avec le numéro d'échec (MTN 66000000)</td><td>Message clair « paiement refusé / annulé », solde inchangé</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">3.5</td><td>Fermer la page de paiement avant la fin</td><td>Pas de crédit, pas de blocage de l'application</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>6. Niveau 4 — Course immédiate (parcours nominal)</h2>
+<p class="sm">Zem en ligne et client rechargé. Tarif de référence affiché à l'écran : 150 FCFA de base + 70 FCFA par km pour un Zem à essence.</p>
+<h3>4A. Commande côté client</h3>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">4.1</td><td>Accueil → demander une course, saisir l'adresse de destination (recherche, adresse enregistrée ou point sur la carte)</td><td>Le départ est la position réelle du client ; l'itinéraire se trace sur la carte</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.2</td><td>Lire le récapitulatif</td><td>Distance, durée et prix cohérents avec le tarif ; solde du portefeuille affiché</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.3</td><td>Mode « Maintenant » sélectionné → bouton <b>Confirmer</b></td><td>Bouton actif et cliquable</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.4</td><td>Passer à « Programmer » puis <b>revenir sur « Maintenant »</b></td><td>Le bouton Confirmer redevient actif (correction faite le 14/10)</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.5</td><td>Avec un solde volontairement trop bas</td><td>Message « solde insuffisant » et bouton Recharger ; la course ne part pas</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.6</td><td>Confirmer la commande</td><td>Écran de recherche d'un Zem, avec possibilité d'annuler</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+<h3>4B. Réception et proposition côté Zem</h3>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">4.7</td><td>La demande arrive sur le radar du Zem</td><td>En moins de ~10 s : un point orange avec le <b>prénom abrégé</b> du client, nombre de clients mis à jour</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.8</td><td>Ouvrir la demande</td><td>Départ, arrivée, distance, prix, <b>note du client</b> et nombre d'avis/courses du client</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.9</td><td>Le Zem <b>propose ses services</b></td><td>Écran d'attente avec décompte ; chez le client, une <b>fenêtre de proposition</b> s'ouvre (profil du Zem)</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.10</td><td>Le client ouvre la fenêtre</td><td>Le Zem voit « le client regarde ton profil »</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.11</td><td>Le client <b>accepte</b> ce Zem</td><td>Les deux téléphones passent au suivi : le Zem « en route vers le client », le client voit le Zem se déplacer</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+<h3>4C. Approche, prise en charge et trajet</h3>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">4.12</td><td>Le Zem roule vers le client</td><td>Sa position bouge de façon <b>fluide</b> chez le client, collée à la route, avec le tracé et le temps d'arrivée ; pas de saut ni de tremblement à l'arrêt</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.13</td><td>Sur la carte du Zem</td><td>On voit : lui, le client, le départ, l'arrivée, le tracé ; la carte reste centrée, bouton « Recentrer » si on la déplace</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.14</td><td>Le Zem confirme son <b>arrivée</b> au point de prise en charge</td><td>Le client est prévenu (statut « arrivé » / notification)</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.15</td><td>Démarrer la course avec le <b>code de prise en charge</b> donné par le client</td><td>Mauvais code refusé ; bon code → course « en cours »</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.16</td><td>Pendant le trajet</td><td>La distance parcourue et le prix courant s'affichent des deux côtés, la position suit le trajet</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.17</td><td>Arrivée à destination, le Zem termine la course</td><td>Course « terminée » des deux côtés</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+<h3>4D. Paiement et clôture</h3>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">4.18</td><td>Solde du client</td><td>Débit du <b>prix exact</b> de la course, uniquement à la fin</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.19</td><td>Gains du Zem</td><td>Le Zem est crédité du prix moins la commission ; la carte « Mes gains » est à jour</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.20</td><td>Le client note le Zem (1 à 5 étoiles) et peut laisser un pourboire</td><td>Note enregistrée, pourboire débité et crédité si donné</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.21</td><td>Le Zem note le client</td><td>Fenêtre de notation après la course ; note prise en compte</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.22</td><td>Reçu de la course (Courses → course terminée → Reçu)</td><td>Texte partageable ; le client <b>ne voit pas</b> la commission, le Zem voit son net</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">4.23</td><td>Historique « Courses »</td><td>La course apparaît, statut « terminée », prix exact</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>7. Niveau 5 — Arrêt en cours de route (course partielle)</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">5.1</td><td>Pendant une course en cours, le client demande un <b>arrêt</b> avant la destination</td><td>Le Zem voit la demande en direct et peut accepter ou refuser</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">5.2</td><td>Le Zem refuse</td><td>Le client est prévenu ; la course continue normalement</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">5.3</td><td>Le client annule sa propre demande d'arrêt</td><td>La demande disparaît chez le Zem</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">5.4</td><td>Le Zem accepte l'arrêt, puis le paiement se fait avec le <b>code d'arrêt</b></td><td>La course se termine ; le prix correspond à la <b>distance réellement parcourue</b></td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">5.5</td><td>Proposition d'arrêt faite par le Zem (si l'écran le permet)</td><td>Le client voit la demande et peut accepter ou refuser</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>8. Niveau 6 — Annulations et refus (très important)</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">6.1</td><td>Le client annule pendant la <b>recherche</b> (avant toute proposition)</td><td>La demande disparaît du radar du Zem ; aucun débit</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">6.2</td><td>Le client annule pendant que la <b>fenêtre de proposition</b> est ouverte / que le Zem attend</td><td>L'écran d'attente du Zem se ferme avec « Le client a annulé sa demande »</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">6.3</td><td>Le client annule <b>après avoir choisi le Zem</b> (Zem en route ou arrivé)</td><td>Le Zem reçoit <b>immédiatement</b> l'alerte « Le client a annulé la course » (+ notification) ; sa carte se vide ; il peut prendre une autre demande</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">6.4</td><td>Le <b>Zem annule</b> après avoir été choisi</td><td>Le client reçoit l'alerte « Ton Zem a annulé… nous cherchons un nouveau Zem » et la recherche reprend ; <b>nouveau code</b> de prise en charge</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">6.5</td><td>Le Zem retire sa proposition avant la décision du client</td><td>La fenêtre se ferme chez le client avec un message clair</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">6.6</td><td>Le client <b>refuse</b> la proposition du Zem</td><td>Le Zem est prévenu et peut accepter une autre demande</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">6.7</td><td>Proposition non traitée jusqu'à <b>expiration</b></td><td>Des deux côtés la proposition se ferme sans blocage</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">6.8</td><td>Deux Zems proposent sur la même demande (si 2 Zems disponibles) ; le client en choisit un</td><td>L'autre est prévenu que la demande est prise ailleurs</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">6.9</td><td>Après chaque annulation : solde du client</td><td>Aucun débit pour une course non terminée</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">6.10</td><td>Annuler avec l'application du Zem <b>fermée</b> ou le téléphone verrouillé</td><td>Notification reçue ; à la réouverture, l'écran est à jour</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>9. Niveau 7 — Course programmée</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">7.1</td><td>Client : choisir « Programmer », un jour puis une heure (au plus tôt dans ~35 min)</td><td>L'heure choisie s'affiche ; le bouton devient « Confirmer la course programmée »</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">7.2</td><td>Après confirmation</td><td>Course visible comme « programmée le … » ; <b>absente du radar</b> du Zem pour l'instant</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">7.3</td><td>~15 min avant l'heure</td><td>La demande est libérée : elle apparaît sur le radar des Zems et la suite est celle du niveau 4</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">7.4</td><td>Annuler une course programmée avant sa libération</td><td>Elle disparaît des courses du client, aucun débit</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>10. Niveau 8 — Sécurité, aide et messages</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">8.1</td><td>Pendant une course : bouton <b>SOS</b></td><td>Trois actions : appeler les secours, prévenir AZƆ̀ avec la position, SMS au contact d'urgence avec la position</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">8.2</td><td>Partager le suivi de la course (si disponible)</td><td>Un lien / texte de partage s'ouvre</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">8.3</td><td>Assistance : créer une demande, y répondre côté admin</td><td>La réponse apparaît dans la conversation du demandeur</td><td class="w">C / Z / A</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">8.4</td><td>Notifications reçues pendant la course (acceptation, arrivée, annulation, fin)</td><td>Textes dans la langue de l'utilisateur, clic ouvre l'application</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">8.5</td><td>Note basse répétée (si on veut tester) : avertissement puis restriction</td><td>Bandeau orange puis rouge ; la restriction bloque la demande avec un message clair</td><td class="w">C / Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>11. Niveau 9 — Qualité de la carte et du GPS</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">9.1</td><td>Zem à l'arrêt, en ligne, 2 minutes</td><td>Le point bleu ne « tremble » pas ; le cercle de précision reste petit (quelques mètres à l'extérieur)</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">9.2</td><td>Zem qui roule sur une rue connue</td><td>Le curseur suit la <b>chaussée</b>, avec la flèche de direction, sans retard visible</td><td class="w">Z + C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">9.3</td><td>Passage entre des immeubles / sous un abri</td><td>Pas de saut de plusieurs centaines de mètres ; retour à la normale ensuite</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">9.4</td><td>Comparer la position affichée avec la position réelle (repère visible)</td><td>Écart à noter en mètres dans la remarque (objectif : moins de 15 m)</td><td class="w">tous</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">9.5</td><td>Tracé et temps d'arrivée</td><td>Le tracé suit de vraies routes ; le temps annoncé est plausible</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>12. Niveau 10 — Cas limites (réseau, application, téléphone)</h2>
+<table>
+<tr><th>N°</th><th>Contrôle</th><th>Résultat attendu</th><th>Qui</th><th>OK / KO</th><th>Remarque</th></tr>
+<tr><td class="n">10.1</td><td>Couper les données du client 20 s pendant la course, puis les rétablir</td><td>Pas de plantage ; le suivi reprend ; message de réseau coupé éventuel</td><td class="w">C</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">10.2</td><td>Couper les données du Zem 20 s pendant la course</td><td>La course n'est pas perdue ; position de nouveau envoyée au retour du réseau</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">10.3</td><td>Fermer complètement l'application (client puis Zem) pendant une course, la rouvrir</td><td>La course en cours est retrouvée, aucune donnée perdue</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">10.4</td><td>Refuser l'autorisation de localisation</td><td>Message demandant de l'activer, pas de plantage</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">10.5</td><td>Zem passe « Hors ligne » pendant une course</td><td>Refusé avec message : terminer ou annuler la course d'abord</td><td class="w">Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">10.6</td><td>Écrans de petite taille et grande taille (si possible deux modèles)</td><td>Aucun bouton masqué par la barre du système, textes lisibles</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+<tr><td class="n">10.7</td><td>Deux courses d'affilée avec les mêmes comptes</td><td>La seconde ne garde aucun reste de la première (carte, code, alertes)</td><td class="w">C + Z</td><td class="ok">☐ ☐</td><td class="rem"></td></tr>
+</table>
+
+<h2>13. Synthèse à remplir</h2>
+<table>
+<tr><th>Niveau</th><th>Points</th><th>OK</th><th>KO</th><th>Gravité du pire KO</th><th>Décision</th></tr>
+<tr><td>0 Préparation</td><td>5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>1 Comptes et connexion</td><td>5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>2 Inscription et validation du Zem</td><td>5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>3 Portefeuille et recharge</td><td>5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>4 Course immédiate</td><td>23</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>5 Arrêt en cours de route</td><td>5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>6 Annulations et refus</td><td>10</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>7 Course programmée</td><td>4</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>8 Sécurité, aide, messages</td><td>5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>9 Carte et GPS</td><td>5</td><td></td><td></td><td></td><td></td></tr>
+<tr><td>10 Cas limites</td><td>7</td><td></td><td></td><td></td><td></td></tr>
+</table>
+<p>Testeur client : ________________ &nbsp; Testeur Zem : ________________ &nbsp; Date : ____ / ____ / 2026 &nbsp; Modèles de téléphone : ________________</p>
+
+<h2>14. À savoir avant de commencer</h2>
+<div class="box warn"><b>Limites connues.</b>
+<ul>
+<li>Le paiement est en <b>mode test</b> (FedaPay sandbox) : aucun vrai argent n'est débité, uniquement les numéros de test fonctionnent.</li>
+<li>Pas encore de paiement <b>en espèces</b>, de codes promo ni de parrainage : ces fonctions attendent des décisions métier.</li>
+<li>Les voix en <b>Fon et Yoruba</b> ne sont pas encore enregistrées ; elles lisent le français en attendant.</li>
+<li>La carte utilise des serveurs publics (OpenStreetMap) : en cas de très mauvais réseau, des tuiles peuvent mettre du temps à s'afficher.</li>
+<li>Les points des niveaux 6 (annulations) et 9 (GPS) sont les corrections les plus récentes : ils n'ont pas encore été vérifiés sur de vrais téléphones, ce sont les plus importants à tester.</li>
+<li>Le serveur gratuit s'endort : la première action peut être lente ; la réveiller avant de commencer (point 0.2).</li>
+</ul></div>
+<div class="foot">Plan établi le 14 octobre 2026 d'après les fonctions présentes dans la version envoyée en ligne le jour même.</div>
+</body></html>

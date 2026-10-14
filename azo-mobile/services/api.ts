@@ -777,7 +777,7 @@ export type ProviderStatus =
   | "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "NEED_INFO" | "APPROVED" | "REJECTED" | "SUSPENDED";
 export type DocumentKind =
   | "CNI" | "SELFIE" | "PERMIS" | "CARTE_GRISE" | "ASSURANCE" | "VISITE_TECHNIQUE"
-  | "PHOTO_VEHICULE" | "RCCM" | "IFU" | "STATUTS" | "DIPLOME" | "EXTRAIT_CASIER";
+  | "PHOTO_VEHICULE" | "RCCM" | "IFU" | "STATUTS" | "DIPLOME" | "EXTRAIT_CASIER" | "PROFILE_PHOTO" | "LOGO";
 export type DocumentReview = "PENDING" | "VALID" | "INVALID";
 export type AgencyPlanChoice = "PRO" | "SILVER" | "OR" | "DIAMANT";
 

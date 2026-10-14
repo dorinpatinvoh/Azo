@@ -76,14 +76,16 @@ export const ROLE_FOR_TYPE: Record<ProviderType, Role> = {
 
 // Pièces exigées pour approuver un dossier.
 export const REQUIRED_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
-  DRIVER: ["CNI", "SELFIE", "PERMIS", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
-  COURIER: ["CNI", "SELFIE", "PERMIS", "PHOTO_VEHICULE"],
-  AGENCY: ["CNI", "SELFIE", "RCCM", "IFU", "STATUTS"],
+  // Zem et conducteurs : plus de permis ni de visite technique à l'inscription ; photo de profil obligatoire.
+  DRIVER: ["CNI", "SELFIE", "PROFILE_PHOTO", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
+  COURIER: ["CNI", "SELFIE", "PROFILE_PHOTO", "PERMIS", "PHOTO_VEHICULE"],
+  // Agences : logo obligatoire.
+  AGENCY: ["CNI", "SELFIE", "LOGO", "RCCM", "IFU", "STATUTS"],
   ARTISAN: ["CNI", "SELFIE"],
 };
 
 export const OPTIONAL_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
-  DRIVER: ["VISITE_TECHNIQUE", "EXTRAIT_CASIER"],
+  DRIVER: ["EXTRAIT_CASIER"],
   COURIER: ["CARTE_GRISE", "ASSURANCE", "EXTRAIT_CASIER"],
   AGENCY: ["PHOTO_VEHICULE", "EXTRAIT_CASIER"],
   ARTISAN: ["EXTRAIT_CASIER"],
@@ -117,7 +119,7 @@ const TYPE_LABELS: Record<ProviderType, string> = {
 };
 
 const DOCUMENT_LABELS: Record<DocumentKind, string> = {
-  CNI: "pièce d'identité",
+  CNI: "carte d'identité ou CIP",
   SELFIE: "selfie de vérification",
   PERMIS: "permis de conduire",
   CARTE_GRISE: "carte grise",
@@ -129,6 +131,8 @@ const DOCUMENT_LABELS: Record<DocumentKind, string> = {
   STATUTS: "statuts de la société",
   DIPLOME: "diplôme ou certificat",
   EXTRAIT_CASIER: "extrait de casier judiciaire",
+  PROFILE_PHOTO: "photo de profil",
+  LOGO: "logo de l'agence",
 };
 
 // Un dossier n'est modifiable que dans ces états : une fois soumis, il appartient à
@@ -155,9 +159,9 @@ const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads"
 // Pièces dont le FICHIER (photo ou scan) est obligatoire pour déposer un dossier.
 // Une simple déclaration ne suffit pas : sans image, l'admin ne peut rien vérifier.
 export const PHOTO_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
-  DRIVER: ["SELFIE", "CNI"],
-  COURIER: ["SELFIE", "CNI"],
-  AGENCY: ["SELFIE", "CNI"],
+  DRIVER: ["SELFIE", "CNI", "PROFILE_PHOTO"],
+  COURIER: ["SELFIE", "CNI", "PROFILE_PHOTO"],
+  AGENCY: ["SELFIE", "CNI", "LOGO"],
   ARTISAN: ["SELFIE", "CNI"],
 };
 

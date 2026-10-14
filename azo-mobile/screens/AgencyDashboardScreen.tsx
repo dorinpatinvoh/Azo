@@ -253,7 +253,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
   }, [data]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={confirmLogout} style={styles.iconButton} accessibilityLabel={t("ag.menuLabel")}>
           <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />

@@ -111,7 +111,7 @@ export default function ProviderStatusScreen({ onEdit, onEnterWorkspace, onBack 
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.muted}>Chargement de ton dossier…</Text>
@@ -124,7 +124,7 @@ export default function ProviderStatusScreen({ onEdit, onEnterWorkspace, onBack 
 
   if (!provider) {
     return (
-      <SafeAreaView style={styles.safe} edges={["top"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <Header onBack={onBack} />
         <View style={styles.center}>
           <MaterialIcons name="badge" size={44} color={colors.primary} />
@@ -152,7 +152,7 @@ export default function ProviderStatusScreen({ onEdit, onEnterWorkspace, onBack 
   const progress = requiredCount > 0 ? Math.min(1, providedCount / requiredCount) : 1;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <Header onBack={onBack} />
 
       <ScrollView

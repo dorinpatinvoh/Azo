@@ -110,7 +110,7 @@ export default function RideRequestScreen({ onBack, onConfirm }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       {/* En-tête */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
