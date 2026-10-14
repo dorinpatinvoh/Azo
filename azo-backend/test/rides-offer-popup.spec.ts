@@ -141,6 +141,7 @@ function makeService(initial: Partial<State> = {}, opts: { pushNever?: boolean }
     emitNewRequest: jest.fn(),
     emitOffered: jest.fn(),
     emitOfferEnded: jest.fn(),
+    emitRideCancelled: jest.fn(),
     emitOfferSeen: jest.fn(),
     emitOfferApproved: jest.fn(),
     clearRideLocations: jest.fn(),

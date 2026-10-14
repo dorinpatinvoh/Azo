@@ -7,6 +7,7 @@ import { typography } from "../theme/typography";
 import { errorMessage, ridesApi, Ride } from "../services/api";
 import { receiptText } from "../utils/receipt";
 import ClientTabBar, { ClientTab } from "../components/ClientTabBar";
+import BackButton from "../components/BackButton";
 import { useI18n, type MessageKey } from "../i18n";
 import {
   fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL, STATUS_INFO, ACTIVE_STATUSES, DEMO_RIDES,
@@ -22,12 +23,14 @@ const FILTERS: { id: Filter; labelKey: MessageKey }[] = [
 ];
 
 type Props = {
+  /** Retour à la page précédente (barre d'application). */
+  onBack?: () => void;
   onNavigateTab: (tab: ClientTab) => void;
   onRequestRide: () => void;
   onTrackRide?: (rideId: string) => void;
 };
 
-export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRide }: Props) {
+export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, onTrackRide }: Props) {
   const { t, locale } = useI18n();
   const [rides, setRides] = useState<Ride[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +85,11 @@ export default function CoursesScreen({ onNavigateTab, onRequestRide, onTrackRid
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
+        {onBack ? (
+          <View style={{ marginBottom: spacing.xs }}>
+            <BackButton onPress={onBack} />
+          </View>
+        ) : null}
         <Text style={styles.title}>{t("courses.title")}</Text>
         <Text style={styles.subtitle}>
           {t("courses.summary", {

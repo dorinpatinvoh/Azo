@@ -343,6 +343,8 @@ export const fr = {
   "live.marker.driver": "Chauffeur",
   "live.loading": "Chargement de ta course…",
   "live.pay.none": "aucun débit",
+  "live.driverCancelled.title": "Ton Zem a annulé",
+  "live.driverCancelled.body": "Ton Zem a annulé la course. Nous cherchons un nouveau Zem pour toi.",
   "live.pay.done": "AZƆ̀ Pay (débité)",
   "live.pay.arrival": "AZƆ̀ Pay (débité à l'arrivée)",
   "live.cancel.title": "Annuler la course ?",

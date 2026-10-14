@@ -8,6 +8,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { userApi, walletApi, ridesApi, UserProfile, Ride } from "../services/api";
 import ClientTabBar, { ClientTab } from "../components/ClientTabBar";
+import BackButton from "../components/BackButton";
 import LanguageSheet from "../components/LanguageSheet";
 import Avatar from "../components/Avatar";
 import AvatarSheet from "../components/AvatarSheet";
@@ -18,6 +19,8 @@ import { languageInfo, useI18n } from "../i18n";
 import { speakKey, stopSpeaking } from "../i18n/voice";
 
 type Props = {
+  /** Retour à la page précédente (barre d'application). */
+  onBack?: () => void;
   onNavigateTab: (tab: ClientTab) => void;
   onOpenNotifications: () => void;
   onOpenProvider: () => void;
@@ -38,7 +41,7 @@ export function initials(user?: Pick<UserProfile, "firstName" | "lastName" | "fu
   return `${first ?? ""}${last ?? ""}`.toUpperCase() || "?";
 }
 
-export default function ProfileScreen({ onNavigateTab, onOpenNotifications, onOpenProvider, onOpenInfo, onOpenHelp, onLogout }: Props) {
+export default function ProfileScreen({ onBack, onNavigateTab, onOpenNotifications, onOpenProvider, onOpenInfo, onOpenHelp, onLogout }: Props) {
   const insets = useSafeAreaInsets();
   const { t, lang, locale, voiceAssist, setVoiceAssist, voiceLang } = useI18n();
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -98,7 +101,10 @@ export default function ProfileScreen({ onNavigateTab, onOpenNotifications, onOp
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       {/* Barre d'application : même fond violet clair que l'accueil, coins du bas arrondis */}
       <View style={[styles.appBar, { paddingTop: insets.top + spacing.sm }]}>
-        <Text style={styles.appBarTitle}>{t("profile.title")}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+          {onBack ? <BackButton onPress={onBack} /> : null}
+          <Text style={styles.appBarTitle}>{t("profile.title")}</Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>

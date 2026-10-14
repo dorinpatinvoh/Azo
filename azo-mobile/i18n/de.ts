@@ -341,6 +341,8 @@ export const de: Record<MessageKey, string> = {
   "live.marker.driver": "Fahrer",
   "live.loading": "Deine Fahrt wird geladen…",
   "live.pay.none": "keine Abbuchung",
+  "live.driverCancelled.title": "Dein Fahrer hat storniert",
+  "live.driverCancelled.body": "Dein Fahrer hat die Fahrt storniert. Wir suchen einen neuen Fahrer für dich.",
   "live.pay.done": "AZƆ̀ Pay (abgebucht)",
   "live.pay.arrival": "AZƆ̀ Pay (Abbuchung bei Ankunft)",
   "live.cancel.title": "Fahrt stornieren?",

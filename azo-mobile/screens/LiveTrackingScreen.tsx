@@ -68,6 +68,8 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   const socketRef = useRef<Socket | null>(null);
   const lastDriverAtRef = useRef(0);
+  // Statut précédent : un Zem déjà assigné qui disparaît (retour en recherche) = il a annulé
+  const prevStatusRef = useRef<string | null>(null);
 
   // Position du Zem reçue par socket, par l'accusé de `ride:join` ou par le suivi périodique.
   // Une position plus ancienne que celle déjà affichée est ignorée (réseau mobile instable :
@@ -125,6 +127,15 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
     tick();
     return () => { cancelled = true; clearTimeout(timer); };
   }, [rideId]);
+
+  useEffect(() => {
+    const status = ride?.status ?? null;
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (status === "PENDING" && (prev === "MATCHED" || prev === "ARRIVED")) {
+      Alert.alert(t("live.driverCancelled.title"), t("live.driverCancelled.body"));
+    }
+  }, [ride?.status, t]);
 
   useEffect(() => {
     if (ride?.status !== "COMPLETED") return;

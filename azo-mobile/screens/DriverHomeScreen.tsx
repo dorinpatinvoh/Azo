@@ -15,6 +15,7 @@ import {
 import { fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
 import { tarification } from "../services/tarification";
 import { distanceKm, fmtKm } from "../utils/geo";
+import { filterFix, snapToPolyline, type FilterState } from "../utils/gpsFilter";
 import RideChatModal from "../components/RideChatModal";
 import OSMMapView, { type OSMMarker } from "../components/OSMMapView";
 import RideStopPanel from "../components/RideStopPanel";
@@ -72,6 +73,10 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   const lastClientAtRef = useRef(0);
   // Vitesse et précision du dernier point GPS, envoyées avec chaque position.
   const fixRef = useRef<{ speed?: number; accuracy?: number }>({});
+  // Dernier point GPS retenu après filtrage (points vagues ou sauts ignorés, arrêt sans tremblement)
+  const filterRef = useRef<FilterState | null>(null);
+  // Précision (m) du point affiché : dessine le cercle de précision autour de « Moi »
+  const [accuracy, setAccuracy] = useState<number | undefined>();
 
   // Position du client reçue par socket (`client:location`) ou dans l'accusé de `ride:join`
   // (dernière position conservée par le serveur : le client apparaît tout de suite). Une
@@ -300,6 +305,13 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         // la relecture toutes les 3 s prendra le relais
       }
     });
+    // Le client annule la course déjà acceptée : on la retire et on prévient tout de suite
+    socket.on("ride:cancelled", (p: { rideId?: string }) => {
+      if (!p?.rideId || p.rideId !== activeRideRef.current?.id) return;
+      setActiveRide(null);
+      loadPending().catch(() => undefined);
+      Alert.alert("Course annulée", "Le client a annulé la course. Tu peux accepter une autre demande.");
+    });
     socket.on("ride:removed", () => {
       loadPending().catch(() => undefined);
       setSummaryTick((n) => n + 1);
@@ -319,7 +331,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   // Pendant la course, on relit son état toutes les 3 s : le client peut avoir demandé ou
   // accepté l'arrêt, ce qui termine la course sans action du Zem. Filet si le socket tombe.
   useEffect(() => {
-    if (!online || activeRide?.status !== "IN_PROGRESS") return;
+    if (!online || !activeRide || !["MATCHED", "ARRIVED", "IN_PROGRESS"].includes(activeRide.status)) return;
     const id = activeRide.id;
     let cancelled = false;
     const tick = async () => {
@@ -333,7 +345,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
             fresh.status === "COMPLETED" ? "Course terminée" : "Course annulée",
             fresh.status === "COMPLETED"
               ? "Le paiement a été effectué sur ton portefeuille AZƆ̀ Pay."
-              : "Cette course a été annulée."
+              : "Le client a annulé la course. Tu peux accepter une autre demande."
           );
           return;
         }
@@ -412,7 +424,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   // Google Maps) ; sans course = position grossière pour économiser la batterie.
   const hasActiveRide = activeRide != null;
   useEffect(() => {
-    if (!online) return;
+    if (!online) { filterRef.current = null; return; }
     let sub: Location.LocationSubscription | null = null;
     let cancelled = false;
 
@@ -421,12 +433,28 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         const perm = await Location.requestForegroundPermissionsAsync();
         if (perm.status !== "granted") { setGpsStatus("denied"); return; }
         setGpsStatus("ok");
+        // Premier point tout de suite : dernier point connu (instantané), puis un vrai point GPS précis.
+        const showFirst = (pos: Location.LocationObject) => {
+          if (cancelled || filterRef.current) return;
+          const f = filterFix(null, { ...pos.coords, timestamp: pos.timestamp });
+          if (!f) return;
+          filterRef.current = f;
+          setPosition({ latitude: f.latitude, longitude: f.longitude });
+          setAccuracy(f.accuracy);
+        };
+        Location.getLastKnownPositionAsync({ maxAge: 60000, requiredAccuracy: 100 }).then((p) => { if (p) showFirst(p); }).catch(() => undefined);
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).then(showFirst).catch(() => undefined);
         sub = await Location.watchPositionAsync(
           hasActiveRide
-            ? { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 2, timeInterval: 1000 }
-            : { accuracy: Location.Accuracy.Balanced, distanceInterval: 25, timeInterval: 10000 },
+            ? { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 1, timeInterval: 1000 }
+            : { accuracy: Location.Accuracy.High, distanceInterval: 5, timeInterval: 3000 },
           (pos) => {
-            const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+            // Filtrage : un point vague ou aberrant ne déplace plus le curseur
+            const kept = filterFix(filterRef.current, { ...pos.coords, timestamp: pos.timestamp });
+            if (!kept) return;
+            filterRef.current = kept;
+            setAccuracy(kept.accuracy);
+            const coords = { latitude: kept.latitude, longitude: kept.longitude };
             const h = pos.coords.heading;
             const s = pos.coords.speed;
             // Vitesse GPS négative = inconnue. En dessous de ~1 m/s (arrêt, demi-tour) le cap
@@ -532,9 +560,13 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     if (liveClient && clientPos) {
       list.push({ id: "client", coordinate: clientPos, title: who, color: "orange", heading: clientPos.heading });
     }
-    if (position) list.push({ id: "driver", coordinate: position, title: "Moi", color: "blue", heading });
+    // Curseur accroché à la route (≤ 25 m du tracé) : il suit la chaussée, pas le bruit du GPS
+    if (position) {
+      const onRoad = driveRoute && activeRide && driveRoute.rideId === activeRide.id && driveRoute.status === activeRide.status ? snapToPolyline(position, driveRoute.coordinates) : position;
+      list.push({ id: "driver", coordinate: onRoad, title: "Moi", color: "blue", heading, accuracy });
+    }
     return list;
-  }, [activeRide?.id, activeRide?.status, activeRide?.originLat, activeRide?.originLng, activeRide?.destLat, activeRide?.destLng, activeRide?.client?.displayName, activeRide?.client?.fullName, position, heading, clientPos]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [driveRoute, accuracy, activeRide?.id, activeRide?.status, activeRide?.originLat, activeRide?.originLng, activeRide?.destLat, activeRide?.destLng, activeRide?.client?.displayName, activeRide?.client?.fullName, position, heading, clientPos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Le tracé n'est montré que s'il correspond à la course et à l'étape en cours.
   const mapPolyline = useMemo<LatLng[]>(
@@ -1154,6 +1186,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
               <NearbyClientsMap
                 position={position}
                 heading={heading}
+                accuracy={accuracy}
                 requests={requests}
                 count={nearbyCount}
                 radiusKm={nearbyRadiusKm()}

@@ -9,8 +9,9 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { colors, radius, spacing } from "../theme/colors";
@@ -193,6 +194,10 @@ function isoToFr(iso: string | null): string {
 }
 
 export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialType, initialVehicle }: Props) {
+  // Le bas de l'écran reste au-dessus de la barre de navigation Android ; boutons plus compacts sur petit écran
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const compact = screenWidth < 360;
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [req, setReq] = useState<ProviderRequirements | null>(null);
@@ -1184,19 +1189,19 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable style={styles.secondaryBtn} onPress={goBack} disabled={busy}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}>
+        <Pressable style={[styles.secondaryBtn, compact && { paddingHorizontal: 14 }]} onPress={goBack} disabled={busy}>
           <Text style={styles.secondaryText}>{step === 0 ? "Quitter" : "Précédent"}</Text>
         </Pressable>
         <Pressable
-          style={[styles.primaryBtn, { flex: 1 }, busy && styles.btnDisabled]}
+          style={[styles.primaryBtn, { flex: 1, minWidth: 0 }, compact && { paddingHorizontal: 12 }, busy && styles.btnDisabled]}
           onPress={goNext}
           disabled={busy}
         >
           {busy ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.primaryText}>
+            <Text style={styles.primaryText} numberOfLines={1} adjustsFontSizeToFit>
               {step === TOTAL_STEPS - 1 ? "Déposer mon dossier" : "Continuer"}
             </Text>
           )}

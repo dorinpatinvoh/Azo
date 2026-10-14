@@ -1744,6 +1744,7 @@ export class RidesService {
 
     if (isClient) {
       if (ride.driverId) {
+        this.gateway.emitRideCancelled(ride.driverId, rideId);
         await this.notifications.push(ride.driverId, "Course annulée", "Le client a annulé la course.", "ride", {
           titleKey: "NOTIFICATION_RIDE_CANCELLED",
           bodyKey: "NOTIFICATION_RIDE_CANCELLED_BY_CLIENT_BODY",

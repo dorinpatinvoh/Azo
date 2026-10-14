@@ -11,6 +11,8 @@ export type OSMMarker = {
   title?: string;
   color?: "green" | "red" | "blue" | "orange";
   heading?: number;
+  /** Précision GPS en mètres : dessine un cercle autour du point. */
+  accuracy?: number;
 };
 
 type Props = {
@@ -102,8 +104,9 @@ function buildMapHtml(initial?: LatLng) {
     <script>
       var map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([${startLat}, ${startLng}], 14);
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19, updateWhenIdle: false, keepBuffer: 4
+        maxZoom: 19, detectRetina: true, updateWhenIdle: false, keepBuffer: 4
       }).addTo(map);
+      var accuracyLayer = L.layerGroup().addTo(map);
       var markersLayer = L.layerGroup().addTo(map);
       var polylineLayer = L.layerGroup().addTo(map);
       var markerStore = {};
@@ -161,6 +164,18 @@ function buildMapHtml(initial?: LatLng) {
         });
       }
 
+      // Cercle de précision GPS (rayon réel, 5 à 120 m) autour du point : montre la fiabilité de la position
+      function setAccuracy(entry, acc) {
+        if (typeof acc !== 'number' || !isFinite(acc) || acc <= 0) {
+          if (entry.circle) { accuracyLayer.removeLayer(entry.circle); entry.circle = null; }
+          return;
+        }
+        var r = Math.min(Math.max(acc, 5), 120);
+        if (!entry.circle) {
+          entry.circle = L.circle(entry.marker.getLatLng(), { radius: r, color: '#1A73E8', weight: 1, opacity: 0.5, fillColor: '#1A73E8', fillOpacity: 0.12, interactive: false }).addTo(accuracyLayer);
+        } else entry.circle.setRadius(r);
+      }
+
       // Rotation par le plus court chemin (350° -> 10° ne fait pas un tour complet).
       function setHeading(entry, heading) {
         var el = entry.marker.getElement();
@@ -184,6 +199,7 @@ function buildMapHtml(initial?: LatLng) {
         if (dist < 0.5) return;
         if (dist > 2000) {
           entry.marker.setLatLng(to);
+          if (entry.circle) entry.circle.setLatLng(to);
           entry.anim = null;
           entry.lastAt = now;
           return;
@@ -208,6 +224,7 @@ function buildMapHtml(initial?: LatLng) {
           var a = e.anim;
           var k = Math.min(1, (t - a.t0) / a.dur);
           e.marker.setLatLng([a.from.lat + (a.to.lat - a.from.lat) * k, a.from.lng + (a.to.lng - a.from.lng) * k]);
+          if (e.circle) e.circle.setLatLng(e.marker.getLatLng());
           if (k >= 1) e.anim = null; else active = true;
         }
         followCamera(t, false);
@@ -296,6 +313,7 @@ function buildMapHtml(initial?: LatLng) {
                 angle: hasHeading(m.heading) ? ((m.heading % 360) + 360) % 360 : null
               };
               markerStore[id] = entry;
+              setAccuracy(entry, m.accuracy);
             } else {
               moveTo(entry, latLngOf(m.coordinate));
               if (iconKey !== entry.lastIconKey) {
@@ -304,12 +322,14 @@ function buildMapHtml(initial?: LatLng) {
                 entry.angle = null;
               }
               setHeading(entry, m.heading);
+              setAccuracy(entry, m.accuracy);
             }
           }
         }
         for (id in markerStore) {
           if (!seen[id]) {
             markersLayer.removeLayer(markerStore[id].marker);
+            if (markerStore[id].circle) accuracyLayer.removeLayer(markerStore[id].circle);
             delete markerStore[id];
           }
         }

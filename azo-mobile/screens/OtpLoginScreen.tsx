@@ -211,6 +211,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
       }
       await SecureStore.deleteItemAsync(REGISTRATION_PENDING_KEY);
 
+      await SecureStore.setItemAsync("lastLoginPhone", digits).catch(() => undefined);
       onVerified(role, provider);
     } catch (e) {
       notify(t("auth.alert.loginFailed"), errorMessage(e));
@@ -246,6 +247,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
       // Message de fin : il doit être prononcé jusqu'au bout même si l'écran change aussitôt
       spokenDone.current = true;
       if (talk) speakKey("voice.done", voiceLang);
+      await SecureStore.setItemAsync("lastLoginPhone", digits).catch(() => undefined);
       onVerified("CLIENT", null);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {

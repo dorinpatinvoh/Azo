@@ -6,12 +6,17 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { Conversation, Ride, RideChatMessage, messagesApi, ridesApi } from "../services/api";
 import ClientTabBar, { ClientTab } from "../components/ClientTabBar";
+import BackButton from "../components/BackButton";
 import RideChatModal from "../components/RideChatModal";
 import Avatar from "../components/Avatar";
 import { maskPersonName } from "../utils/phone";
 import { useI18n } from "../i18n";
 
-type Props = { onNavigateTab: (tab: ClientTab) => void };
+type Props = {
+  /** Retour à la page précédente (barre d'application). */
+  onBack?: () => void;
+  onNavigateTab: (tab: ClientTab) => void;
+};
 
 const ACTIVE = ["MATCHED", "ARRIVED", "IN_PROGRESS"];
 const MAX_FALLBACK = 8;
@@ -62,7 +67,7 @@ async function conversationsFromHistory(unknownName: string): Promise<Conversati
 }
 
 /** Onglet « Messages » : les Zem avec qui le client a déjà échangé, du plus récent au plus ancien. */
-export default function MessagesScreen({ onNavigateTab }: Props) {
+export default function MessagesScreen({ onBack, onNavigateTab }: Props) {
   const insets = useSafeAreaInsets();
   const { t, locale } = useI18n();
   const [items, setItems] = useState<Conversation[]>([]);
@@ -112,7 +117,10 @@ export default function MessagesScreen({ onNavigateTab }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <View style={[styles.appBar, { paddingTop: insets.top + spacing.sm }]}>
-        <Text style={styles.appBarTitle}>{t("msg.title")}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+          {onBack ? <BackButton onPress={onBack} /> : null}
+          <Text style={styles.appBarTitle}>{t("msg.title")}</Text>
+        </View>
       </View>
 
       <ScrollView

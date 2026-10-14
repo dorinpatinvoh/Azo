@@ -60,6 +60,7 @@ function makeService(status: string, code = pickupCode) {
   };
   const gateway = {
     emitStatus: jest.fn(),
+    emitRideCancelled: jest.fn(),
     clearRideLocations: jest.fn(),
     clearClientLocationState: jest.fn(),
     invalidateRideLocationContext: jest.fn(),

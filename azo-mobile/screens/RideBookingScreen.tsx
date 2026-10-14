@@ -984,10 +984,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
           {!!destination && (
             <SchedulePicker
               value={scheduledAt}
-              onChange={(value) => {
-                setScheduledAt(value);
-                setScheduleMode(value !== null || scheduleMode);
-              }}
+              onChange={setScheduledAt}
               onModeChange={setScheduleMode}
             />
           )}

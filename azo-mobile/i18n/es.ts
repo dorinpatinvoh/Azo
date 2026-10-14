@@ -341,6 +341,8 @@ export const es: Record<MessageKey, string> = {
   "live.marker.driver": "Conductor",
   "live.loading": "Cargando tu viaje…",
   "live.pay.none": "sin cobro",
+  "live.driverCancelled.title": "Tu conductor canceló",
+  "live.driverCancelled.body": "Tu conductor canceló el viaje. Estamos buscando un nuevo conductor para ti.",
   "live.pay.done": "AZƆ̀ Pay (cobrado)",
   "live.pay.arrival": "AZƆ̀ Pay (se cobra a la llegada)",
   "live.cancel.title": "¿Cancelar el viaje?",

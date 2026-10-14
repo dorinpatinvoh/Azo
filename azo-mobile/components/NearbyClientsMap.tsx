@@ -15,6 +15,8 @@ type Props = {
   count: number;
   radiusKm: number;
   gpsHint?: string | null;
+  /** Précision GPS (m) du point « Moi ». */
+  accuracy?: number;
 };
 
 /** Nom affiché sous le point du client : « Kossi A. » (serveur) ou nom masqué par l'application. */
@@ -25,7 +27,7 @@ export const clientLabel = (ride: Ride) => ride.client?.displayName || maskPerso
  * avec le prénom du client. Le point d'un client est son point de départ demandé (sa position
  * GPS en direct reste privée tant qu'il ne t'a pas choisi).
  */
-export default function NearbyClientsMap({ position, heading, requests, count, radiusKm, gpsHint }: Props) {
+export default function NearbyClientsMap({ position, heading, requests, count, radiusKm, gpsHint, accuracy }: Props) {
   const markers = useMemo<OSMMarker[]>(() => {
     const list: OSMMarker[] = requests.map(({ ride }) => ({
       id: ride.id,
@@ -33,9 +35,12 @@ export default function NearbyClientsMap({ position, heading, requests, count, r
       title: clientLabel(ride),
       color: "orange",
     }));
-    if (position) list.push({ id: "driver", coordinate: position, title: "Moi", color: "blue", heading });
+    if (position) list.push({ id: "driver", coordinate: position, title: "Moi", color: "blue", heading, accuracy });
     return list;
-  }, [requests, position, heading]);
+  }, [requests, position, heading, accuracy]);
+
+  // Le Zem reste centré sur sa carte ; avec un client proche (3 km max) la vue garde les deux visibles.
+  const nearest = useMemo(() => requests.filter((r) => r.km != null && r.km <= 3).sort((a, b) => (a.km ?? 0) - (b.km ?? 0))[0], [requests]);
 
   return (
     <View style={styles.card}>
@@ -52,7 +57,13 @@ export default function NearbyClientsMap({ position, heading, requests, count, r
         </Text>
       </View>
       <View style={styles.map}>
-        <OSMMapView center={position ?? undefined} markers={markers} />
+        <OSMMapView
+          center={position ?? undefined}
+          markers={markers}
+          zoom={16}
+          followMarkerId={nearest ? undefined : "driver"}
+          fitMarkerIds={nearest ? ["driver", nearest.ride.id] : undefined}
+        />
         {!position && !!gpsHint && (
           <View style={styles.hint}>
             <MaterialIcons name="gps-not-fixed" size={14} color={colors.onSurfaceVariant} />

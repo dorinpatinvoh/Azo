@@ -8,7 +8,7 @@ import {
   PlusJakartaSans_800ExtraBold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import { useFonts as useInter, Inter_400Regular } from "@expo-google-fonts/inter";
-import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert, Platform } from "react-native";
+import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert, Platform, BackHandler } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 import SplashScreen, { ONBOARDING_SEEN_KEY } from "./screens/SplashScreen";
@@ -65,6 +65,19 @@ import { FONT } from "./theme/fontNormalize";
 setupNotificationHandler();
 
 type Route = ScreenId | "menu";
+
+/* ---------- Navigation : historique et reprise ---------- */
+// Écrans d'entrée / racines : y aller efface l'historique (on repart de zéro) et on ne revient jamais « en arrière » vers eux.
+const ROOT_ROUTES = new Set<Route>(["home", "splash", "otp", "assist-offer", "language", "driver-home", "courier-home", "agency-dashboard", "admin-providers", "admin-dashboard"]);
+// Écrans d'entrée (onboarding, connexion) : jamais empilés dans l'historique
+const ENTRY_ROUTES = new Set<Route>(["splash", "otp", "assist-offer", "language"]);
+// Écrans du client où le bouton retour (et le bouton retour du téléphone) ramène à la page précédente
+const BACK_ROUTES = new Set<Route>(["courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "delivery", "rental", "marketplace", "provider-onboarding", "provider-status", "admin-support"]);
+// Écrans retrouvés à la reconnexion (ceux qui n'ont besoin d'aucun état en mémoire : pas de course en cours, etc.)
+const RESTORABLE_ROUTES = new Set<Route>(["provider-onboarding", "provider-status", "courses", "wallet", "profile", "profile-info", "messages", "notifications", "help", "support", "delivery", "rental", "marketplace"]);
+const clientRoutesSet = new Set<Route>(["home", "courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "ride-tracking", "ride-rating", "delivery", "rental", "marketplace", "provider-onboarding", "provider-status"]);
+const LAST_ROUTE_KEY = "lastRoute";
+const LAST_PHONE_KEY = "lastLoginPhone";
 
 function routeFor(
   role: string,
@@ -154,14 +167,6 @@ function AppInner() {
   }, [lang, sessionToken]);
 
   // Popup « un Zem a accepté ta course » : par-dessus n'importe quel écran du client
-  // Écran d'où le portefeuille a été ouvert (l'agence y revient, pas à l'accueil client)
-  const [walletBack, setWalletBack] = useState<Route>("home");
-  // Écran d'où l'assistance a été ouverte (aide client, espace Zem, agence ou administrateur)
-  const [supportBack, setSupportBack] = useState<Route>("help");
-  const openSupport = (from: Route) => {
-    setSupportBack(from);
-    goTo("support");
-  };
   const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "rental"];
   const offerWatcher = useOfferWatcher(!!sessionToken && clientRoutes.includes(route), route === "ride-tracking");
   // Session ouverte mais inscription (nom, prénom, sexe, NPI) pas terminée : on rouvre le formulaire.
@@ -182,9 +187,53 @@ function AppInner() {
     return () => clearTimeout(t);
   }, []);
 
+  // Historique de navigation : « retour » ramène à la page d'où l'on vient, pas à un écran fixe
+  const routeRef = useRef<Route>(route);
+  routeRef.current = route;
+  const historyRef = useRef<Route[]>([]);
+
   const goTo = useCallback((r: Route) => {
+    const current = routeRef.current;
+    if (r === current) return;
+    if (ROOT_ROUTES.has(r)) {
+      historyRef.current = [];
+    } else if (!ENTRY_ROUTES.has(current) && !(current === "ride-request" && r === "ride-tracking")) {
+      historyRef.current = [...historyRef.current.slice(-29), current];
+    }
     setRoute(r);
   }, []);
+
+  /** Retour : dernière page visitée (jamais la page actuelle), sinon l'accueil. */
+  const goBack = useCallback((fallback: Route = "home") => {
+    const current = routeRef.current;
+    let previous: Route | undefined;
+    while (historyRef.current.length > 0) {
+      const candidate = historyRef.current[historyRef.current.length - 1];
+      historyRef.current = historyRef.current.slice(0, -1);
+      if (candidate !== current) {
+        previous = candidate;
+        break;
+      }
+    }
+    setRoute(previous ?? fallback);
+  }, []);
+
+  // Bouton retour du téléphone : même comportement que le bouton de l'écran ; sur l'accueil et les espaces pro, l'application se ferme normalement
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      const current = routeRef.current;
+      if (current === "ride-tracking" || current === "ride-rating") {
+        goTo("home");
+        return true;
+      }
+      if (BACK_ROUTES.has(current)) {
+        goBack();
+        return true;
+      }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [goBack, goTo]);
 
   // « Commencer » ou « Passer » : on retient que l'onboarding a été vu, puis connexion.
   const finishOnboarding = useCallback(() => {
@@ -283,6 +332,33 @@ function AppInner() {
     [goTo]
   );
 
+  /**
+   * Retrouve la dernière page où le CLIENT était (même compte) quand il se reconnecte ou rouvre l'application.
+   * Un autre compte, une page qui demande un état en mémoire (course en cours…) ou un rôle professionnel : on garde la page d'accueil du rôle.
+   */
+  const resolveStartRoute = useCallback(async (base: Route): Promise<Route> => {
+    if (base !== "home" && base !== "provider-status") return base;
+    try {
+      const [raw, phone] = await Promise.all([SecureStore.getItemAsync(LAST_ROUTE_KEY), SecureStore.getItemAsync(LAST_PHONE_KEY)]);
+      if (!raw || !phone) return base;
+      const saved = JSON.parse(raw) as { route?: string; phone?: string };
+      if (saved.phone === phone && saved.route && RESTORABLE_ROUTES.has(saved.route as Route)) return saved.route as Route;
+    } catch {
+      // stockage illisible : accueil
+    }
+    return base;
+  }, []);
+
+  // Mémorise la page courante du client connecté (la dernière valeur reste après la déconnexion)
+  useEffect(() => {
+    if (!sessionToken) return;
+    const value: Route | null = RESTORABLE_ROUTES.has(route) ? route : clientRoutesSet.has(route) ? "home" : null;
+    if (!value) return;
+    SecureStore.getItemAsync(LAST_PHONE_KEY)
+      .then((phone) => (phone ? SecureStore.setItemAsync(LAST_ROUTE_KEY, JSON.stringify({ route: value, phone })) : undefined))
+      .catch(() => undefined);
+  }, [route, sessionToken]);
+
   const handleLogout = useCallback(async () => {
     const pushToken = pushTokenRef.current;
     pushTokenRef.current = null;
@@ -331,7 +407,7 @@ function AppInner() {
           const role = savedRole.toUpperCase().trim();
           const savedProviderStatus = await SecureStore.getItemAsync("providerStatus");
           const savedProviderType = await SecureStore.getItemAsync("providerType");
-          setRoute(routeFor(role, savedProviderStatus, savedProviderType));
+          setRoute(await resolveStartRoute(routeFor(role, savedProviderStatus, savedProviderType)));
         } else {
           // Pas de session : l'onboarding n'est montré qu'à la toute première ouverture de
           // l'application. Ensuite (déconnexion, session expirée) on va directement à la connexion.
@@ -355,7 +431,7 @@ function AppInner() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [resolveStartRoute]);
 
   const fontsReady = (pjsLoaded || !!pjsError) && (interLoaded || !!interError);
 
@@ -404,7 +480,7 @@ function AppInner() {
             onVerified={(role?: string | null, provider?: ProviderRef | null) => {
               setResumeRegistration(false);
               setSessionToken(getToken());
-              goTo(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null));
+              void resolveStartRoute(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null)).then(goTo);
             }}
             onBack={() => goTo("splash")}
           />
@@ -420,7 +496,7 @@ function AppInner() {
         {route === "ride-request" && (
           <RideBookingScreen
             service={rideVehicle === "car-confort" ? "transport" : "zem"}
-            onBack={() => goTo("home")}
+            onBack={() => goBack()}
             onRecharge={() => goTo("wallet")}
             onConfirmed={(id, label) => {
               offerWatcher.watch(id);
@@ -453,25 +529,20 @@ function AppInner() {
         )}
 
         {route === "delivery" && (
-          <DeliveryScreen onBack={() => goTo("home")} onConfirm={() => goTo("home")} />
+          <DeliveryScreen onBack={() => goBack()} onConfirm={() => goTo("home")} />
         )}
 
         {route === "rental" && (
-          <VehicleRentalScreen onBack={() => goTo("home")} onReserve={() => goTo("home")} />
+          <VehicleRentalScreen onBack={() => goBack()} onReserve={() => goTo("home")} />
         )}
 
         {route === "wallet" && (
-          <WalletScreen
-            onBack={() => {
-              const back = walletBack;
-              setWalletBack("home");
-              goTo(back);
-            }}
-          />
+          <WalletScreen onBack={() => goBack()} />
         )}
 
         {route === "courses" && (
           <CoursesScreen
+            onBack={() => goBack()}
             onNavigateTab={goTo}
             onRequestRide={() => goTo("ride-request")}
             onTrackRide={(id) => {
@@ -484,6 +555,7 @@ function AppInner() {
 
         {route === "profile" && (
           <ProfileScreen
+            onBack={() => goBack()}
             onNavigateTab={goTo}
             onOpenNotifications={() => goTo("notifications")}
             onOpenProvider={() => goTo("provider-status")}
@@ -493,20 +565,20 @@ function AppInner() {
           />
         )}
 
-        {route === "profile-info" && <PersonalInfoScreen onBack={() => goTo("profile")} />}
+        {route === "profile-info" && <PersonalInfoScreen onBack={() => goBack("profile")} />}
 
-        {route === "help" && <HelpScreen onBack={() => goTo("profile")} onOpenSupport={() => openSupport("help")} />}
-        {route === "support" && <SupportScreen onBack={() => goTo(supportBack)} />}
-        {route === "admin-support" && <AdminSupportScreen onBack={() => goTo("admin-providers")} />}
+        {route === "help" && <HelpScreen onBack={() => goBack("profile")} onOpenSupport={() => goTo("support")} />}
+        {route === "support" && <SupportScreen onBack={() => goBack()} />}
+        {route === "admin-support" && <AdminSupportScreen onBack={() => goBack("admin-providers")} />}
 
         {route === "messages" && (
-          <MessagesScreen onNavigateTab={goTo} />
+          <MessagesScreen onBack={() => goBack()} onNavigateTab={goTo} />
         )}
 
         {route === "provider-onboarding" && (
           <ProviderOnboardingScreen
             onSubmitted={() => goTo("provider-status")}
-            onBack={() => goTo("home")}
+            onBack={() => goBack()}
           />
         )}
 
@@ -522,7 +594,7 @@ function AppInner() {
                   : "driver-home"
               )
             }
-            onBack={() => goTo("home")}
+            onBack={() => goBack()}
           />
         )}
 
@@ -538,7 +610,7 @@ function AppInner() {
           <DriverHomeScreen
             onLogout={handleLogout}
             onOpenDossier={() => goTo("provider-status")}
-            onOpenSupport={() => openSupport("driver-home")}
+            onOpenSupport={() => goTo("support")}
           />
         )}
 
@@ -553,11 +625,8 @@ function AppInner() {
           <AgencyDashboardScreen
             onBack={handleLogout}
             onOpenDossier={() => goTo("provider-status")}
-            onOpenWallet={() => {
-              setWalletBack("agency-dashboard");
-              goTo("wallet");
-            }}
-            onOpenSupport={() => openSupport("agency-dashboard")}
+            onOpenWallet={() => goTo("wallet")}
+            onOpenSupport={() => goTo("support")}
           />
         )}
 
@@ -569,10 +638,10 @@ function AppInner() {
         )}
 
         {route === "marketplace" && (
-          <MarketplaceEscrowScreen onBack={() => goTo("home")} onConfirm={() => goTo("home")} />
+          <MarketplaceEscrowScreen onBack={() => goBack()} onConfirm={() => goTo("home")} />
         )}
 
-        {route === "notifications" && <NotificationsScreen onBack={() => goTo("home")} />}
+        {route === "notifications" && <NotificationsScreen onBack={() => goBack()} />}
 
         {route === "menu" && <DevMenuScreen onSelect={(id) => goTo(id)} />}
 
