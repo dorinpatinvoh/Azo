@@ -64,6 +64,8 @@ export const de: Record<MessageKey, string> = {
   "auth.kind.courier": "Kurier, persönlicher Kurier & Lieferant",
   "auth.kind.agency": "Flottenagentur",
   "auth.kind.hint": "Danach reichst du die Unterlagen für deine Tätigkeit ein.",
+  "auth.signup.create": "Noch kein Konto? Konto erstellen",
+  "auth.signup.have": "Ich habe schon ein Konto",
   "auth.phone.label": "Handynummer (10 Ziffern)",
   "auth.phone.operators": "Zertifizierte Netze:",
   "auth.phone.send": "Meinen Code erhalten",

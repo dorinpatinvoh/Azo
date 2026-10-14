@@ -64,6 +64,8 @@ export const en: Record<MessageKey, string> = {
   "auth.kind.courier": "Courier, personal courier & delivery",
   "auth.kind.agency": "Fleet agency",
   "auth.kind.hint": "After this step you submit the file dedicated to your activity.",
+  "auth.signup.create": "No account yet? Create an account",
+  "auth.signup.have": "I already have an account",
   "auth.phone.label": "Mobile number (10 digits)",
   "auth.phone.operators": "Certified networks:",
   "auth.phone.send": "Get my code",

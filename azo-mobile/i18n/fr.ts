@@ -66,6 +66,8 @@ export const fr = {
   "auth.kind.courier": "Coursier, Coursier personnel & Livreur",
   "auth.kind.agency": "Agence de flotte",
   "auth.kind.hint": "Après cette étape, tu déposes le dossier dédié à ton activité.",
+  "auth.signup.create": "Pas encore de compte ? Créer un compte",
+  "auth.signup.have": "J'ai déjà un compte",
   "auth.phone.label": "Numéro de mobile (10 chiffres)",
   "auth.phone.operators": "Réseaux certifiés :",
   "auth.phone.send": "Recevoir mon code",

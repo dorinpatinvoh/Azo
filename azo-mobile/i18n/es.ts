@@ -64,6 +64,8 @@ export const es: Record<MessageKey, string> = {
   "auth.kind.courier": "Mensajero, mensajero personal y repartidor",
   "auth.kind.agency": "Agencia de flota",
   "auth.kind.hint": "Después de este paso presentas el expediente de tu actividad.",
+  "auth.signup.create": "¿Aún no tienes cuenta? Crear una cuenta",
+  "auth.signup.have": "Ya tengo una cuenta",
   "auth.phone.label": "Número de móvil (10 dígitos)",
   "auth.phone.operators": "Redes certificadas:",
   "auth.phone.send": "Recibir mi código",

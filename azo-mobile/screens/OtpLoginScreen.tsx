@@ -72,6 +72,8 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
   const [step, setStep] = useState<Step>(resumeRegistration ? "register" : "phone");
   // Type de compte choisi à l'inscription : « Agence » ouvre ensuite le dossier d'agence (seul endroit où l'on peut en créer une)
   const [accountKind, setAccountKind] = useState<AccountKind>("CLIENT");
+  // « Créer un compte » depuis l'écran du numéro : le profil est choisi avant le numéro et le code, puis le parcours dédié suit
+  const [signupMode, setSignupMode] = useState(false);
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState(["", "", "", ""]);
   // Inscription (après l'OTP) : nom, prénom, sexe et NPI
@@ -423,6 +425,27 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
 
           {step === "phone" ? (
             <View style={styles.card}>
+              {signupMode ? (
+                <View style={{ marginBottom: spacing.md }}>
+                  <Text style={styles.label}>{t("auth.kind.title")}</Text>
+                  <AccountKindPicker value={accountKind} onChange={setAccountKind} />
+                  {accountKind !== "CLIENT" ? <Text style={styles.nameHint}>{t("auth.kind.hint")}</Text> : null}
+                  <Pressable
+                    onPress={() => {
+                      setSignupMode(false);
+                      setAccountKind("CLIENT");
+                    }}
+                    accessibilityRole="button"
+                    style={{ paddingVertical: spacing.sm }}
+                  >
+                    <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 14 }}>{t("auth.signup.have")}</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable onPress={() => setSignupMode(true)} accessibilityRole="button" style={{ paddingBottom: spacing.sm }}>
+                  <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 14 }}>{t("auth.signup.create")}</Text>
+                </Pressable>
+              )}
               <View style={styles.labelRow}>
                 <Text style={styles.label}>{t("auth.phone.label")}</Text>
                 <Text style={styles.digitCount}>
@@ -480,11 +503,15 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
             </View>
           ) : (
             <View style={styles.card}>
-              <Text style={styles.label}>{t("auth.kind.title")}</Text>
-              <AccountKindPicker value={accountKind} onChange={setAccountKind} />
-              {accountKind !== "CLIENT" ? <Text style={styles.nameHint}>{t("auth.kind.hint")}</Text> : null}
+              {!signupMode ? (
+                <>
+                  <Text style={styles.label}>{t("auth.kind.title")}</Text>
+                  <AccountKindPicker value={accountKind} onChange={setAccountKind} />
+                  {accountKind !== "CLIENT" ? <Text style={styles.nameHint}>{t("auth.kind.hint")}</Text> : null}
+                </>
+              ) : null}
 
-              <Text style={[styles.label, styles.fieldGap]}>{t("auth.field.lastName")}</Text>
+              <Text style={[styles.label, !signupMode && styles.fieldGap]}>{t("auth.field.lastName")}</Text>
               <TextInput
                 style={[styles.nameInput, !!lastName && !isValidName(lastName) && styles.inputInvalid]}
                 value={lastName}
