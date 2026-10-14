@@ -21,6 +21,7 @@ import OSMMapView, { type OSMMarker } from "../components/OSMMapView";
 import RideStopPanel from "../components/RideStopPanel";
 import EarningsCard from "../components/EarningsCard";
 import StandingBanner from "../components/StandingBanner";
+import PillTabBar, { type PillTabItem } from "../components/PillTabBar";
 import RateClientModal from "../components/RateClientModal";
 import { tr } from "../i18n";
 import { getRideRoute, getTripRoute } from "../services/routing";
@@ -30,7 +31,18 @@ import { nearbyRadiusKm } from "../config/radar";
 import { ApiError } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 
-type Props = { onLogout: () => void; onOpenDossier?: () => void; onOpenSupport?: () => void };
+type Props = { onLogout: () => void; onOpenDossier?: () => void; onOpenSupport?: () => void; onOpenWallet?: () => void };
+
+// Barre du bas de l'espace Zem : « Portefeuille » ouvre l'écran AZƆ̀ Pay, les autres onglets restent dans cet écran.
+type ZemTab = "home" | "gains" | "activity" | "wallet" | "profile";
+const ZEM_TABS: PillTabItem<ZemTab>[] = [
+  { id: "home", label: "Accueil", icon: "radio-outline", iconActive: "radio" },
+  { id: "gains", label: "Gains", icon: "stats-chart-outline", iconActive: "stats-chart" },
+  { id: "activity", label: "Activité", icon: "receipt-outline", iconActive: "receipt" },
+  { id: "wallet", label: "AZƆ̀ Pay", icon: "wallet-outline", iconActive: "wallet" },
+  { id: "profile", label: "Profil", icon: "person-outline", iconActive: "person" },
+];
+const ZEM_TITLES: Record<ZemTab, string> = { home: "Zém Radar", gains: "Mes gains", activity: "Mon activité", wallet: "AZƆ̀ Pay", profile: "Mon profil" };
 type LatLng = { latitude: number; longitude: number };
 type GpsStatus = "idle" | "ok" | "denied" | "error";
 
@@ -47,7 +59,8 @@ const isToday = (iso: string) => {
 // Issues de proposition déjà annoncées au Zem (évite de répéter l'alerte à chaque réouverture).
 const announcedEndings = new Set<string>();
 
-export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSupport }: Props) {
+export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet }: Props) {
+  const [tab, setTab] = useState<ZemTab>("home");
   const [online, setOnline] = useState(false);
   // Course terminée : le Zem note son client (null = rien à noter)
   const [rateTarget, setRateTarget] = useState<{ rideId: string; name: string } | null>(null);
@@ -868,6 +881,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     );
   }
 
+  // Une course ou une proposition en cours ramène sur l'accueil : c'est là que le Zem agit
+  useEffect(() => {
+    if (activeRide || offered) setTab("home");
+  }, [activeRide?.id, offered?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleLogout() {
     Alert.alert("Déconnexion", "Quitter ton espace conducteur ?", [
       { text: "Annuler", style: "cancel" },
@@ -883,28 +901,17 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
-        {onOpenDossier ? (
-          <Pressable onPress={onOpenDossier} style={styles.iconButton} accessibilityLabel="Mon dossier">
-            <MaterialIcons name="verified-user" size={20} color={colors.primary} />
-          </Pressable>
-        ) : (
-          <View style={{ width: 40 }} />
-        )}
-        <Text style={styles.headerTitle}>Zém Radar</Text>
-        {onOpenSupport ? (
-          <Pressable onPress={onOpenSupport} style={styles.iconButton} accessibilityLabel="Assistance">
-            <MaterialIcons name="support-agent" size={20} color={colors.primary} />
-          </Pressable>
-        ) : null}
-        <Pressable onPress={handleLogout} style={styles.iconButton} accessibilityLabel="Se déconnecter">
-          <MaterialIcons name="logout" size={20} color={colors.onSurfaceVariant} />
-        </Pressable>
+        <Text style={styles.headerTitle}>{ZEM_TITLES[tab]}</Text>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
+        {tab === "home" && (
+        <>
+        <StandingBanner />
+
         <View style={[styles.statusCard, online && { borderColor: colors.primary, borderWidth: 1.5 }]}>
           <View style={styles.statusRow}>
             <View style={[styles.motorcycleIcon, { backgroundColor: online ? colors.primary : colors.outline }]}>
@@ -1135,6 +1142,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
           </View>
         )}
 
+        </>
+        )}
+
+        {tab === "gains" && (
+        <>
         {/* --- Gains & Objectif journalier --- */}
         <View style={styles.earningsCard}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -1161,8 +1173,6 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
           </Text>
         </View>
 
-        <StandingBanner />
-
         <EarningsCard refreshKey={history.length} />
 
         <View style={styles.statsGrid}>
@@ -1176,6 +1186,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
           <Text style={styles.withdrawText}>Retrait Express MoMo</Text>
         </Pressable>
 
+        </>
+        )}
+
+        {tab === "home" && (
+        <>
         {/* --- Proposition envoyée : le client regarde ton profil avant de te choisir --- */}
         {!activeRide && offered && <DriverOfferWaiting ride={offered} busy={busy} onWithdraw={handleWithdrawOffer} position={position} heading={heading} />}
 
@@ -1270,8 +1285,13 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
           </>
         )}
 
+        </>
+        )}
+
+        {tab === "activity" && (
+        <>
         {/* --- Activité récente --- */}
-        <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>Activité récente</Text>
+        <Text style={styles.sectionTitle}>Activité récente</Text>
         {recent.length === 0 ? (
           <Text style={styles.emptyText}>Tes courses terminées apparaîtront ici.</Text>
         ) : (
@@ -1292,7 +1312,58 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
             ))}
           </View>
         )}
+        </>
+        )}
+
+        {tab === "profile" && (
+          <View style={{ gap: spacing.sm }}>
+            {myVehicle ? (
+              <View style={styles.profileRow}>
+                <MaterialIcons name={VEHICLE_ICON[myVehicle]} size={22} color={colors.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileRowTitle}>Mon véhicule</Text>
+                  <Text style={styles.profileRowSub}>{VEHICLE_LABEL[myVehicle]}</Text>
+                </View>
+              </View>
+            ) : null}
+            {onOpenDossier ? (
+              <Pressable style={styles.profileRow} onPress={onOpenDossier} accessibilityRole="button">
+                <MaterialIcons name="verified-user" size={22} color={colors.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileRowTitle}>Mon dossier</Text>
+                  <Text style={styles.profileRowSub}>Pièces, statut de validation</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
+              </Pressable>
+            ) : null}
+            {onOpenSupport ? (
+              <Pressable style={styles.profileRow} onPress={onOpenSupport} accessibilityRole="button">
+                <MaterialIcons name="support-agent" size={22} color={colors.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.profileRowTitle}>Assistance</Text>
+                  <Text style={styles.profileRowSub}>Écrire à l'équipe AZƆ̀</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
+              </Pressable>
+            ) : null}
+            <Pressable style={styles.profileRow} onPress={handleLogout} accessibilityRole="button">
+              <MaterialIcons name="logout" size={22} color={colors.error} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.profileRowTitle, { color: colors.error }]}>Se déconnecter</Text>
+              </View>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
+
+      <PillTabBar
+        items={ZEM_TABS}
+        active={tab}
+        onNavigate={(next) => {
+          if (next === "wallet") onOpenWallet?.();
+          else setTab(next);
+        }}
+      />
 
       {activeRide && (
         <RideChatModal
@@ -1410,6 +1481,9 @@ const styles = StyleSheet.create({
   acceptBtn: { backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: 16, paddingVertical: 10 },
   acceptBtnDisabled: { opacity: 0.5 },
   acceptBtnText: { ...typography.labelMd, color: "#fff", fontWeight: "800" },
+  profileRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.md, padding: spacing.md },
+  profileRowTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
+  profileRowSub: { ...typography.bodySm, color: colors.onSurfaceVariant },
   tripRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.md, padding: spacing.md },
   tripText: { ...typography.labelMd, color: colors.onSurface },
   tripMeta: { ...typography.labelSm, color: colors.onSurfaceVariant },

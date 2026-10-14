@@ -20,10 +20,13 @@ import { FONT } from "../theme/fontNormalize";
 import { Delivery, deliveryApi, errorMessage, walletApi } from "../services/api";
 import { formatBeninPhoneDisplay, maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
+import PillTabBar, { type PillTabItem } from "../components/PillTabBar";
 
 type Props = {
   onLogout: () => void;
   onOpenDossier?: () => void;
+  onOpenSupport?: () => void;
+  onOpenWallet?: () => void;
 };
 
 const POLL_MS = 8000;
@@ -46,7 +49,16 @@ const isToday = (iso: string) => {
   );
 };
 
-export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
+// Barre du bas : « AZƆ̀ Pay » ouvre le portefeuille, « Profil » liste dossier, assistance et déconnexion.
+type CourierTab = "home" | "wallet" | "profile";
+const COURIER_TABS: PillTabItem<CourierTab>[] = [
+  { id: "home", label: "Missions", icon: "bicycle-outline", iconActive: "bicycle" },
+  { id: "wallet", label: "AZƆ̀ Pay", icon: "wallet-outline", iconActive: "wallet" },
+  { id: "profile", label: "Profil", icon: "person-outline", iconActive: "person" },
+];
+
+export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet }: Props) {
+  const [tab, setTab] = useState<CourierTab>("home");
   const [online, setOnline] = useState(true);
   const [pending, setPending] = useState<Delivery[]>([]);
   const [history, setHistory] = useState<Delivery[]>([]);
@@ -258,6 +270,8 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
           keyboardShouldPersistTaps="handled"
         >
+          {tab === "home" && (
+          <>
           {/* Indicateurs du jour */}
           <View style={styles.kpiRow}>
             <View style={styles.kpiCard}>
@@ -578,8 +592,50 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier }: Props) {
               </View>
             </>
           ) : null}
+          </>
+          )}
+
+          {tab === "profile" && (
+            <View style={{ gap: spacing.sm }}>
+              {onOpenDossier ? (
+                <Pressable style={styles.profileRow} onPress={onOpenDossier} accessibilityRole="button">
+                  <MaterialIcons name="verified-user" size={22} color={colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.profileRowTitle}>Mon dossier</Text>
+                    <Text style={styles.profileRowSub}>Pièces, statut de validation</Text>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
+                </Pressable>
+              ) : null}
+              {onOpenSupport ? (
+                <Pressable style={styles.profileRow} onPress={onOpenSupport} accessibilityRole="button">
+                  <MaterialIcons name="support-agent" size={22} color={colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.profileRowTitle}>Assistance</Text>
+                    <Text style={styles.profileRowSub}>Écrire à l'équipe AZƆ̀</Text>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
+                </Pressable>
+              ) : null}
+              <Pressable style={styles.profileRow} onPress={confirmExit} accessibilityRole="button">
+                <MaterialIcons name="logout" size={22} color={colors.error} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.profileRowTitle, { color: colors.error }]}>Se déconnecter</Text>
+                </View>
+              </Pressable>
+            </View>
+          )}
         </ScrollView>
       )}
+
+      <PillTabBar
+        items={COURIER_TABS}
+        active={tab}
+        onNavigate={(next) => {
+          if (next === "wallet") onOpenWallet?.();
+          else setTab(next);
+        }}
+      />
 
       {activeDelivery ? (
         <RideChatModal
@@ -734,6 +790,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: spacing.sm,
   },
+  profileRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.md, padding: spacing.md },
+  profileRowTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
+  profileRowSub: { ...typography.bodySm, color: colors.onSurfaceVariant },
   sectionTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
   refreshLink: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
 

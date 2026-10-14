@@ -80,14 +80,14 @@ export const REQUIRED_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   DRIVER: ["CNI", "SELFIE", "PROFILE_PHOTO", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
   COURIER: ["CNI", "SELFIE", "PROFILE_PHOTO", "PERMIS", "PHOTO_VEHICULE"],
   // Agences : logo obligatoire.
-  AGENCY: ["CNI", "SELFIE", "LOGO", "RCCM", "IFU", "STATUTS"],
+  AGENCY: ["CNI", "LOGO", "RCCM", "IFU"],
   ARTISAN: ["CNI", "SELFIE"],
 };
 
 export const OPTIONAL_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   DRIVER: ["EXTRAIT_CASIER"],
   COURIER: ["CARTE_GRISE", "ASSURANCE", "EXTRAIT_CASIER"],
-  AGENCY: ["PHOTO_VEHICULE", "EXTRAIT_CASIER"],
+  AGENCY: [],
   ARTISAN: ["EXTRAIT_CASIER"],
 };
 
@@ -161,7 +161,7 @@ const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads"
 export const PHOTO_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   DRIVER: ["SELFIE", "CNI", "PROFILE_PHOTO"],
   COURIER: ["SELFIE", "CNI", "PROFILE_PHOTO"],
-  AGENCY: ["SELFIE", "CNI", "LOGO"],
+  AGENCY: ["CNI", "LOGO"],
   ARTISAN: ["SELFIE", "CNI"],
 };
 

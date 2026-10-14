@@ -611,6 +611,7 @@ function AppInner() {
             onLogout={handleLogout}
             onOpenDossier={() => goTo("provider-status")}
             onOpenSupport={() => goTo("support")}
+            onOpenWallet={() => goTo("wallet")}
           />
         )}
 
@@ -618,6 +619,8 @@ function AppInner() {
           <CourierHomeScreen
             onLogout={handleLogout}
             onOpenDossier={() => goTo("provider-status")}
+            onOpenSupport={() => goTo("support")}
+            onOpenWallet={() => goTo("wallet")}
           />
         )}
 
