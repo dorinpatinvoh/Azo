@@ -78,7 +78,7 @@ export const errorCode = (e: unknown): string | null =>
 export const isRouteMissing = (e: unknown) =>
   e instanceof ApiError && e.status === 404 && /^Cannot (GET|POST|PATCH|PUT|DELETE) /.test(e.message);
 
-async function request<T>(
+async function requestOnce<T>(
   path: string,
   options: RequestInit & { timeoutMs?: number } = {}
 ): Promise<T> {
@@ -114,6 +114,35 @@ async function request<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Render (offre gratuite) endort le serveur après un moment sans activité : à son réveil (30 à 60 s) la passerelle répond 502/503/504
+// AVANT que l'API ne reçoive la requête. On réessaie donc automatiquement (sans risque de doublon : rien n'a été traité).
+const WAKE_RETRY_STATUSES = [502, 503, 504];
+const WAKE_RETRY_MAX = 6;
+const WAKE_RETRY_DELAY_MS = 5000;
+
+async function request<T>(path: string, options: RequestInit & { timeoutMs?: number } = {}): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await requestOnce<T>(path, options);
+    } catch (e) {
+      if (e instanceof ApiError && WAKE_RETRY_STATUSES.includes(e.status) && attempt < WAKE_RETRY_MAX) {
+        await new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_DELAY_MS));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+/** Réveille le serveur sans attendre sa réponse (à l'ouverture de l'application) : il est prêt quand l'utilisateur saisit son numéro. */
+export function wakeServer(): void {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 70000);
+  fetch(`${API_URL}/health`, { signal: controller.signal })
+    .catch(() => undefined)
+    .finally(() => clearTimeout(timer));
 }
 
 const json = (body?: unknown) => (body === undefined ? undefined : JSON.stringify(body));
@@ -230,6 +259,8 @@ export type RegistrationPayload = {
   firstName: string;
   gender: "M" | "F";
   npi: string;
+  /** Type de compte choisi à l'inscription (Client, Zem, coursier, agence). */
+  accountKind?: "CLIENT" | "DRIVER" | "COURIER" | "AGENCY";
 };
 
 /** Un compte doit-il encore passer par l'écran d'inscription ? */
@@ -958,6 +989,8 @@ export type PickedFile = { uri: string; name: string; type: string; base64?: str
 export const providersApi = {
   requirements: () => api.get<ProviderRequirements>(`${P}/providers/requirements`),
   me: () => api.get<ProviderMe>(`${P}/providers/me`),
+  /** Supprime l'inscription professionnelle commencée mais jamais déposée (brouillon). */
+  deleteDraft: (id: string) => api.delete<{ deleted: string }>(`${P}/providers/applications/${id}`),
   save: (draft: ProviderApplicationDraft) =>
     api.post<ProviderDossier>(`${P}/providers/applications`, draft),
   declareDocument: (id: string, kind: DocumentKind, expiresAt?: string | null) =>

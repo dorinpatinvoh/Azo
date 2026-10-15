@@ -242,6 +242,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
         firstName: normalizeName(firstName),
         gender,
         npi: cleanNpi(npi),
+        accountKind,
       });
       // Le serveur doit confirmer l'enregistrement : sinon (serveur pas à jour) on ne laisse
       // pas l'utilisateur entrer comme si tout était sauvegardé.

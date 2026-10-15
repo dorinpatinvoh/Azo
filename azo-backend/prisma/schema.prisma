@@ -159,6 +159,8 @@ model User {
   role               Role       @default(CLIENT)
   status             UserStatus @default(ACTIVE)
   language           String     @default("fr") // fr | en | es | de
+  // Type de compte choisi à l'inscription (CLIENT | DRIVER | COURIER | AGENCY) : seule l'inscription « AGENCY » permet d'ouvrir un dossier d'agence
+  signupKind         String?
   createdAt          DateTime   @default(now())
 
   // Nouveaux champs profil (section 1 du cahier des charges)

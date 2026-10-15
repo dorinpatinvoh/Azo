@@ -102,6 +102,11 @@ export class RegisterUserDto {
   @IsString({ message: "Le NPI doit être un texte de 10 chiffres" })
   @Matches(/^\d{10}$/, { message: "Le NPI doit contenir exactement 10 chiffres" })
   npi: string;
+
+  // Type de compte choisi à l'inscription (facultatif : un ancien client de l'application n'envoie rien)
+  @IsOptional()
+  @IsIn(["CLIENT", "DRIVER", "COURIER", "AGENCY"], { message: "Type de compte inconnu" })
+  accountKind?: string;
 }
 
 export class UpdateProfileDto {
@@ -313,6 +318,7 @@ export class UsersService {
           npiCipher: this.npiCrypto.encrypt(dto.npi),
           npiLast4: dto.npi.slice(-4),
           profileCompletedAt,
+          signupKind: dto.accountKind ?? "CLIENT",
         },
       });
       if (result.count !== 1) {

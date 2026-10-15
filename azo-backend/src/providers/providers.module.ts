@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Injectable,
@@ -610,6 +611,26 @@ export class ProvidersService {
     };
   }
 
+  /**
+   * DELETE /providers/applications/:id — supprime l'inscription professionnelle commencée mais jamais déposée (brouillon).
+   * Efface le dossier, ses pièces (base et disque) et son historique. Refusé dès que le dossier a été déposé.
+   */
+  async deleteDraft(userId: string, id: string) {
+    const provider = await this.prisma.providerProfile.findUnique({ where: { id }, include: { documents: true } });
+    if (!provider || provider.userId !== userId) throw new NotFoundException("Dossier introuvable");
+    if (provider.status !== "DRAFT") {
+      throw new BadRequestException("Seule une inscription non terminée peut être supprimée : ce dossier a déjà été déposé");
+    }
+    await this.prisma.providerProfile.delete({ where: { id } });
+    // Les fichiers déposés sur le disque sont effacés (les images en base partent avec le dossier).
+    for (const doc of provider.documents) {
+      if (!doc.url || doc.url.startsWith("data:")) continue;
+      const file = path.resolve(UPLOAD_ROOT, doc.url);
+      if (file.startsWith(path.resolve(UPLOAD_ROOT))) await fsp.rm(file, { force: true }).catch(() => undefined);
+    }
+    return { deleted: id };
+  }
+
   // POST /providers/applications — ouvre un brouillon ou met à jour le dossier.
   async saveApplication(userId: string, dto: SaveApplicationDto) {
     const user = await this.prisma.user.findUnique({
@@ -625,6 +646,12 @@ export class ProvidersService {
     if (!provider) {
       if (!dto.type) throw new BadRequestException("Choisis un type d'activité pour ouvrir un dossier");
       this.assertTypeEnabled(dto.type);
+      // Une agence ne se crée qu'à l'inscription (choix « Agence de flotte ») : un client déjà inscrit ne peut pas en ouvrir une.
+      if (dto.type === "AGENCY" && user.signupKind !== "AGENCY") {
+        throw new ForbiddenException(
+          "La création d'une agence se fait à l'inscription : crée un compte en choisissant « Agence de flotte »."
+        );
+      }
       provider = await this.prisma.providerProfile.create({
         data: { userId, type: dto.type, status: "DRAFT", zones: dto.zones ?? [] },
       });
@@ -1523,6 +1550,12 @@ export class ProvidersController {
       return;
     }
     res.sendFile(absolute!);
+  }
+
+  // DELETE /providers/applications/:id — supprime une inscription non terminée (brouillon)
+  @Delete("applications/:id")
+  deleteDraft(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.deleteDraft(u.userId, id);
   }
 
   // POST /providers/applications/:id/submit

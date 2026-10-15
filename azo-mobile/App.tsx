@@ -8,7 +8,7 @@ import {
   PlusJakartaSans_800ExtraBold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import { useFonts as useInter, Inter_400Regular } from "@expo-google-fonts/inter";
-import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert, Platform, BackHandler } from "react-native";
+import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert, Platform, BackHandler, AppState } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 import SplashScreen, { ONBOARDING_SEEN_KEY } from "./screens/SplashScreen";
@@ -46,9 +46,11 @@ import AdminProvidersScreen from "./screens/AdminProvidersScreen";
 import {
   getToken,
   notificationsApi,
+  providersApi,
   ProviderRef,
   ProviderType,
   setApiUrl,
+  wakeServer,
   setToken,
   userApi,
 } from "./services/api";
@@ -171,6 +173,65 @@ function AppInner() {
   const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "rental"];
   const offerWatcher = useOfferWatcher(!!sessionToken && clientRoutes.includes(route), route === "ride-tracking");
   // Session ouverte mais inscription (nom, prénom, sexe, NPI) pas terminée : on rouvre le formulaire.
+  // Inscription professionnelle commencée mais jamais déposée : au retour sur l'accueil, on propose de la continuer ou de la supprimer
+  const draftPromptShown = useRef(false);
+  useEffect(() => {
+    if (route === "provider-onboarding") draftPromptShown.current = true;
+    if (!sessionToken || route !== "home" || draftPromptShown.current) return;
+    draftPromptShown.current = true;
+    providersApi
+      .me()
+      .then((me) => {
+        const draft = me.provider;
+        if (!draft || draft.status !== "DRAFT") return;
+        const label = draft.type === "AGENCY" ? "Agence de flotte" : draft.type === "COURIER" ? "Coursier, Coursier personnel & Livreur" : "Zem & Conducteur indépendant";
+        Alert.alert(
+          "Inscription en cours",
+          `Tu as commencé une inscription « ${label} » sans la terminer. Que veux-tu faire ?`,
+          [
+            { text: "Continuer", onPress: () => goTo("provider-onboarding") },
+            {
+              text: "Supprimer",
+              style: "destructive",
+              onPress: () =>
+                Alert.alert(
+                  "Supprimer cette inscription ?",
+                  "Les informations et les pièces déjà envoyées seront effacées. Tu pourras recommencer plus tard.",
+                  [
+                    { text: "Annuler", style: "cancel" },
+                    {
+                      text: "Supprimer",
+                      style: "destructive",
+                      onPress: () => {
+                        providersApi
+                          .deleteDraft(draft.id)
+                          .then(() => {
+                            setSignupType(null);
+                            SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
+                            Alert.alert("Inscription supprimée", "Ton inscription en cours a été supprimée.");
+                          })
+                          .catch(() => Alert.alert("Suppression impossible", "Vérifie ta connexion et réessaie."));
+                      },
+                    },
+                  ]
+                ),
+            },
+            { text: "Plus tard", style: "cancel" },
+          ]
+        );
+      })
+      .catch(() => undefined);
+  }, [sessionToken, route]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Serveur Render endormi : on le réveille dès l'ouverture et au retour dans l'application, avant que l'utilisateur n'en ait besoin
+  useEffect(() => {
+    wakeServer();
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") wakeServer();
+    });
+    return () => sub.remove();
+  }, []);
+
   // Activité choisie à l'inscription (Zem, coursier, agence) : le parcours dédié reste imposé jusqu'au dépôt du dossier
   const [signupType, setSignupType] = useState<ProviderType | null>(null);
   useEffect(() => {
