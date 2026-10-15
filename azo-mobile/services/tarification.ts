@@ -17,7 +17,7 @@ export type VehicleKey = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | 
 
 /** Les types historiques restent acceptés (anciennes courses en base). */
 export type LegacyVehicleKey = "ZEM" | "CAR";
-export type AgencyLevel = "PRO" | "SILVER" | "OR" | "DIAMANT";
+export type AgencyLevel = "PRO" | "SILVER" | "OR" | "DIAMANT" | "PLATINE" | "ELITE";
 
 /** Palier kilométrique : `upToKm` inclus, `null` pour le dernier palier (illimité). */
 export type VehicleBracket = { upToKm: number | null; perKm: number };

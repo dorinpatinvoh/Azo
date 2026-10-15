@@ -7,7 +7,7 @@
  * Options :
  *   --name "<nom>"     raison sociale de l'agence (défaut : « Agence Test AZƆ̀ »)
  *   --owner "<nom>"    nom du gérant (défaut : « Gérant Agence Test »)
- *   --plan <niveau>    PRO (défaut), SILVER, OR ou DIAMANT : frais d'activation, commission et plafond viennent de tarification.json
+ *   --plan <niveau>    PRO (défaut), SILVER, OR, DIAMANT, PLATINE ou ELITE : frais d'activation, commission et plafond viennent de tarification.json
  *   --balance <F>      solde AZƆ̀ Pay du gérant (défaut : de quoi payer l'activation du niveau + 50 000 F)
  *   --activated        agence DÉJÀ activée (frais réglés). Sans cela, le testeur voit et paie l'activation lui-même.
  *   --with-drivers     crée aussi deux Zem approuvés (0197000101 et 0197000102) que l'agence peut rattacher par numéro
@@ -30,7 +30,7 @@ const valueOptions = ["name", "owner", "plan", "balance"].map((n) => `--${n}`);
 const raw = args.find((a, i) => !a.startsWith("--") && !valueOptions.includes(args[i - 1]));
 
 if (!raw) {
-  console.error('Usage : node --env-file=.env scripts/create-agency.js <numéro> [--name "…"] [--plan PRO|SILVER|OR|DIAMANT] [--balance 150000] [--activated] [--with-drivers] [--allow-remote]');
+  console.error('Usage : node --env-file=.env scripts/create-agency.js <numéro> [--name "…"] [--plan PRO|SILVER|OR|DIAMANT|PLATINE|ELITE] [--balance 150000] [--activated] [--with-drivers] [--allow-remote]');
   process.exit(1);
 }
 

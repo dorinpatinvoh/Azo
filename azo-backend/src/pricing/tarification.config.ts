@@ -35,7 +35,7 @@ export type LegacyVehicleType = "ZEM" | "CAR";
 export type VehicleKeyOrLegacy = VehicleKey | LegacyVehicleType;
 
 /** Niveaux d'agence (les niveaux ne concernent QUE les agences). */
-export type AgencyLevel = "PRO" | "SILVER" | "OR" | "DIAMANT";
+export type AgencyLevel = "PRO" | "SILVER" | "OR" | "DIAMANT" | "PLATINE" | "ELITE";
 
 /** Profils prestataires définis par la spécification. */
 export type ProfileKey = "ZEM_INDEPENDANT" | "LIVREUR" | "COURSIER";
@@ -131,7 +131,7 @@ export const TARIFICATION_CONFIG = "TARIFICATION_CONFIG";
 
 export type TarificationConfigProvider = { provide: string; useFactory: () => TarificationConfig };
 
-const LEVELS: AgencyLevel[] = ["PRO", "SILVER", "OR", "DIAMANT"];
+const LEVELS: AgencyLevel[] = ["PRO", "SILVER", "OR", "DIAMANT", "PLATINE", "ELITE"];
 const FAMILIES: VehicleFamily[] = ["ZEM", "CAR"];
 
 let cached: TarificationConfig | null = null;

@@ -199,12 +199,14 @@ const COURIER_SPECIALTIES: { id: string; label: string; hint: string }[] = [
   { id: "LIVREUR_COLIS", label: "Livreur de colis", hint: "Livraison de colis et marchandises avec double OTP" },
 ];
 
-// Une agence choisit directement son niveau (voir agencies/plans.ts) : Pro, Silver, Or ou Diamant.
+// Une agence choisit directement son niveau (voir agencies/plans.ts) : Pro, Silver, Or, Diamant, Platine ou Elite.
 export const AGENCY_TYPES: { id: string; label: string; hint: string }[] = [
   { id: "PRO", label: PLAN_LABELS.PRO, hint: "Agence Pro" },
   { id: "SILVER", label: PLAN_LABELS.SILVER, hint: "Agence Silver" },
   { id: "OR", label: PLAN_LABELS.OR, hint: "Agence Or" },
   { id: "DIAMANT", label: PLAN_LABELS.DIAMANT, hint: "Agence Diamant" },
+  { id: "PLATINE", label: PLAN_LABELS.PLATINE, hint: "Agence Platine" },
+  { id: "ELITE", label: PLAN_LABELS.ELITE, hint: "Agence Elite" },
 ];
 
 export type AgencyDetails = {
@@ -294,7 +296,7 @@ class SaveApplicationDto {
   @IsOptional() @IsString() @MaxLength(30) plateNumber?: string;
   @IsOptional() @IsString() @MaxLength(60) categoryId?: string;
   @IsOptional() @IsString() @MaxLength(120) agencyName?: string;
-  @IsOptional() @IsIn(["PRO", "SILVER", "OR", "DIAMANT"]) plan?: AgencyPlan;
+  @IsOptional() @IsIn(["PRO", "SILVER", "OR", "DIAMANT", "PLATINE", "ELITE"]) plan?: AgencyPlan;
 
   // Champs complémentaires pour l'inscription complète d'une Agence (Bénin)
   @IsOptional() @IsString() @MaxLength(60) representativeFirstName?: string;

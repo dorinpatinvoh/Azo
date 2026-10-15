@@ -83,7 +83,7 @@ export class AgenciesService {
           "pour gérer des comptes."
       );
 
-    // Plafond de comptes du niveau (PRO 10, SILVER 25, OR 100, DIAMANT 1 000) : toute création au-delà est refusée.
+    // Plafond de comptes du niveau (PRO 30, SILVER 75, OR 100, DIAMANT 1 000, PLATINE 2 500, ELITE 5 000) : toute création au-delà est refusée.
     if (!this.pricing.canAgencyAddAccount(agency.plan, agency.drivers.length))
       throw new BadRequestException(
         `Limite de comptes atteinte pour ${PLAN_LABELS[agency.plan]} ` +

@@ -788,7 +788,7 @@ export type DocumentKind =
   | "CNI" | "SELFIE" | "PERMIS" | "CARTE_GRISE" | "ASSURANCE" | "VISITE_TECHNIQUE"
   | "PHOTO_VEHICULE" | "RCCM" | "IFU" | "STATUTS" | "DIPLOME" | "EXTRAIT_CASIER" | "PROFILE_PHOTO" | "LOGO";
 export type DocumentReview = "PENDING" | "VALID" | "INVALID";
-export type AgencyPlanChoice = "PRO" | "SILVER" | "OR" | "DIAMANT";
+export type AgencyPlanChoice = "PRO" | "SILVER" | "OR" | "DIAMANT" | "PLATINE" | "ELITE";
 
 /** Référence courte renvoyée par /auth/verify-otp. */
 export type ProviderRef = { id: string; type: ProviderType; status: ProviderStatus };

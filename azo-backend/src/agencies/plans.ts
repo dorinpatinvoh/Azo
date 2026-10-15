@@ -29,12 +29,14 @@ export const PLANS: Record<AgencyPlan, AgencyLevelRules> = Object.fromEntries(
   ])
 ) as Record<AgencyPlan, AgencyLevelRules>;
 
-// Les quatre niveaux d'agence s'appellent simplement Pro, Silver, Or et Diamant.
+// Les six niveaux d'agence s'appellent simplement Pro, Silver, Or, Diamant, Platine et Elite.
 export const PLAN_LABELS: Record<AgencyPlan, string> = {
   PRO: "Pro",
   SILVER: "Silver",
   OR: "Or",
   DIAMANT: "Diamant",
+  PLATINE: "Platine",
+  ELITE: "Elite",
 };
 
 /** Frais prélevés à chaque retrait d'une agence, selon son niveau. */

@@ -141,6 +141,8 @@ enum AgencyPlan {
   SILVER
   OR
   DIAMANT
+  PLATINE
+  ELITE
 }
 
 model User {
@@ -252,7 +254,7 @@ model Agency {
   plan           AgencyPlan @default(PRO)
   // Valeurs par défaut = niveau PRO de la grille officielle (src/pricing/tarification.json).
   commissionRate Float      @default(0.03) // PRO : 3 % de commission par course
-  maxAccounts    Int        @default(10) // PRO : 10 comptes maximum (grille validée le 04/10/2026)
+  maxAccounts    Int        @default(30) // PRO : 30 comptes maximum (grille du 14/10/2026 : PRO 30, SILVER 75, OR 100, DIAMANT 1 000, PLATINE 2 500, ELITE 5 000)
   activationFee  Int        @default(100000) // PRO : frais d'activation uniques (FCFA)
   feePaidAt      DateTime? // null = frais pas encore encaissés
   createdAt      DateTime   @default(now())

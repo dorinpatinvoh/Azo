@@ -95,7 +95,7 @@ const EMPTY_FORM: Form = {
   fleetSize: "",
 };
 
-// Une agence choisit directement son niveau : Pro, Silver, Or ou Diamant. Montants et plafonds viennent de la grille
+// Une agence choisit directement son niveau : Pro, Silver, Or, Diamant, Platine ou Elite. Montants et plafonds viennent de la grille
 // officielle partagée (jamais codés en dur ici).
 const AGENCY_LEVEL_CHOICES = (Object.keys(tarification().agencyLevels) as AgencyLevel[]).map((plan) => {
   const rules = agencyLevelPricing(plan);
@@ -164,10 +164,12 @@ const DEFAULT_AGENCY_PLANS: {
   maxAccounts: number;
   commissionRate: number;
 }[] = [
-  { plan: "PRO", label: "Pro", fee: 100000, maxAccounts: 10, commissionRate: 0.03 },
-  { plan: "SILVER", label: "Silver", fee: 215500, maxAccounts: 25, commissionRate: 0.025 },
+  { plan: "PRO", label: "Pro", fee: 100000, maxAccounts: 30, commissionRate: 0.03 },
+  { plan: "SILVER", label: "Silver", fee: 215500, maxAccounts: 75, commissionRate: 0.025 },
   { plan: "OR", label: "Or", fee: 450500, maxAccounts: 100, commissionRate: 0.02 },
   { plan: "DIAMANT", label: "Diamant", fee: 600500, maxAccounts: 1000, commissionRate: 0.01 },
+  { plan: "PLATINE", label: "Platine", fee: 1200500, maxAccounts: 2500, commissionRate: 0.005 },
+  { plan: "ELITE", label: "Elite", fee: 2500500, maxAccounts: 5000, commissionRate: 0.0025 },
 ];
 
 // Pièces dont la date d'expiration a du sens (permis, assurance, visite technique, CNI).

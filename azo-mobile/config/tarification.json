@@ -120,13 +120,13 @@
       "activationFee": 100000,
       "commissionPct": 3,
       "withdrawalFeePct": 1,
-      "maxAccounts": 10
+      "maxAccounts": 30
     },
     "SILVER": {
       "activationFee": 215500,
       "commissionPct": 2.5,
       "withdrawalFeePct": 0.75,
-      "maxAccounts": 25
+      "maxAccounts": 75
     },
     "OR": {
       "activationFee": 450500,
@@ -139,6 +139,18 @@
       "commissionPct": 1,
       "withdrawalFeePct": 0.25,
       "maxAccounts": 1000
+    },
+    "PLATINE": {
+      "activationFee": 1200500,
+      "commissionPct": 0.5,
+      "withdrawalFeePct": 0.2,
+      "maxAccounts": 2500
+    },
+    "ELITE": {
+      "activationFee": 2500500,
+      "commissionPct": 0.25,
+      "withdrawalFeePct": 0.1,
+      "maxAccounts": 5000
     }
   },
   "profiles": {

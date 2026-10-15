@@ -109,6 +109,8 @@ const AGENCY_TYPE_LABELS: Record<string, string> = {
   SILVER: "Silver",
   OR: "Or",
   DIAMANT: "Diamant",
+  PLATINE: "Platine",
+  ELITE: "Elite",
 };
 
 function fmtDate(iso: string | null | undefined) {
