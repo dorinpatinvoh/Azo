@@ -20,7 +20,7 @@ const SCREENS: { id: ScreenId; label: string; group: string; icon: keyof typeof 
   { id: "ride-request", label: "4. Demande de course", group: "Client", icon: "map" },
   { id: "ride-tracking", label: "5. Suivi de course", group: "Client", icon: "near-me" },
   { id: "ride-rating", label: "6. Fin de trajet & notation", group: "Client", icon: "star" },
-  { id: "delivery", label: "7. Coursier & Livraison colis", group: "Client", icon: "local-shipping" },
+  { id: "delivery", label: "7. Envoyer un colis (livreur express)", group: "Client", icon: "local-shipping" },
   { id: "rental", label: "8. Location de véhicules", group: "Client", icon: "directions-car" },
   { id: "wallet", label: "9. Portefeuille / Paiement", group: "Client", icon: "account-balance-wallet" },
   { id: "courses", label: "9b. Mes courses (historique)", group: "Client", icon: "receipt-long" },

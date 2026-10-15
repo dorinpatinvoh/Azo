@@ -155,4 +155,20 @@ describe("Réservation d'un coursier personnel", () => {
     expect(pricing.ridePrice(10, "ZEM_TRICYCLE")).toBe(1300);
     expect(pricing.personalCourierPrice("ZEM_TRICYCLE", 10)).toBe(2100);
   });
+
+  it("colis express : le livreur ne voit que les colis demandant son Speeder (ou sans préférence)", async () => {
+    const { service, prisma } = make();
+    prisma.providerProfile.findUnique.mockResolvedValue({ type: "COURIER", categoryId: "COURSIER_EXPRESS", vehicleType: "ZEM_TRICYCLE" });
+    await service.pending("k1");
+    const where = prisma.delivery.findMany.mock.calls[0][0].where;
+    expect(where.mode).toBe("EXPRESS");
+    expect(where.OR).toEqual([{ vehicleType: null }, { vehicleType: "ZEM_TRICYCLE" }]);
+  });
+
+  it("refuse d'accepter un colis demandant un autre Speeder", async () => {
+    const { service, prisma } = make();
+    prisma.providerProfile.findUnique.mockResolvedValue({ type: "COURIER", categoryId: "COURSIER_EXPRESS", vehicleType: "ZEM_ESSENCE" });
+    prisma.delivery.findUnique.mockResolvedValue({ id: "d1", clientId: "c1", mode: "EXPRESS", vehicleType: "GAZELLE" });
+    await expect(service.accept("k1", "d1")).rejects.toBeInstanceOf(BadRequestException);
+  });
 });

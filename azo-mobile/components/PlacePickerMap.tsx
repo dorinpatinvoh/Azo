@@ -5,6 +5,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import OSMMapView, { type LatLng, type OSMMarker } from "./OSMMapView";
+import { getDrivingRoute } from "../services/routing";
 import { Place, placesApi } from "../services/api";
 
 const COTONOU: LatLng = { latitude: 6.3703, longitude: 2.3912 };
@@ -18,6 +19,8 @@ type Props = {
   onDrop: (p: Place | null) => void;
   pickupLabel?: string;
   dropLabel?: string;
+  /** Distance de route (km) entre le départ et la destination, `null` tant qu'elle n'est pas connue. */
+  onRouteKm?: (km: number | null) => void;
 };
 
 /** Champ d'adresse avec suggestions ; renvoie un lieu avec coordonnées. */
@@ -90,7 +93,7 @@ function AddressField({ label, place, onPick, active, onFocus }: { label: string
  * Carte + champs « Départ » / « Destination » : on tape une adresse, on touche la carte, ou on utilise sa position GPS.
  * Le départ est rempli automatiquement avec la position du téléphone.
  */
-export default function PlacePickerMap({ pickup, drop, onPickup, onDrop, pickupLabel = "Point de départ", dropLabel = "Destination" }: Props) {
+export default function PlacePickerMap({ pickup, drop, onPickup, onDrop, pickupLabel = "Point de départ", dropLabel = "Destination", onRouteKm }: Props) {
   const [target, setTarget] = useState<Target>("pickup");
   const [locating, setLocating] = useState(false);
   const [me, setMe] = useState<LatLng | null>(null);
@@ -106,8 +109,12 @@ export default function PlacePickerMap({ pickup, drop, onPickup, onDrop, pickupL
         // on garde le libellé par défaut : les coordonnées suffisent pour le prix et le suivi
       }
       const place: Place = { title, latitude: coord.latitude, longitude: coord.longitude };
-      if (which === "pickup") onPickup(place);
-      else onDrop(place);
+      if (which === "pickup") {
+        onPickup(place);
+        setTarget("drop");
+      } else {
+        onDrop(place);
+      }
     },
     [onPickup, onDrop]
   );
@@ -135,6 +142,28 @@ export default function PlacePickerMap({ pickup, drop, onPickup, onDrop, pickupL
     locate();
   }, [pickup, locate]);
 
+  // Itinéraire routier entre le départ et la destination, dès que les deux sont connus
+  const [route, setRoute] = useState<LatLng[] | undefined>(undefined);
+  useEffect(() => {
+    if (!pickup || !drop) {
+      setRoute(undefined);
+      onRouteKm?.(null);
+      return;
+    }
+    const controller = new AbortController();
+    getDrivingRoute({ latitude: pickup.latitude, longitude: pickup.longitude }, { latitude: drop.latitude, longitude: drop.longitude }, controller.signal)
+      .then((r) => {
+        setRoute(r.coordinates);
+        onRouteKm?.(r.distanceKm);
+      })
+      .catch(() => {
+        setRoute(undefined);
+        onRouteKm?.(null);
+      });
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickup?.latitude, pickup?.longitude, drop?.latitude, drop?.longitude]);
+
   const markers: OSMMarker[] = [];
   if (me) markers.push({ id: "me", coordinate: me, title: "Ma position", color: "blue" });
   if (pickup) markers.push({ id: "pickup", coordinate: { latitude: pickup.latitude, longitude: pickup.longitude }, title: "Départ", color: "green" });
@@ -146,20 +175,10 @@ export default function PlacePickerMap({ pickup, drop, onPickup, onDrop, pickupL
   return (
     <View style={{ gap: spacing.sm }}>
       <View style={styles.map}>
-        <OSMMapView center={centerCoord} markers={markers} zoom={15} onPress={(c) => setFromCoord(c, target)} />
+        <OSMMapView center={centerCoord} markers={markers} polyline={route} fitMarkerIds={pickup && drop ? ["pickup", "drop"] : undefined} zoom={15} onPress={(c) => setFromCoord(c, target)} />
         <Pressable style={styles.locateBtn} onPress={locate} accessibilityLabel="Ma position">
           {locating ? <ActivityIndicator size="small" color={colors.primary} /> : <MaterialIcons name="my-location" size={22} color={colors.primary} />}
         </Pressable>
-      </View>
-
-      <View style={styles.targetRow}>
-        {(["pickup", "drop"] as Target[]).map((t) => (
-          <Pressable key={t} style={[styles.targetChip, target === t && styles.targetChipActive]} onPress={() => setTarget(t)}>
-            <Text style={[styles.targetText, target === t && styles.targetTextActive]}>
-              {t === "pickup" ? "Toucher la carte : départ" : "Toucher la carte : destination"}
-            </Text>
-          </Pressable>
-        ))}
       </View>
 
       <AddressField label={pickupLabel} place={pickup} onPick={onPickup} active={target === "pickup"} onFocus={() => setTarget("pickup")} />

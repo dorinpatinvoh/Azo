@@ -7,7 +7,8 @@ import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
 import SchedulePicker from "../components/SchedulePicker";
 import PlacePickerMap from "../components/PlacePickerMap";
-import { Place, VehicleType, deliveryApi, errorMessage, placesApi, walletApi } from "../services/api";
+import { Delivery, Place, VehicleType, deliveryApi, errorMessage, walletApi } from "../services/api";
+import CourierTrackMap from "../components/CourierTrackMap";
 import { tarification } from "../services/tarification";
 
 type Props = { onBack: () => void; onRecharge: () => void; onBooked: () => void };
@@ -58,6 +59,23 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
   const [pickup, setPickup] = useState<Place | null>(null);
   const [drop, setDrop] = useState<Place | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
+  const [routeKm, setRouteKm] = useState<number | null>(null);
+  const [bookings, setBookings] = useState<Delivery[]>([]);
+
+  // Mes réservations en cours (suivi, codes, annulation)
+  const loadBookings = React.useCallback(async () => {
+    try {
+      const list = await deliveryApi.mine();
+      setBookings(list.filter((d) => d.mode === "PERSONAL" && ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status)));
+    } catch {
+      // hors ligne : on garde la liste précédente
+    }
+  }, []);
+  useEffect(() => {
+    loadBookings();
+    const timer = setInterval(loadBookings, 8000);
+    return () => clearInterval(timer);
+  }, [loadBookings]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -69,8 +87,8 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
   const estimate = useMemo(() => {
     // Sans destination, la distance n'est pas connue : pas d'estimation chiffrée
     if (!rule || !pickup || !drop) return null;
-    return Math.round(rule.base + crowKm(pickup, drop) * 1.3 * rule.perKm);
-  }, [rule, pickup, drop]);
+    return Math.round(rule.base + (routeKm ?? crowKm(pickup, drop) * 1.3) * rule.perKm);
+  }, [rule, pickup, drop, routeKm]);
 
   async function confirm() {
     if (!pickup) {
@@ -96,10 +114,11 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
         pickupLng: pickup.longitude,
         ...(drop ? { dropLat: drop.latitude, dropLng: drop.longitude } : {}),
       });
+      loadBookings();
       Alert.alert(
         "Coursier personnel demandé ✅",
         `Montant réservé : ${fcfa(d.price)}. Le total final sera calculé à la fin, selon les kilomètres parcourus.\nCode de départ : ${d.pickupCode}\nCode de fin : ${d.deliveryCode}\n\nConserve ces codes : ton coursier te les demandera. Il reste réservé pour toi pendant toute la durée choisie.`,
-        [{ text: "Suivre ma demande", onPress: onBooked }]
+        [{ text: "OK", onPress: onBooked }]
       );
     } catch (e) {
       Alert.alert("Impossible de commander", errorMessage(e));
@@ -124,6 +143,35 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
         <Text style={styles.intro}>
           Un coursier rien que pour toi pendant la durée choisie. Une fois ta demande acceptée, il ne prend plus d'autre course avant la fin.
         </Text>
+
+        {bookings.map((b) => (
+          <View key={b.id} style={styles.bookingCard}>
+            <Text style={styles.bookingTitle}>
+              {b.status === "PENDING" ? "Recherche de ton coursier…" : b.status === "MATCHED" ? "Ton coursier arrive" : "Course en cours"}
+            </Text>
+            <Text style={styles.priceNote}>De : {b.pickupAddress}</Text>
+            {b.dropAddress ? <Text style={styles.priceNote}>Vers : {b.dropAddress}</Text> : null}
+            {b.bookedUntil ? <Text style={styles.priceNote}>Réservé jusqu'au {new Date(b.bookedUntil).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</Text> : null}
+            {b.scheduledAt && b.status === "PENDING" ? <Text style={styles.priceNote}>Départ programmé le {new Date(b.scheduledAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</Text> : null}
+            {["MATCHED", "IN_PROGRESS"].includes(b.status) ? <CourierTrackMap deliveryId={b.id} perKm={b.vehicleType ? cfg?.vehicles?.[b.vehicleType]?.perKm : undefined} /> : null}
+            <View style={styles.codesRow}>
+              <View style={styles.codeBox}><Text style={styles.priceNote}>Code de départ</Text><Text style={styles.codeValue}>{b.pickupCode}</Text></View>
+              <View style={styles.codeBox}><Text style={styles.priceNote}>Code de fin</Text><Text style={styles.codeValue}>{b.deliveryCode}</Text></View>
+            </View>
+            {["PENDING", "MATCHED"].includes(b.status) ? (
+              <Pressable
+                onPress={() =>
+                  Alert.alert("Annuler la réservation", "Veux-tu annuler cette demande ?", [
+                    { text: "Non", style: "cancel" },
+                    { text: "Annuler", style: "destructive", onPress: () => deliveryApi.cancel(b.id).then(loadBookings).catch((e) => Alert.alert("Erreur", errorMessage(e))) },
+                  ])
+                }
+              >
+                <Text style={styles.warn}>Annuler la demande</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
 
         {GROUPS.map((g) => (
           <View key={g.title} style={{ gap: spacing.sm }}>
@@ -182,7 +230,7 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
         <SchedulePicker value={scheduledAt} onChange={setScheduledAt} onModeChange={setScheduleMode} />
 
         <Text style={styles.sectionTitle}>Lieux</Text>
-        <PlacePickerMap pickup={pickup} drop={drop} onPickup={setPickup} onDrop={setDrop} dropLabel="Destination (facultatif)" />
+        <PlacePickerMap pickup={pickup} drop={drop} onPickup={setPickup} onDrop={setDrop} onRouteKm={setRouteKm} dropLabel="Destination (facultatif)" />
 
         <View style={styles.priceCard}>
           <Text style={styles.priceLabel}>Prix estimé</Text>
@@ -238,5 +286,10 @@ const styles = StyleSheet.create({
   daysRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   stepBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryFixed },
   daysText: { ...typography.labelLg, color: colors.onSurface, fontWeight: "800" },
+  bookingCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, gap: spacing.xs, borderWidth: 1.5, borderColor: colors.primary },
+  bookingTitle: { ...typography.labelLg, color: colors.primary, fontWeight: "800" },
+  codesRow: { flexDirection: "row", gap: spacing.sm },
+  codeBox: { flex: 1, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, padding: spacing.sm, alignItems: "center" },
+  codeValue: { ...typography.headlineSm, color: colors.primary, fontWeight: "800", letterSpacing: 3 },
   warn: { ...typography.labelMd, color: colors.error, fontWeight: "700", marginTop: 6 },
 });

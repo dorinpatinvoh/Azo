@@ -17,7 +17,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { FONT } from "../theme/fontNormalize";
 import PrimaryButton from "../components/PrimaryButton";
-import { Delivery, Place, deliveryApi, errorMessage } from "../services/api";
+import { Delivery, Place, VehicleType, deliveryApi, errorMessage } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
 import CourierTrackMap from "../components/CourierTrackMap";
@@ -30,9 +30,19 @@ const PACKAGE_TYPES = [
   { id: "medium", label: "Colis Moyen", note: "Carton < 15 kg", price: 2500, icon: "inventory-2" as const },
 ];
 
+// Le Speeder dont le client a besoin pour son colis (seuls les livreurs de ce véhicule voient la mission)
+const SPEEDERS: { id: VehicleType; label: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
+  { id: "ZEM_ESSENCE", label: "Speeder à essence", icon: "two-wheeler" },
+  { id: "ZEM_ELECTRIC", label: "Speeder électrique", icon: "electric-moped" },
+  { id: "ZEM_TRICYCLE", label: "Speeder tricycle", icon: "electric-rickshaw" },
+  { id: "GAZELLE", label: "Speeder Gazelle", icon: "directions-car" },
+  { id: "KOALA", label: "Speeder Koala", icon: "directions-car" },
+  { id: "LEOPARD", label: "Speeder Léopard", icon: "local-taxi" },
+];
+
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
-  PENDING: { label: "Recherche d'un coursier…", color: colors.secondary, bg: colors.secondaryFixed },
-  MATCHED: { label: "Coursier en route (ramassage)", color: colors.primary, bg: colors.primaryFixed },
+  PENDING: { label: "Recherche d'un livreur…", color: colors.secondary, bg: colors.secondaryFixed },
+  MATCHED: { label: "Livreur en route (ramassage)", color: colors.primary, bg: colors.primaryFixed },
   IN_PROGRESS: { label: "Colis en livraison", color: colors.primary, bg: colors.primaryFixed },
   COMPLETED: { label: "Livré ✅", color: "#146C2E", bg: "#D7F0DC" },
   CANCELLED: { label: "Annulé", color: colors.error, bg: colors.errorContainer },
@@ -44,6 +54,7 @@ type Props = { onBack: () => void; onConfirm: () => void };
 
 export default function DeliveryScreen({ onBack }: Props) {
   const [selectedType, setSelectedType] = useState("small");
+  const [speeder, setSpeeder] = useState<VehicleType>("ZEM_ESSENCE");
   const [pickup, setPickup] = useState<Place | null>(null);
   const [drop, setDrop] = useState<Place | null>(null);
   const [payer, setPayer] = useState<"me" | "recipient">("me");
@@ -86,6 +97,7 @@ export default function DeliveryScreen({ onBack }: Props) {
         packageType: selectedType,
         pickupAddress: pickup.title,
         dropAddress: drop.title,
+        vehicleType: speeder,
         pickupLat: pickup.latitude,
         pickupLng: pickup.longitude,
         dropLat: drop.latitude,
@@ -95,8 +107,8 @@ export default function DeliveryScreen({ onBack }: Props) {
       });
       await loadMine();
       Alert.alert(
-        "Coursier en recherche 📦",
-        `Code de ramassage (expéditeur) : ${d.pickupCode}\nCode de remise (destinataire) : ${d.deliveryCode}\n\nConserve ces codes : le coursier en aura besoin pour valider chaque étape.`
+        "Livreur en recherche 📦",
+        `Code de ramassage (expéditeur) : ${d.pickupCode}\nCode de remise (destinataire) : ${d.deliveryCode}\n\nConserve ces codes : le livreur en aura besoin pour valider chaque étape.`
       );
     } catch (e) {
       Alert.alert("Impossible de commander", errorMessage(e));
@@ -106,7 +118,7 @@ export default function DeliveryScreen({ onBack }: Props) {
   }
 
   function handleCancel(d: Delivery) {
-    Alert.alert("Annuler la livraison", "Veux-tu annuler cette demande de coursier ?", [
+    Alert.alert("Annuler la livraison", "Veux-tu annuler cette demande de livreur ?", [
       { text: "Non", style: "cancel" },
       {
         text: "Annuler la demande",
@@ -124,7 +136,7 @@ export default function DeliveryScreen({ onBack }: Props) {
   }
 
   const activeDeliveries = deliveries.filter((d) =>
-    ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status)
+    d.mode !== "PERSONAL" && ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status)
   );
 
   return (
@@ -133,7 +145,7 @@ export default function DeliveryScreen({ onBack }: Props) {
         <Pressable onPress={onBack} style={styles.iconButton}>
           <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />
         </Pressable>
-        <Text style={styles.headerTitle}>Coursier & Livraison</Text>
+        <Text style={styles.headerTitle}>Envoyer un colis</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -145,7 +157,7 @@ export default function DeliveryScreen({ onBack }: Props) {
         <View style={styles.banner}>
           <MaterialIcons name="verified-user" size={22} color={colors.onPrimary} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.bannerTitle}>Coursier Express & Personnel — Cotonou</Text>
+            <Text style={styles.bannerTitle}>Livreur express — Cotonou</Text>
             <Text style={styles.bannerSubtitle}>Double sécurité OTP au ramassage et à la remise</Text>
           </View>
         </View>
@@ -200,7 +212,7 @@ export default function DeliveryScreen({ onBack }: Props) {
                     <View style={styles.courierRow}>
                       <MaterialIcons name="shield" size={18} color={colors.primary} />
                       <Text style={styles.courierText} numberOfLines={1}>
-                        {maskPersonName(d.courier.fullName, "Coursier AZƆ̀")} ·{" "}
+                        {maskPersonName(d.courier.fullName, "Livreur AZƆ̀")} ·{" "}
                         {maskBeninPhone(d.courier.phone)}
                       </Text>
                       <Pressable
@@ -224,7 +236,7 @@ export default function DeliveryScreen({ onBack }: Props) {
           </View>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Que souhaites-tu confier au coursier ?</Text>
+        <Text style={styles.sectionTitle}>Que souhaites-tu confier au livreur ?</Text>
         <View style={{ gap: spacing.sm }}>
           {PACKAGE_TYPES.map((p) => {
             const active = p.id === selectedType;
@@ -255,6 +267,16 @@ export default function DeliveryScreen({ onBack }: Props) {
               </Pressable>
             );
           })}
+        </View>
+
+        <Text style={styles.sectionTitle}>Quel Speeder pour ton colis ?</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {SPEEDERS.map((v) => (
+            <Pressable key={v.id} style={[styles.payerChip, { flexGrow: 1, flexBasis: "45%" }, speeder === v.id && styles.payerChipActive]} onPress={() => setSpeeder(v.id)}>
+              <MaterialIcons name={v.icon} size={18} color={speeder === v.id ? colors.onPrimary : colors.onSurfaceVariant} />
+              <Text style={[styles.payerText, speeder === v.id && { color: colors.onPrimary }]}>{v.label}</Text>
+            </Pressable>
+          ))}
         </View>
 
         <Text style={styles.sectionTitle}>Adresses de la mission</Text>
@@ -299,7 +321,7 @@ export default function DeliveryScreen({ onBack }: Props) {
 
         <View style={{ marginTop: spacing.lg }}>
           <PrimaryButton
-            label={`Commander un coursier · ${fcfa(selectedPackage.price)}`}
+            label={`Commander un livreur · ${fcfa(selectedPackage.price)}`}
             icon="local-shipping"
             onPress={handleConfirm}
             loading={loading}

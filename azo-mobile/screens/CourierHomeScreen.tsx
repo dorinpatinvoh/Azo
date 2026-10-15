@@ -569,8 +569,8 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
               <MaterialIcons name="pause-circle-outline" size={34} color={colors.outline} />
               <Text style={styles.emptyTitle}>Tu es hors ligne</Text>
               <Text style={styles.muted}>
-                Active l'interrupteur en haut à droite pour voir et accepter les missions de livraison et
-                de coursier personnel autour de toi.
+                Active l'interrupteur en haut à droite pour voir et accepter les missions
+                autour de toi.
               </Text>
             </View>
           ) : pending.length === 0 ? (
@@ -578,7 +578,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
               <MaterialIcons name="inventory-2" size={34} color={colors.outline} />
               <Text style={styles.emptyTitle}>Aucune mission en attente</Text>
               <Text style={styles.muted}>
-                Les nouvelles demandes de livraison de colis et de coursier personnel s'affichent ici
+                Les nouvelles missions de ton activité s'affichent ici
                 automatiquement.
               </Text>
             </View>

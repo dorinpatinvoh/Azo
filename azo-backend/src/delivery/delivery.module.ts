@@ -144,6 +144,8 @@ export class DeliveryService {
     } else {
       if (!askedPrice) throw new BadRequestException("Le prix de la livraison est obligatoire.");
       if (!dropAddress) throw new BadRequestException("L'adresse de livraison est obligatoire.");
+      // Speeder demandé pour le colis (facultatif) : seuls les livreurs de ce véhicule voient la mission
+      if (vehicleType) extra = { vehicleType };
     }
     if (dto.payer === "SENDER" || personal) {
       const w = await this.wallet.getWallet(clientId);
@@ -174,18 +176,26 @@ export class DeliveryService {
 
   // Missions disponibles pour les coursiers / livreurs (sans code secret exposé !)
   /** Spécialité du coursier : un coursier personnel ne voit que les réservations de son véhicule, les autres que les colis express. */
-  private async courierScope(courierId?: string): Promise<Prisma.DeliveryWhereInput> {
+  private async courierScope(courierId?: string): Promise<{ mode: "PERSONAL" | "EXPRESS"; vehicleType: VehicleType | null }> {
     const profile = courierId ? await this.prisma.providerProfile.findUnique({ where: { userId: courierId }, select: { type: true, categoryId: true, vehicleType: true } }) : null;
-    if (profile?.type === "COURIER" && profile.categoryId === "COURSIER_PERSONNEL") {
-      return { mode: "PERSONAL", ...(profile.vehicleType ? { vehicleType: profile.vehicleType } : {}) };
-    }
-    return { mode: "EXPRESS" };
+    const personal = profile?.type === "COURIER" && profile.categoryId === "COURSIER_PERSONNEL";
+    return { mode: personal ? "PERSONAL" : "EXPRESS", vehicleType: profile?.vehicleType ?? null };
+  }
+
+  /**
+   * Missions visibles : réservations du véhicule du coursier personnel ; colis express demandant le Speeder du livreur
+   * (ou sans préférence de véhicule).
+   */
+  private scopeWhere(scope: { mode: "PERSONAL" | "EXPRESS"; vehicleType: VehicleType | null }): Prisma.DeliveryWhereInput {
+    if (!scope.vehicleType) return { mode: scope.mode };
+    if (scope.mode === "PERSONAL") return { mode: "PERSONAL", vehicleType: scope.vehicleType };
+    return { mode: "EXPRESS", OR: [{ vehicleType: null }, { vehicleType: scope.vehicleType }] };
   }
 
   async pending(courierId?: string, near?: { lat: number; lng: number }) {
     const scope = await this.courierScope(courierId);
     const items = await this.prisma.delivery.findMany({
-      where: { status: "PENDING", courierId: null, ...scope },
+      where: { status: "PENDING", courierId: null, ...this.scopeWhere(scope) },
       include: { client: { select: { fullName: true, phone: true } } },
       orderBy: { createdAt: "desc" },
       take: 40,
@@ -239,7 +249,7 @@ export class DeliveryService {
     const existing = await this.prisma.delivery.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Mission de livraison introuvable");
     const scope = await this.courierScope(courierId);
-    if (existing.mode !== (scope.mode as string) || (existing.vehicleType && scope.vehicleType && existing.vehicleType !== scope.vehicleType)) {
+    if (existing.mode !== scope.mode || (existing.vehicleType && scope.vehicleType && existing.vehicleType !== scope.vehicleType)) {
       throw new BadRequestException("Cette mission ne correspond pas à ton activité ou à ton véhicule.");
     }
 
