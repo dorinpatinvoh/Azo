@@ -1,0 +1,118 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 15 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">15 octobre 2026 · 9 commits backend sur main · 28 suites / 312 tests · mise à jour de 18 h 45</span></div>
+
+<h2>1. En résumé</h2>
+<p>Sept changements côté serveur : des <b>niveaux d'agence Platine et Elite</b>, une <b>agence réservée à l'inscription</b> (verrouillée côté serveur), un <b>module Finances de l'entreprise</b> (gains et retraits), le <b>coursier personnel</b> (réservation par véhicule et durée, programmation, exclusivité, suivi GPS, règlement aux kilomètres réels), le <b>Speeder tricycle</b>, la <b>commission de 15 % versée au portefeuille administrateur</b> et les <b>missions de livraison dans un rayon de 10 km</b>. S'y ajoutent des <b>notifications poussées</b> pour tous les événements et des <b>scripts de comptes de test</b> par profil. Tout est sur <code>main</code> (dernier commit <code>640af55b</code>) ; je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>640af55b</code>).</p>
+<div class="box warn"><b>À vérifier en premier :</b> (1) les <b>6 migrations</b> du jour (§9), dont <code>ALTER TYPE … ADD VALUE</code> pour le tricycle ; (2) la <b>règle de commission</b> (§5) : 15 % pour tous <b>sauf les employés d'agence</b>, qui gardent la commission de leur niveau ; (3) le <b>portefeuille admin</b> n'est pas lié aux retraits de l'entreprise (§5) ; (4) le <b>plafonnement du débit</b> du client en fin de course personnelle (§6).</div>
+
+<h2>2. Agences : niveaux Platine et Elite, inscription réservée (<code>agencies/</code>, <code>providers/</code>, <code>users/</code>)</h2>
+<ul>
+<li><b>Niveaux</b> : PRO (30 comptes), SILVER (75), OR (100), DIAMANT (1 000), <b>PLATINE (2 500)</b>, <b>ELITE (5 000)</b> — frais, commission et plafond lus dans <code>tarification.json</code>. Migrations <code>20261014200000_agency_levels_platine_elite</code> et <code>20261013095900_fix_agency_plan_silver</code> (rattrapage de l'ancien niveau SILVER).</li>
+<li><b>Agence réservée à l'inscription</b> : un indicateur de type de compte est posé à l'inscription (migration <code>20261015120000_user_signup_kind</code>) et vérifié à la création d'un dossier AGENCY ; un client déjà inscrit ne peut plus en créer. Une inscription non terminée peut être supprimée.</li>
+<li><b>Réveil du serveur Render</b> au lancement de l'application (le plan gratuit s'endort).</li>
+</ul>
+
+<h2>3. Notifications poussées (<code>notifications/</code>)</h2>
+<ul>
+<li>Notifications pour <b>tous les événements</b> (course, livraison, paiement, message, sécurité), avec le <b>canal Android</b> adapté (messages, paiements, alertes) et les données nécessaires pour <b>ouvrir le bon écran</b> dans l'application. Poussées activées par défaut.</li>
+<li>Textes centralisés dans <code>notification-texts.ts</code> (clés traduites côté mobile). Les anciens libellés du portefeuille restent reconnus (idempotence des écritures).</li>
+</ul>
+
+<h2>4. Finances de l'entreprise (<code>admin/finance.service.ts</code>)</h2>
+<ul>
+<li>Routes admin : <code>GET /admin/finance</code> (gains par source et par mois, total, mois en cours, retiré, en attente, payé, <b>disponible</b>), <code>GET/POST /admin/finance/withdrawals</code>, <code>POST …/:id/paid</code>, <code>POST …/:id/cancel</code>.</li>
+<li><b>Sources de gains</b> (requêtes SQL) : commissions de courses (<code>Ride.commission</code>), livraisons (15 %), activations d'agence, frais de retrait, parts mensuelles Speeder.</li>
+<li><b>Retraits</b> (<code>CompanyWithdrawal</code>, enum REQUESTED / PAID / CANCELLED, migration <code>20261015150000_company_withdrawals</code>) : minimum 1 000 F, verrou consultatif <code>pg_advisory_xact_lock('company-withdrawal')</code> contre les demandes simultanées, numéro béninois normalisé, passage à « payé » / « annulé » uniquement depuis REQUESTED.</li>
+<li>Tests : <code>admin-finance.spec.ts</code> (8 tests).</li>
+</ul>
+
+<h2>5. Commission de 15 % et portefeuille administrateur (<code>pricing/</code>, <code>wallet/</code>, <code>rides/</code>)</h2>
+<table>
+<tr><th>Cas</th><th>Commission</th></tr>
+<tr><td>Speeder, coursier personnel, livreur express</td><td><b>15 %</b> (<code>platformCommission.pct</code> dans <code>tarification.json</code>)</td></tr>
+<tr><td>Employé d'agence</td><td>Commission du <b>niveau de l'agence</b> (inchangé)</td></tr>
+<tr><td>Livraisons</td><td>15 % (<code>deliveryCommission</code>)</td></tr>
+<tr><td>Part mensuelle du Speeder indépendant</td><td><b>0</b> (était 15 % du mois) : elle aurait doublé la commission par course. Le prélèvement mensuel existe toujours mais ne prélève plus rien.</td></tr>
+</table>
+<ul>
+<li><b>Versement</b> : <code>WalletService.creditPlatformInTx</code> crédite le portefeuille du <b>premier administrateur actif</b> (créé si besoin), avec une transaction « Commission AZƆ̀ », <b>dans la même transaction</b> que le paiement de la course (<code>RidesService.settle</code>) ou de la livraison (<code>WalletService.settleDelivery</code>, nouvelle méthode en une seule transaction : débit client, gain du coursier, commission). <b>Sans administrateur actif, rien n'est versé.</b></li>
+<li><b>Point à trancher :</b> le portefeuille admin et le module Finances (§4) sont <b>deux comptabilités séparées</b> : un retrait d'entreprise ne débite pas le portefeuille admin, et le « disponible » est calculé à partir des commissions enregistrées, pas du solde du portefeuille. À unifier si tu veux un seul solde.</li>
+<li><b>Livraison payée par le destinataire :</b> le gain net du coursier est crédité sans débit préalable (comportement d'origine) et la commission est créditée à l'admin : cela crée de la monnaie sans contrepartie. À revoir (prélèvement de la commission sur le portefeuille du coursier ?).</li>
+<li>Tests : <code>rides-stop.spec.ts</code> et <code>rides-drop-code.spec.ts</code> adaptés.</li>
+</ul>
+
+<h2>6. Coursier personnel (<code>delivery/</code>)</h2>
+<ul>
+<li><b>Modèle</b> : <code>Delivery</code> gagne <code>mode</code> (EXPRESS par défaut / PERSONAL), <code>vehicleType</code>, <code>bookingHours</code>, <code>scheduledAt</code>, <code>bookedFrom</code>, <code>bookedUntil</code>, <code>distanceKm</code>, <code>traveledMeters</code>, point d'odomètre, dernière position du coursier et coordonnées du départ / de la destination. Migrations <code>20261015180000_personal_courier</code>, <code>…200000_personal_courier_schedule</code>, <code>…210000_tricycle_delivery_tracking</code>, <code>…220000_delivery_coordinates</code> (toutes en <code>IF NOT EXISTS</code>).</li>
+<li><b>Commande</b> (<code>POST /deliveries</code>, <code>mode: "PERSONAL"</code>) : véhicule obligatoire (tarif défini), durée parmi 5 h / 24 h / 72 h, ou jours entiers de 4 à 14 au-delà de 3 jours (<b>départ programmé obligatoire</b>), départ programmé entre 10 minutes et 30 jours, départ obligatoire, <b>destination facultative</b>. Le <b>prix est calculé par le serveur</b> (base + km × tarif) ; le prix envoyé par le client est ignoré. Distance par OSRM (repli : vol d'oiseau × 1,3). Solde du client vérifié.</li>
+<li><b>Tarifs</b> (<code>personalCourier</code> dans <code>tarification.json</code>, base + par km) : Speeder essence / électrique 500 + 100, <b>tricycle 600 + 150</b>, Gazelle 1 000 + 300, Koala 1 000 + 450, Léopard 1 000 + 1 300.</li>
+<li><b>Exclusivité</b> : à l'acceptation, la réservation va de l'heure de départ (programmée, sinon maintenant) à la fin de la durée ; un coursier ne peut accepter une mission dont la fenêtre <b>chevauche</b> une réservation existante (même terminée plus tôt). Une réservation future n'empêche pas d'accepter une mission immédiate. Si le coursier se désiste avant le ramassage, la réservation est libérée.</li>
+<li><b>Visibilité</b> (<code>GET /deliveries/pending</code>) : un coursier personnel ne voit que les réservations de <b>son véhicule</b> ; les autres que les colis express. <b>Rayon de 10 km</b> autour de la position envoyée (<code>?lat=&amp;lng=</code>) : les missions dont le départ est connu et plus lointain sont masquées ; chaque mission porte <code>pickupDistanceKm</code>. Sans coordonnées, la mission reste visible.</li>
+<li><b>Suivi GPS</b> : <code>POST /deliveries/:id/location</code> (coursier de la mission, statuts MATCHED / IN_PROGRESS) enregistre la position ; après le code de ramassage, l'<b>odomètre</b> existant (<code>rides/odometer.ts</code>, filtres de précision et de vitesse) cumule <code>traveledMeters</code>. <code>GET /deliveries/:id/track</code> (client ou coursier) renvoie position et kilomètres.</li>
+<li><b>Règlement en fin de course</b> (<code>confirmDelivery</code>) : prix final = base + <b>kilomètres réellement parcourus</b> × tarif ; sans trace GPS exploitable (moins de 50 m), repli sur la distance estimée. <b>Le débit est plafonné au solde du client</b> : s'il est insuffisant, on prélève ce qu'il a (pas de dette). Puis 15 % pour l'entreprise (§5), le reste au coursier.</li>
+<li>Un colis express exige toujours prix et adresse de livraison. Il peut demander un <b>Speeder précis</b> (<code>vehicleType</code>, enregistré) : un livreur express ne voit et n'accepte que les colis de <b>son véhicule</b> ou sans préférence ; un autre véhicule est refusé à l'acceptation.</li>
+<li>Tests : <code>personal-courier.spec.ts</code> (16 tests : prix, durées, commission, exclusivité, véhicule, programmation, destination absente, règlement, plafond du solde, tricycle, colis express par Speeder).</li>
+</ul>
+
+<h2>7. Speeder tricycle (<code>pricing/</code>, <code>providers/</code>)</h2>
+<ul>
+<li>Nouveau véhicule <code>ZEM_TRICYCLE</code> (famille ZEM) : <b>base 300 F, 100 F/km jusqu'à 15 km, 80 F/km de 16 à 25 km, 75 F/km au-delà</b>. Ajouté à l'enum Prisma <code>VehicleType</code> (migration <code>ALTER TYPE … ADD VALUE IF NOT EXISTS</code>), aux types de la configuration, aux choix d'inscription (Speeder et coursiers) et à la validation du dossier.</li>
+<li>Il compte comme Speeder pour le prélèvement mensuel et la règle « pas de recharge ». Le radar le traite comme les autres Speeder (correspondance stricte de véhicule).</li>
+</ul>
+
+<h2>8. Profils, libellés et scripts (<code>providers/</code>, <code>scripts/</code>)</h2>
+<ul>
+<li><b>Libellés de dossier</b> : « Coursier personnel » et « Livreur express » séparés (<code>typeLabelOf</code>, d'après la catégorie ; l'ancien <code>LIVREUR_COLIS</code> reste accepté).</li>
+<li><b>Choix de véhicule des coursiers</b> : essence, électrique, tricycle, Gazelle, Koala, Léopard.</li>
+<li><b>Scripts</b> : <code>create-provider.js</code> (profils <code>spider-essence</code>, <code>spider-electrique</code>, <code>voiture</code>, <code>coursier-personnel</code>, <code>livreur-express</code> ; option <code>--vehicle</code>), <code>create-agency.js</code>, <code>credit-wallet.js</code>, <code>seed-agency-test.js</code>. Garde : refus hors base locale sans <code>--allow-remote</code>.</li>
+<li>Migration de rattrapage <code>20260928090500_fix_vehicle_type</code> (anciens types de véhicule).</li>
+<li><b>Vocabulaire :</b> le produit s'appelle maintenant <b>« Speeder »</b>. Le backend dit encore « Spider » dans ses textes (notifications, libellés de dossier, libellés du portefeuille, messages de course). <b>Non modifié</b> : si tu le renommes, garde la reconnaissance de l'ancien libellé « Prélèvement mensuel Spider » (idempotence).</li>
+</ul>
+
+<h2>9. Migrations du jour (à appliquer dans l'ordre)</h2>
+<table>
+<tr><th>Migration</th><th>Contenu</th></tr>
+<tr><td><code>20261014200000_agency_levels_platine_elite</code></td><td>Niveaux Platine et Elite</td></tr>
+<tr><td><code>20261015120000_user_signup_kind</code></td><td>Type de compte choisi à l'inscription</td></tr>
+<tr><td><code>20261015150000_company_withdrawals</code></td><td>Retraits de l'entreprise</td></tr>
+<tr><td><code>20261015180000_personal_courier</code></td><td>Mode, véhicule, durée, fin de réservation, distance</td></tr>
+<tr><td><code>20261015200000_personal_courier_schedule</code></td><td>Départ programmé, début de réservation</td></tr>
+<tr><td><code>20261015210000_tricycle_delivery_tracking</code></td><td>Valeur <code>ZEM_TRICYCLE</code> + colonnes de suivi GPS</td></tr>
+<tr><td><code>20261015220000_delivery_coordinates</code></td><td>Coordonnées de départ / destination</td></tr>
+</table>
+<p>Appliquées par <code>render:start</code> (<code>prisma migrate deploy</code>). En local : <code>npx prisma migrate deploy</code> puis <code>npx prisma generate</code> (backend arrêté, sinon EPERM sous Windows).</p>
+
+<h2>10. Qualité et limites</h2>
+<ul>
+<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>28 suites / 312 tests</b> verts (296 avant le coursier personnel de l'après-midi).</li>
+<li><b>Non vérifié :</b> les migrations sur la base Render ; le suivi GPS et l'odomètre en conditions réelles (téléphone, route) ; le règlement d'une course personnelle de bout en bout avec un vrai compte ; l'appel OSRM depuis Render ; le filtre de 10 km sur de vraies positions.</li>
+<li><b>Pas de test dédié</b> pour : <code>GET /deliveries/pending</code> avec le rayon de 10 km, <code>creditPlatformInTx</code> sans administrateur actif, les notifications poussées.</li>
+<li><b>Limites connues :</b> les livraisons créées avant le jour n'ont pas de coordonnées (le filtre de 10 km ne les concerne pas) ; sans destination, seul le montant de départ est réservé à la commande ; le suivi GPS ne cumule les kilomètres qu'après le code de ramassage.</li>
+</ul>
+
+<h2>11. Questions pour toi</h2>
+<table>
+<tr><th>Sujet</th><th>Question</th></tr>
+<tr><td>Portefeuille admin / Finances</td><td>Un seul solde ? Aujourd'hui, les commissions arrivent dans le portefeuille admin <b>et</b> sont comptées par le module Finances, mais un retrait d'entreprise ne débite pas ce portefeuille.</td></tr>
+<tr><td>Livraison payée par le destinataire</td><td>Prélever la commission sur le portefeuille du coursier plutôt que de la créditer à l'admin sans contrepartie ?</td></tr>
+<tr><td>Agences</td><td>Les employés d'agence gardent la commission de leur niveau (pas de 15 %). Confirmé par Sergio ; à valider côté métier.</td></tr>
+<tr><td>Solde insuffisant en fin de course</td><td>Prélever ce qui est disponible (actuel) ou bloquer le montant à la commande ?</td></tr>
+<tr><td>Sans destination</td><td>Le montant de départ est réservé, le reste est facturé aux kilomètres réels : message au client à valider.</td></tr>
+<tr><td>Renommage « Spider » → « Speeder »</td><td>À faire dans les textes du serveur ?</td></tr>
+<tr><td>Administrateur</td><td>Quel compte reçoit les commissions ? Aujourd'hui, le plus ancien administrateur actif.</td></tr>
+</table>
+
+<h2>12. Commits du jour (backend)</h2>
+<table>
+<tr><th>Commit</th><th>Contenu côté backend</th></tr>
+<tr><td><code>fd009347</code></td><td>Niveaux d'agence Platine et Elite, plafonds Pro 30 / Silver 75, migrations de rattrapage</td></tr>
+<tr><td><code>ca8df5f5</code></td><td>Agence réservée à l'inscription (serveur), suppression d'une inscription non terminée</td></tr>
+<tr><td><code>8629e990</code></td><td>Notifications poussées pour tous les événements</td></tr>
+<tr><td><code>53bf32fb</code></td><td>Renommage Zem → Spider (textes), comptes de test par profil, migration des types de véhicule</td></tr>
+<tr><td><code>2b6ba875</code></td><td>Finances de l'entreprise, coursier personnel (réservation, exclusivité), commission de 15 %</td></tr>
+<tr><td><code>047c0138</code></td><td>Programmation, suivi GPS, règlement aux kilomètres réels, tricycle</td></tr>
+<tr><td><code>d102f3e6</code></td><td>Coordonnées des missions, rayon de 10 km</td></tr>
+<tr><td><code>640af55b</code></td><td>Colis express : Speeder demandé par le client, visibilité par véhicule du livreur</td></tr>
+</table>
+<div class="foot">Rapport rédigé le 15 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 18 h 45. Les commits <code>cc787c80</code>, <code>ca4803bf</code>, <code>e83033b4</code> et <code>889f7dc1</code> ne touchent que le mobile.</div>
+</body></html>

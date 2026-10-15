@@ -1,0 +1,103 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 15 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">15 octobre 2026 · 12 commits poussés sur main (dont 6 mobiles) · mise à jour de 18 h 45</span></div>
+
+<h2>1. En résumé</h2>
+<p>Aujourd'hui, le mobile a reçu <b>les cinq profils de compte</b> (Client, Speeder, Coursier personnel, Livreur express, Agence de flotte), <b>un nouveau parcours « Coursier personnel »</b> (véhicule, durée, programmation, carte GPS, suivi en direct), <b>le Speeder tricycle</b>, <b>l'accueil à trois cartes Speeder</b>, <b>l'espace admin « Finances »</b> (gains de l'entreprise et retraits), <b>les barres du bas</b> des espaces agence et coursier, une <b>page de connexion et un onboarding retravaillés</b> et les <b>notifications poussées</b> ouvrant le bon écran. Le nom <b>« Speeder »</b> remplace « Zem » puis « Spider » dans toute l'application. Les prix affichés au client ne montrent plus que le <b>prix au kilomètre</b>. Tout compile (<code>tsc</code> sans erreur).</p>
+<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>18:43</b>) contient tout. <b>Le backend doit être déployé avant</b> (migrations, §10) sinon l'application échouera sur les nouveaux champs. <b>Priorités de test :</b> le parcours coursier personnel de bout en bout (commande, acceptation, GPS, fin et règlement), l'accueil à trois cartes, l'inscription par profil et l'espace admin Finances. <b>Notifications poussées :</b> le fichier Firebase <code>google-services.json</code> manque encore à la racine de <code>azo-mobile</code> ; sans lui, aucune notification n'arrive dans un APK construit en local.</div>
+
+<h2>2. Cinq profils de compte</h2>
+<ul>
+<li>Liste de l'inscription et de « Devenir prestataire » (<code>AccountKindPicker</code>) : <b>Client, Speeder, Coursier personnel, Livreur express, Agence de flotte</b>, en 4 langues. « Coursier personnel » et « Livreur express » ne sont plus regroupés : chacun a <b>sa propre carte</b> dans le dossier d'inscription, avec son icône.</li>
+<li><b>Choix du véhicule à l'inscription</b> : Speeder, coursier personnel et livreur express choisissent leur véhicule — Speeder à essence, électrique, tricycle ou voiture (Gazelle, Koala, Léopard). Pour les coursiers, aucun véhicule n'est présélectionné.</li>
+<li>Espace admin, liste des dossiers : filtres <b>Speeder / Coursier personnel / Livreur express / Agence</b> (la séparation coursier se fait côté application, d'après la catégorie du dossier).</li>
+<li>Libellés : « chauffeur » et « conducteur » deviennent « Speeder » (4 langues, écrans compris). Les groupes du formulaire s'appellent « Speeder moto » et « Speeder voiture ».</li>
+</ul>
+
+<h2>3. Coursier personnel : nouveau parcours client</h2>
+<p>Sur l'accueil, la tuile « Coursier Pro » devient <b>« Coursier personnel »</b> et ouvre un nouvel écran (<code>PersonalCourierScreen</code>). La tuile « Espace Agence » est retirée de l'accueil client (la grille passe à 5 tuiles, centrée).</p>
+<table>
+<tr><th>Étape</th><th>Comportement</th></tr>
+<tr><td>Véhicule</td><td>Six cartes : Speeder à essence, électrique, tricycle, Gazelle, Koala, Léopard. Chaque carte n'affiche que le <b>prix au kilomètre</b> (jamais la base).</td></tr>
+<tr><td>Durée</td><td>Environ 5 heures, 1 jour, 3 jours, ou <b>« Plus de 3 jours »</b> (4 à 14 jours, début obligatoirement programmé).</td></tr>
+<tr><td>Départ</td><td>Maintenant ou programmé (jour et heure, jusqu'à 7 jours : <code>SchedulePicker</code> déjà utilisé pour les courses).</td></tr>
+<tr><td>Lieux</td><td><b>Carte GPS</b> (composant <code>PlacePickerMap</code>) : départ rempli avec la position du téléphone, bouton « Ma position », recherche d'adresse avec suggestions. Pas de boutons de choix : le premier toucher sur la carte pose le départ, le suivant la destination (le champ actif est entouré). <b>Dès que les deux lieux sont connus, l'itinéraire routier s'affiche</b> entre le départ et l'arrivée et la carte cadre les deux points. <b>La destination est facultative</b> ; le départ est obligatoire.</td></tr>
+<tr><td>Prix</td><td>Estimation (calculée sur la distance de l'itinéraire affiché) seulement si la destination est connue ; sinon le prix au km. Le total final est calculé <b>à la fin de la course selon les kilomètres réellement parcourus</b>.</td></tr>
+<tr><td>Suivi</td><td>Le client voit son coursier se déplacer sur une carte et les kilomètres déjà parcourus (<code>CourierTrackMap</code>, actualisation toutes les 4 s) dans sa carte de mission.</td></tr>
+</table>
+<ul>
+<li>Un coursier réservé n'accepte plus d'autre mission pendant la durée (message clair s'il essaie). Une mission programmée plus tard ne bloque pas une mission immédiate.</li>
+<li><b>Mes réservations</b> : le suivi d'un coursier personnel (état, carte du coursier, codes de départ et de fin, fin de réservation, annulation) se fait dans <b>son propre écran</b> ; l'écran des colis ne les affiche plus.</li>
+<li><b>Envoyer un colis</b> (tuile de l'accueil, écran renommé « Envoyer un colis ») ne concerne que le <b>livreur express</b> : textes en « livreur », plus de choix « Coursier Personnel ». Il utilise la même carte avec itinéraire pour le ramassage et la livraison, et le même suivi en direct.</li>
+<li><b>Speeder demandé pour le colis</b> : le client choisit le Speeder dont il a besoin (essence, électrique, tricycle, Gazelle, Koala, Léopard) ; seuls les livreurs express de ce véhicule voient la mission.</li>
+</ul>
+
+<h2>4. Espace coursier : GPS et missions à 10 km</h2>
+<ul>
+<li>Pendant une mission acceptée, le téléphone du coursier envoie sa position toutes les 3 à 4 s (<code>hooks/useCourierTracking.ts</code>). Le serveur cumule les kilomètres après le code de ramassage. <b>Limite : suivi au premier plan seulement</b> (l'application doit rester ouverte).</li>
+<li>Le coursier ne voit plus que les <b>missions à moins de 10 km</b> de lui : une carte affiche sa position et les départs des missions, et chaque carte de mission indique « à X km de toi ». Une mission dont le départ n'a pas de coordonnées reste visible.</li>
+<li>Les textes de l'espace coursier ne parlent plus de « coursier personnel » pour tous : « les nouvelles missions de ton activité ».</li>
+<li>Barre du bas du coursier / livreur à <b>5 onglets</b>, app bar et profil modifiable (<code>cc787c80</code>).</li>
+</ul>
+
+<h2>5. Accueil client et réservation de course</h2>
+<ul>
+<li><b>Trois cartes côte à côte</b> : Speeder moto (essence ou électrique), Speeder tricycle (ouvre directement la réservation en tricycle), Speeder Voiture. Cartes plus compactes (plus de pastille, textes réduits).</li>
+<li><b>Speeder tricycle</b> pour les courses simples : base 300 F, 100 F/km jusqu'à 15 km, 80 F/km de 16 à 25 km, 75 F/km au-delà (le barème embarqué est resynchronisé). En course personnelle : base 600 F, 150 F/km.</li>
+<li>Les voitures s'appellent maintenant « Speeder Gazelle », « Speeder Koala », « Speeder Léopard » (liste « Quelle voiture veux-tu ? », suivi de course).</li>
+<li><b>Bases masquées</b> : la ligne « Prise en charge » des fiches véhicule et le détail du prix ne montrent plus la base ; seuls les paliers « km × prix au km » et le total apparaissent. Les libellés d'accessibilité aussi.</li>
+</ul>
+
+<h2>6. Espace admin « Finances »</h2>
+<ul>
+<li>Nouvel onglet <b>Finances</b> dans la barre du bas de l'admin (Dossiers, Tableau de bord, Finances, Support) : gains de l'entreprise par source et par mois, total du mois, montant disponible au retrait, demande de retrait (minimum 1 000 F), historique, marquage « payé » avec référence, annulation.</li>
+<li>La barre du bas admin (<code>AdminTabBar</code>) est ajoutée aux écrans Dossiers, Tableau de bord et Support.</li>
+</ul>
+
+<h2>7. Connexion, onboarding, notifications</h2>
+<ul>
+<li><b>Page de connexion</b> retravaillée (bandeau d'accueil, pastilles de confiance, carte du numéro superposée) ; <b>onboarding en plein écran</b> sans retour vers l'onboarding depuis la connexion ; icône des réglages du serveur retirée de l'écran de connexion.</li>
+<li>Page « Créer un compte » retravaillée ; le choix du profil est dès l'écran du numéro.</li>
+<li><b>Notifications poussées</b> pour tous les événements, avec ouverture <b>au bon écran</b> (course, message, paiement…) ; retour en arrière corrigé dans l'entrée.</li>
+<li>Barre du bas et profil de l'<b>espace agence</b> (<code>889f7dc1</code>).</li>
+</ul>
+
+<h2>8. Ce qui n'est pas encore commité</h2>
+<p>Rien côté mobile : tout est sur <code>main</code> (dernier commit <code>640af55b</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
+
+<h2>9. APK et environnement</h2>
+<ul>
+<li>Build local (Gradle hors ligne), signé avec la clé de debug : dernier APK à <b>18:43</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code> (96 Mo). Désinstaller l'ancienne version si l'installation est refusée.</li>
+<li><b>Comptes de test</b> par profil : <code>scripts/create-provider.js</code> (profils <code>spider-essence</code>, <code>spider-electrique</code>, <code>voiture</code>, <code>coursier-personnel</code>, <code>livreur-express</code> ; option <code>--vehicle</code>, y compris <code>ZEM_TRICYCLE</code>). Sur la base Render : à lancer par toi avec l'URL externe et <code>--allow-remote</code>. <b>Un compte admin actif doit exister</b> pour que les 15 % arrivent dans son portefeuille.</li>
+<li><b>Sécurité :</b> l'URL de la base Render a été collée dans une conversation : pense à <b>changer le mot de passe de la base</b> après les tests.</li>
+</ul>
+
+<h2>10. Reste à faire côté front</h2>
+<table>
+<tr><th>Sujet</th><th>État</th></tr>
+<tr><td>Test réel des sujets du jour</td><td>Coursier personnel de bout en bout, GPS et itinéraire sur la carte, choix du Speeder pour un colis, missions à 10 km, accueil à trois cartes, inscription par profil, Finances admin</td></tr>
+<tr><td>Notifications poussées</td><td>Fichier <code>google-services.json</code> (Firebase) à placer à la racine de <code>azo-mobile</code> + clé FCM dans le projet Expo</td></tr>
+<tr><td>Suivi GPS en arrière-plan</td><td>Non fait : l'application du coursier doit rester ouverte</td></tr>
+<tr><td>Bilan de fin de course personnelle</td><td>Pas de message de bilan dédié (km parcourus, total) ; le montant se lit dans le portefeuille</td></tr>
+<tr><td>Écran admin</td><td>La barre du bas existe ; pas de test réel des retraits</td></tr>
+<tr><td>Textes d'aide</td><td>Quelques textes parlent encore de « prise en charge » (sans montant)</td></tr>
+<tr><td>Allemand</td><td>Quelques tournures maladroites après le remplacement par « Speeder » (« Elektro-Speeders »)</td></tr>
+<tr><td>Plan de tests internes</td><td>Pas mis à jour : ne couvre ni le coursier personnel, ni le tricycle, ni l'inscription par profil</td></tr>
+<tr><td>Enregistrements Fon / Yoruba</td><td>Toujours à produire par un locuteur natif</td></tr>
+</table>
+
+<h2>11. Commits du jour (front)</h2>
+<table>
+<tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>889f7dc1</code></td><td>Barre du bas et profil de l'espace agence ; réglage serveur retiré de la connexion</td></tr>
+<tr><td><code>8629e990</code></td><td>Notifications poussées pour tous les événements, ouverture au bon écran, page « Créer un compte »</td></tr>
+<tr><td><code>e83033b4</code></td><td>Onboarding en plein écran, plus de retour vers l'onboarding</td></tr>
+<tr><td><code>ca4803bf</code></td><td>Page de connexion retravaillée</td></tr>
+<tr><td><code>53bf32fb</code></td><td>« Zem » devient « Spider » partout ; comptes de test par profil</td></tr>
+<tr><td><code>cc787c80</code></td><td>Espace coursier / livreur : barre à 5 onglets, app bar, profil modifiable</td></tr>
+<tr><td><code>2b6ba875</code></td><td>Coursier personnel réservable, Finances admin, profils d'inscription séparés</td></tr>
+<tr><td><code>047c0138</code></td><td>Programmation, GPS et règlement aux kilomètres, Speeder tricycle, bases masquées, « Speeder » partout</td></tr>
+<tr><td><code>d102f3e6</code></td><td>Carte GPS de choix des lieux, suivi pour toutes les commandes, missions à 10 km, accueil à trois cartes</td></tr>
+<tr><td><code>640af55b</code></td><td>Carte sans boutons avec itinéraire, choix du Speeder pour un colis, « Envoyer un colis » réservé au livreur express, réservations dans l'écran du coursier personnel</td></tr>
+</table>
+<div class="foot">Rapport rédigé le 15 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 18 h 45. Les commits <code>fd009347</code> et <code>ca8df5f5</code> (10:43 et 11:27) sont décrits dans le rapport backend.</div>
+</body></html>
