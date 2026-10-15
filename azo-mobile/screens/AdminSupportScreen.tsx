@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AdminTabBar, { type AdminTab } from "../components/AdminTabBar";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
@@ -11,7 +12,7 @@ const FILTERS: (SupportStatus | undefined)[] = ["OPEN", "ANSWERED", "CLOSED", un
 const STATUS_COLOR: Record<SupportStatus, string> = { OPEN: "#b45309", ANSWERED: "#0a7a3b", CLOSED: "#5d5662" };
 
 /** Espace administrateur : demandes d'assistance à traiter, réponse et clôture. */
-export default function AdminSupportScreen({ onBack }: { onBack: () => void }) {
+export default function AdminSupportScreen({ onBack, onNavigateTab }: { onBack: () => void; onNavigateTab?: (tab: AdminTab) => void }) {
   const { t, locale } = useI18n();
   const [filter, setFilter] = useState<SupportStatus | undefined>("OPEN");
   const [tickets, setTickets] = useState<SupportTicketSummary[] | null>(null);
@@ -147,6 +148,7 @@ export default function AdminSupportScreen({ onBack }: { onBack: () => void }) {
           </>
         )}
       </KeyboardAvoidingView>
+      <AdminTabBar active="support" onNavigate={onNavigateTab} />
     </SafeAreaView>
   );
 }

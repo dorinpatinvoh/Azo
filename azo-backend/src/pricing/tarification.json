@@ -95,10 +95,10 @@
 
   "profiles": {
     "ZEM_INDEPENDANT": {
-      "monthlyRevenueSharePct": 15,
+      "monthlyRevenueSharePct": 0,
       "withdrawalFeePct": 1.5,
       "rideCommissionPct": 0,
-      "_notes": "Règle validée : 15 % des revenus du mois + 1,5 % sur chaque retrait. Aucune commission par course. Concerne les deux types de Spider (essence et électrique)."
+      "_notes": "Mise à jour du 15/10/2026 : la commission de 15 % est désormais prélevée sur CHAQUE course (voir `platformCommission`), versée au portefeuille administrateur ; la part mensuelle de 15 % est supprimée pour ne pas prélever deux fois. Frais de retrait : 1,5 %."
     },
     "LIVREUR": {
       "category": "INDEPENDANT_PERSONNEL",
@@ -140,6 +140,27 @@
 
   "agencyActivation": {
     "requiredForOperations": true
+  },
+
+  "platformCommission": {
+    "pct": 15,
+    "_notes": "Chaque course ou livraison terminée par un Spider, un coursier personnel, un livreur express ou un employé d'agence rapporte 15 % à l'entreprise ; la somme est versée au portefeuille administrateur."
+  },
+
+  "personalCourier": {
+    "_notes": "Coursier personnel : course réservée pour une durée (environ 5 heures, 1 jour, 3 jours). Prix = base + kilomètres × tarif au km, selon le véhicule. Le coursier qui accepte reste réservé jusqu'à la fin de la durée.",
+    "durations": [
+      { "hours": 5, "label": "Environ 5 heures" },
+      { "hours": 24, "label": "1 jour" },
+      { "hours": 72, "label": "3 jours" }
+    ],
+    "vehicles": {
+      "ZEM_ESSENCE": { "base": 500, "perKm": 100 },
+      "ZEM_ELECTRIC": { "base": 500, "perKm": 100 },
+      "GAZELLE": { "base": 1000, "perKm": 300 },
+      "KOALA": { "base": 1000, "perKm": 450 },
+      "LEOPARD": { "base": 1000, "perKm": 1300 }
+    }
   },
 
   "delivery": {

@@ -37,6 +37,9 @@ import DriverHomeScreen from "./screens/DriverHomeScreen";
 import CourierHomeScreen from "./screens/CourierHomeScreen";
 import AgencyDashboardScreen from "./screens/AgencyDashboardScreen";
 import AdminDashboardScreen from "./screens/AdminDashboardScreen";
+import AdminFinanceScreen from "./screens/AdminFinanceScreen";
+import PersonalCourierScreen from "./screens/PersonalCourierScreen";
+import type { AdminTab } from "./components/AdminTabBar";
 import MarketplaceEscrowScreen from "./screens/MarketplaceEscrowScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
 import DevMenuScreen, { ScreenId } from "./screens/DevMenuScreen";
@@ -70,17 +73,18 @@ type Route = ScreenId | "menu";
 
 /* ---------- Navigation : historique et reprise ---------- */
 // Écrans d'entrée / racines : y aller efface l'historique (on repart de zéro) et on ne revient jamais « en arrière » vers eux.
-const ROOT_ROUTES = new Set<Route>(["home", "splash", "otp", "assist-offer", "language", "driver-home", "courier-home", "agency-dashboard", "admin-providers", "admin-dashboard"]);
+const ROOT_ROUTES = new Set<Route>(["admin-finance", "admin-support", "home", "splash", "otp", "assist-offer", "language", "driver-home", "courier-home", "agency-dashboard", "admin-providers", "admin-dashboard"]);
 // Écrans d'entrée (onboarding, connexion) : jamais empilés dans l'historique
 const ENTRY_ROUTES = new Set<Route>(["splash", "otp", "assist-offer", "language"]);
 // Écrans du client où le bouton retour (et le bouton retour du téléphone) ramène à la page précédente
-const BACK_ROUTES = new Set<Route>(["courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "delivery", "rental", "marketplace", "provider-onboarding", "provider-status", "admin-support"]);
+const BACK_ROUTES = new Set<Route>(["courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "delivery", "personal-courier", "rental", "marketplace", "provider-onboarding", "provider-status", "admin-support"]);
 // Écrans retrouvés à la reconnexion (ceux qui n'ont besoin d'aucun état en mémoire : pas de course en cours, etc.)
-const RESTORABLE_ROUTES = new Set<Route>(["provider-onboarding", "provider-status", "courses", "wallet", "profile", "profile-info", "messages", "notifications", "help", "support", "delivery", "rental", "marketplace"]);
-const clientRoutesSet = new Set<Route>(["home", "courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "ride-tracking", "ride-rating", "delivery", "rental", "marketplace", "provider-onboarding", "provider-status"]);
+const RESTORABLE_ROUTES = new Set<Route>(["provider-onboarding", "provider-status", "courses", "wallet", "profile", "profile-info", "messages", "notifications", "help", "support", "delivery", "personal-courier", "rental", "marketplace"]);
+const clientRoutesSet = new Set<Route>(["home", "courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "ride-tracking", "ride-rating", "delivery", "personal-courier", "rental", "marketplace", "provider-onboarding", "provider-status"]);
 const LAST_ROUTE_KEY = "lastRoute";
 const LAST_PHONE_KEY = "lastLoginPhone";
 const SIGNUP_TYPE_KEY = "signupProviderType";
+const SIGNUP_CATEGORY_KEY = "signupProviderCategory";
 
 function routeFor(
   role: string,
@@ -170,7 +174,7 @@ function AppInner() {
   }, [lang, sessionToken]);
 
   // Popup « un Spider a accepté ta course » : par-dessus n'importe quel écran du client
-  const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "rental"];
+  const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "personal-courier", "rental"];
   const offerWatcher = useOfferWatcher(!!sessionToken && clientRoutes.includes(route), route === "ride-tracking");
   // Session ouverte mais inscription (nom, prénom, sexe, NPI) pas terminée : on rouvre le formulaire.
   // Inscription professionnelle commencée mais jamais déposée : au retour sur l'accueil, on propose de la continuer ou de la supprimer
@@ -184,7 +188,7 @@ function AppInner() {
       .then((me) => {
         const draft = me.provider;
         if (!draft || draft.status !== "DRAFT") return;
-        const label = draft.type === "AGENCY" ? "Agence de flotte" : draft.type === "COURIER" ? "Coursier, Coursier personnel & Livreur" : "Spider & Conducteur indépendant";
+        const label = draft.type === "AGENCY" ? "Agence de flotte" : draft.type === "COURIER" ? (draft.activity?.categoryId === "COURSIER_PERSONNEL" ? "Coursier personnel" : "Livreur express") : "Spider (Zem)";
         Alert.alert(
           "Inscription en cours",
           `Tu as commencé une inscription « ${label} » sans la terminer. Que veux-tu faire ?`,
@@ -208,6 +212,7 @@ function AppInner() {
                           .then(() => {
                             setSignupType(null);
                             SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
+SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
                             Alert.alert("Inscription supprimée", "Ton inscription en cours a été supprimée.");
                           })
                           .catch(() => Alert.alert("Suppression impossible", "Vérifie ta connexion et réessaie."));
@@ -234,6 +239,11 @@ function AppInner() {
 
   // Activité choisie à l'inscription (Spider, coursier, agence) : le parcours dédié reste imposé jusqu'au dépôt du dossier
   const [signupType, setSignupType] = useState<ProviderType | null>(null);
+  // Spécialité du coursier choisie à l'inscription (Coursier personnel ou Livreur express)
+  const [signupCategory, setSignupCategory] = useState<string | null>(null);
+  useEffect(() => {
+    SecureStore.getItemAsync(SIGNUP_CATEGORY_KEY).then((v) => setSignupCategory(v || null)).catch(() => undefined);
+  }, []);
   useEffect(() => {
     SecureStore.getItemAsync(SIGNUP_TYPE_KEY)
       .then((v) => setSignupType(v === "DRIVER" || v === "COURIER" || v === "AGENCY" ? v : null))
@@ -271,6 +281,12 @@ function AppInner() {
     }
     setRoute(r);
   }, []);
+
+  /** Barre du bas de l'administrateur : un onglet = un écran. */
+  const goToAdminTab = useCallback(
+    (tab: AdminTab) => goTo(tab === "providers" ? "admin-providers" : tab === "dashboard" ? "admin-dashboard" : tab === "finance" ? "admin-finance" : "admin-support"),
+    [goTo]
+  );
 
   /** Retour : dernière page visitée (jamais la page actuelle), sinon l'accueil. */
   const goBack = useCallback((fallback: Route = "home") => {
@@ -429,11 +445,10 @@ function AppInner() {
           goTo("ride-request");
           break;
         case "livraison":
-        case "coursier":
           goTo("delivery");
           break;
-        case "agence":
-          goTo("provider-status");
+        case "coursier":
+          goTo("personal-courier");
           break;
         case "location":
           goTo("rental");
@@ -489,6 +504,7 @@ function AppInner() {
     // L'inscription professionnelle en cours est propre au compte qui se déconnecte
     setSignupType(null);
     SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
+SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
     try {
       await SecureStore.deleteItemAsync("userRole");
       await SecureStore.deleteItemAsync("userToken");
@@ -597,13 +613,16 @@ function AppInner() {
         {route === "otp" && (
           <OtpLoginScreen
             resumeRegistration={resumeRegistration}
-            onVerified={(role?: string | null, provider?: ProviderRef | null, startType?: ProviderType | null) => {
+            onVerified={(role?: string | null, provider?: ProviderRef | null, startType?: ProviderType | null, startCategory?: string | null) => {
               setResumeRegistration(false);
               setSessionToken(getToken());
               // Inscription avec une activité (Spider, coursier, agence) : on enchaîne sur le dossier dédié (mémorisé jusqu'au dépôt)
               if (startType) {
                 setSignupType(startType);
                 SecureStore.setItemAsync(SIGNUP_TYPE_KEY, startType).catch(() => undefined);
+                setSignupCategory(startCategory ?? null);
+                if (startCategory) SecureStore.setItemAsync(SIGNUP_CATEGORY_KEY, startCategory).catch(() => undefined);
+                else SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
                 goTo("provider-onboarding");
                 return;
               }              void resolveStartRoute(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null)).then(goTo);
@@ -653,6 +672,14 @@ function AppInner() {
           <RideRatingScreen rideId={rideId} onDone={() => goTo("home")} />
         )}
 
+        {route === "personal-courier" && (
+          <PersonalCourierScreen
+            onBack={() => goBack()}
+            onRecharge={() => goTo("wallet")}
+            onBooked={() => goTo("delivery")}
+          />
+        )}
+
         {route === "delivery" && (
           <DeliveryScreen onBack={() => goBack()} onConfirm={() => goTo("home")} />
         )}
@@ -694,7 +721,8 @@ function AppInner() {
 
         {route === "help" && <HelpScreen onBack={() => goBack("profile")} onOpenSupport={() => goTo("support")} />}
         {route === "support" && <SupportScreen onBack={() => goBack()} />}
-        {route === "admin-support" && <AdminSupportScreen onBack={() => goBack("admin-providers")} />}
+        {route === "admin-support" && <AdminSupportScreen onBack={() => goTo("admin-providers")} onNavigateTab={goToAdminTab} />}
+        {route === "admin-finance" && <AdminFinanceScreen onNavigateTab={goToAdminTab} />}
 
         {route === "messages" && (
           <MessagesScreen onBack={() => goBack()} onNavigateTab={goTo} />
@@ -703,10 +731,12 @@ function AppInner() {
         {route === "provider-onboarding" && (
           <ProviderOnboardingScreen
             signupType={signupType ?? undefined}
+            signupCategory={signupCategory ?? undefined}
             initialType={signupType ?? undefined}
             onSubmitted={() => {
               setSignupType(null);
               SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
+SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
               goTo("provider-status");
             }}
             onBack={() => goBack()}
@@ -734,6 +764,7 @@ function AppInner() {
             onBack={handleLogout}
             onOpenDashboard={() => goTo("admin-dashboard")}
             onOpenSupport={() => goTo("admin-support")}
+            onNavigateTab={goToAdminTab}
           />
         )}
 
@@ -773,6 +804,7 @@ function AppInner() {
           <AdminDashboardScreen
             onBack={() => goTo("admin-providers")}
             onOpenProviders={() => goTo("admin-providers")}
+            onNavigateTab={goToAdminTab}
           />
         )}
 

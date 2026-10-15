@@ -120,6 +120,13 @@ export type TarificationConfig = {
   };
   agencyActivation: { requiredForOperations: boolean };
   delivery: { commissionPct: number; _aDefinir?: string[] };
+  /** Commission de l'entreprise sur chaque course / livraison terminée (versée au portefeuille administrateur). */
+  platformCommission?: { pct: number };
+  /** Coursier personnel : durées de réservation et tarif par véhicule (base + km). */
+  personalCourier?: {
+    durations: { hours: number; label: string }[];
+    vehicles: Record<string, { base: number; perKm: number }>;
+  };
   /** Liste des valeurs provisoires : elles ne sont pas des règles validées. */
   aDefinir?: ProvisionalRule[];
 };
@@ -209,6 +216,18 @@ function assertValid(config: TarificationConfig): TarificationConfig {
     if (!pricing) fail(`niveau d'agence « ${level} » manquant dans \`agencyLevels\``);
     for (const key of ["activationFee", "commissionPct", "withdrawalFeePct", "maxAccounts"] as const) {
       if (!isNonNegativeNumber(pricing[key])) fail(`\`agencyLevels.${level}.${key}\` doit être un nombre ≥ 0`);
+    }
+  }
+
+  if (config.platformCommission && !(isNonNegativeNumber(config.platformCommission.pct) && config.platformCommission.pct <= 100))
+    fail("`platformCommission.pct` doit être un pourcentage entre 0 et 100");
+  if (config.personalCourier) {
+    const pc = config.personalCourier;
+    if (!Array.isArray(pc.durations) || pc.durations.length === 0 || pc.durations.some((d) => !(Number.isInteger(d.hours) && d.hours > 0)))
+      fail("`personalCourier.durations` doit contenir des durées en heures (entiers > 0)");
+    for (const [vehicle, rule] of Object.entries(pc.vehicles ?? {})) {
+      if (!isNonNegativeNumber(rule?.base) || !isNonNegativeNumber(rule?.perKm))
+        fail(`\`personalCourier.vehicles.${vehicle}\` : base et perKm doivent être des nombres ≥ 0`);
     }
   }
 

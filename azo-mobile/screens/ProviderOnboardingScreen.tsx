@@ -37,6 +37,8 @@ type Props = {
   initialType?: ProviderType;
   /** Activité choisie à la création du compte : le parcours d'inscription dédié ne propose qu'elle (seule porte d'entrée vers une agence). */
   signupType?: ProviderType;
+  /** Spécialité du coursier choisie à l'inscription (COURSIER_PERSONNEL ou COURSIER_EXPRESS) : elle est préremplie et seule proposée. */
+  signupCategory?: string;
   initialVehicle?: VehicleType;
 };
 
@@ -71,7 +73,7 @@ type Form = {
 const EMPTY_FORM: Form = {
   type: null,
   vehicleType: null,
-  categoryId: "LIVREUR_COLIS",
+  categoryId: "COURSIER_EXPRESS",
   fullName: "",
   city: "",
   zones: "",
@@ -123,9 +125,8 @@ const LEGAL_FORMS = [
 ];
 
 const DEFAULT_COURIER_SPECIALTIES = [
-  { id: "COURSIER_EXPRESS", label: "Coursier express", hint: "Plis urgents, documents et petits paquets" },
   { id: "COURSIER_PERSONNEL", label: "Coursier personnel", hint: "Courses personnelles, marché, pharmacie & achats" },
-  { id: "LIVREUR_COLIS", label: "Livreur de colis", hint: "Livraison de colis et marchandises avec double OTP" },
+  { id: "COURSIER_EXPRESS", label: "Livreur express", hint: "Plis urgents, documents et colis livrés vite, avec double code OTP" },
 ];
 
 type VehicleChoice = { value: VehicleType; label: string; hint: string; family?: "ZEM" | "CAR" };
@@ -151,9 +152,11 @@ function vehicleIcon(value: VehicleType): keyof typeof MaterialIcons.glyphMap {
 
 // Filière coursier / livreur : choix inchangés pour l'instant (harmonisation à venir).
 const DEFAULT_COURIER_VEHICLES: VehicleChoice[] = [
-  { value: "GAZELLE", label: "Gazelle — Moto / Spider (coursier)", hint: "Plis, courses personnelles et colis en ville" },
-  { value: "KOALA", label: "Koala — Voiture climatisée (livreur)", hint: "Colis moyens, achats et marchandises" },
-  { value: "LEOPARD", label: "Léopard — Berline haut de gamme (livreur)", hint: "Livraisons premium et clients VIP" },
+  { value: "ZEM_ESSENCE", label: "Moto à essence", hint: "Moto thermique — plis, courses et colis en ville", family: "ZEM" },
+  { value: "ZEM_ELECTRIC", label: "Moto électrique", hint: "Moto électrique — mêmes missions, zéro émission", family: "ZEM" },
+  { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme", family: "CAR" },
+  { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire climatisée", family: "CAR" },
+  { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée", family: "CAR" },
 ];
 
 // Nouvelle grille officielle AZƆ̀ pour les Agences
@@ -197,7 +200,7 @@ function isoToFr(iso: string | null): string {
   return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
 }
 
-export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialType, initialVehicle, signupType }: Props) {
+export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialType, initialVehicle, signupType, signupCategory }: Props) {
   // Le bas de l'écran reste au-dessus de la barre de navigation Android ; boutons plus compacts sur petit écran
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -222,9 +225,9 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         return {
           ...t,
           enabled: true,
-          label: "Spider & Conducteur indépendant",
+          label: "Spider (Zem)",
           description:
-            "Spider, Spider indépendant (moto-taxi), Spider électrique ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
+            "Spider (moto-taxi à essence ou électrique) ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
           vehicleChoices: t.vehicleChoices?.length ? t.vehicleChoices : DEFAULT_DRIVER_VEHICLES,
         };
       }
@@ -232,9 +235,9 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         return {
           ...t,
           enabled: true,
-          label: "Coursier, Coursier personnel & Livreur",
+          label: "Coursier",
           description:
-            "Coursier express, coursier personnel (courses, marché, pharmacie) ou livreur de colis avec double code OTP.",
+            "Coursier personnel ou livreur express.",
           vehicleChoices: t.vehicleChoices?.length ? t.vehicleChoices : DEFAULT_COURIER_VEHICLES,
           specialties: t.specialties?.length ? t.specialties : DEFAULT_COURIER_SPECIALTIES,
         };
@@ -242,7 +245,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       return {
         ...t,
         enabled: true,
-        label: "Agence (Flotte Spider, Voitures & Livreurs)",
+        label: "Agence de flotte (Spider, voitures & livreurs)",
       };
     });
   }, [req]);
@@ -254,6 +257,24 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     () => availableTypes.filter((t) => (lockedType ? t.type === lockedType : t.type !== "AGENCY")),
     [availableTypes, lockedType]
   );
+  // Chaque profil a sa carte : « Coursier personnel » et « Livreur express » sont deux métiers distincts
+  type TypeCard = { key: string; type: ProviderType; category?: string; label: string; description: string };
+  const typeCards = useMemo<TypeCard[]>(
+    () =>
+      choosableTypes.flatMap((t): TypeCard[] =>
+        t.type === "COURIER"
+          ? DEFAULT_COURIER_SPECIALTIES.filter((sp) => !signupCategory || sp.id === signupCategory).map((sp) => ({
+              key: `COURIER:${sp.id}`,
+              type: "COURIER" as ProviderType,
+              category: sp.id,
+              label: sp.label,
+              description: sp.hint,
+            }))
+          : [{ key: t.type, type: t.type as ProviderType, label: t.label, description: t.description }]
+      ),
+    [choosableTypes, signupCategory]
+  );
+
   const currentType = (form.type ?? dossier?.type ?? null) as ProviderType | null;
   const isAgency = currentType === "AGENCY";
   const isCourier = currentType === "COURIER";
@@ -289,7 +310,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
           setForm({
             type: existing.type === "ARTISAN" ? "DRIVER" : existing.type,
             vehicleType: existing.activity.vehicleType,
-            categoryId: existing.activity.categoryId ?? "LIVREUR_COLIS",
+            categoryId: !existing.activity.categoryId || existing.activity.categoryId === "LIVREUR_COLIS" ? "COURSIER_EXPRESS" : existing.activity.categoryId,
             fullName: existing.identity.fullName ?? "",
             city: existing.identity.city ?? "",
             zones: existing.identity.zones.join(", "),
@@ -318,7 +339,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             if (item.expiresAt) setExpiryDraft((s) => ({ ...s, [item.kind]: isoToFr(item.expiresAt) }));
           }
         } else {
-          setForm((f) => ({ ...f, type: initialType ?? null, vehicleType: initialVehicle ?? null }));
+          setForm((f) => ({ ...f, type: initialType ?? null, vehicleType: initialVehicle ?? null, categoryId: signupCategory ?? f.categoryId }));
         }
       } catch (e) {
         if (alive) setLoadError(errorMessage(e));
@@ -643,17 +664,17 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                 ? "Inscription de ton agence de flotte (Spider, voitures ou livreurs)."
                 : lockedType
                   ? "Voici le parcours d'inscription dédié à ton activité."
-                  : "Choisis ton profil professionnel : Spider / Conducteur indépendant, ou Coursier / Coursier personnel / Livreur."}
+                  : "Choisis ton profil professionnel : Spider (Zem), Coursier personnel ou Livreur express."}
             </Text>
 
-            {choosableTypes.map((t) => {
-              const selected = currentType === t.type;
+            {typeCards.map((t) => {
+              const selected = currentType === t.type && (!t.category || form.categoryId === t.category);
               return (
                 <Pressable
-                  key={t.type}
+                  key={t.key}
                   style={[styles.card, selected && styles.cardSelected]}
                   onPress={() =>
-                    setForm((f) => ({ ...f, type: t.type, vehicleType: f.vehicleType ?? "ZEM_ESSENCE" }))
+                    setForm((f) => ({ ...f, type: t.type, vehicleType: t.type === "COURIER" ? f.vehicleType : f.vehicleType ?? "ZEM_ESSENCE", ...(t.category ? { categoryId: t.category } : {}) }))
                   }
                 >
                   <View style={[styles.cardIconWrap, selected && styles.cardIconWrapSelected]}>
@@ -661,9 +682,11 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                       name={
                         t.type === "AGENCY"
                           ? "apartment"
-                          : t.type === "COURIER"
-                            ? "local-shipping"
-                            : "two-wheeler"
+                          : t.category === "COURSIER_PERSONNEL"
+                            ? "directions-run"
+                            : t.type === "COURIER"
+                              ? "local-shipping"
+                              : "two-wheeler"
                       }
                       size={22}
                       color={selected ? colors.primary : colors.onSurfaceVariant}
@@ -710,39 +733,6 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
               </View>
             )}
 
-            {/* Spécialité Coursier / Coursier personnel / Livreur */}
-            {isCourier && (
-              <View style={styles.subSection}>
-                <Text style={styles.sectionTitle}>Quelle est ta spécialité ?</Text>
-                {(typeConfig?.specialties ?? DEFAULT_COURIER_SPECIALTIES).map((sp) => {
-                  const selected = form.categoryId === sp.id;
-                  return (
-                    <Pressable
-                      key={sp.id}
-                      style={[styles.choiceRow, selected && styles.choiceRowSelected]}
-                      onPress={() => setForm((f) => ({ ...f, categoryId: sp.id }))}
-                    >
-                      <MaterialIcons
-                        name={
-                          sp.id === "COURSIER_PERSONNEL"
-                            ? "shopping-bag"
-                            : sp.id === "COURSIER_EXPRESS"
-                              ? "bolt"
-                              : "inventory-2"
-                        }
-                        size={20}
-                        color={selected ? colors.primary : colors.onSurfaceVariant}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.choiceTitle}>{sp.label}</Text>
-                        <Text style={styles.cardMeta}>{sp.hint}</Text>
-                      </View>
-                      {selected && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
 
             {/* Spider / Spider indépendant / Moto / Voiture */}
             {!isAgency && currentType && (
@@ -757,7 +747,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                   const groups: { key: "ZEM" | "CAR"; title: string; items: VehicleChoice[] }[] = [
                     {
                       key: "ZEM",
-                      title: "Moto-taxi (Spider)",
+                      title: isCourier ? "Moto" : "Moto-taxi (Spider)",
                       items: choices.filter((v) =>
                         v.family ? v.family === "ZEM" : v.value === "ZEM_ESSENCE" || v.value === "ZEM_ELECTRIC"
                       ),
@@ -1085,18 +1075,16 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             <Text style={styles.title}>Vérifie et dépose ton dossier</Text>
 
             <View style={styles.summaryCard}>
-              <SummaryRow label="Activité" value={typeConfig?.label ?? dossier?.typeLabel ?? "—"} />
+              <SummaryRow
+                label="Activité"
+                value={
+                  isCourier
+                    ? DEFAULT_COURIER_SPECIALTIES.find((sp) => sp.id === form.categoryId)?.label ?? "Coursier"
+                    : typeConfig?.label ?? dossier?.typeLabel ?? "—"
+                }
+              />
               {isAgency && (
                 <SummaryRow label="Niveau d'agence" value={agencyPlanName(form.plan) || form.agencyType} />
-              )}
-              {isCourier && (
-                <SummaryRow
-                  label="Spécialité"
-                  value={
-                    DEFAULT_COURIER_SPECIALTIES.find((s) => s.id === form.categoryId)?.label ??
-                    form.categoryId
-                  }
-                />
               )}
               {!isAgency && form.vehicleType && (
                 <SummaryRow

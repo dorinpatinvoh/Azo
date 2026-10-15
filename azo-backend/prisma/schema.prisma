@@ -354,6 +354,12 @@ model Delivery {
   price         Int
   status        RideStatus @default(PENDING)
   createdAt     DateTime   @default(now())
+  /// "EXPRESS" (livreur express, colis) ou "PERSONAL" (coursier personnel réservé pour une durée)
+  mode          String     @default("EXPRESS")
+  vehicleType   VehicleType? // coursier personnel : véhicule demandé
+  bookingHours  Int? // coursier personnel : durée de réservation (heures)
+  bookedUntil   DateTime? // coursier personnel : fin de la réservation (fixée à l'acceptation)
+  distanceKm    Float? // coursier personnel : distance estimée par le serveur
 }
 
 model RentalBooking {
@@ -662,4 +668,28 @@ model SupportMessage {
   createdAt  DateTime      @default(now())
 
   @@index([ticketId, createdAt])
+}
+
+// Retraits des gains de l'entreprise (écran « Finances » de l'administrateur) : le disponible = gains − retraits demandés ou versés.
+enum CompanyWithdrawalStatus {
+  REQUESTED // demandé, pas encore versé
+  PAID // versé sur le compte Mobile Money
+  CANCELLED // annulé : le montant redevient disponible
+}
+
+model CompanyWithdrawal {
+  id            String                  @id @default(uuid())
+  amount        Int
+  phone         String // compte Mobile Money de destination (+229…)
+  method        String? // MTN | MOOV | CELTIIS
+  note          String?
+  status        CompanyWithdrawalStatus @default(REQUESTED)
+  reference     String? // référence de l'opération Mobile Money, saisie au versement
+  requestedById String
+  decidedById   String? // administrateur qui l'a marqué versé ou annulé
+  paidAt        DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@index([status])
 }

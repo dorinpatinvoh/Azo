@@ -387,17 +387,46 @@ export class PricingService {
     user: { profile?: string | null; agencyLevel?: AgencyLevel | string | null },
     rideAmount: number
   ): number {
+    // Les employés d'agence restent soumis à la commission de leur niveau d'agence ; tous les autres (Spider, coursier personnel,
+    // livreur express) versent 15 % à l'entreprise.
     if (user.agencyLevel) return this.agencyCommission(user.agencyLevel, rideAmount);
-    const profile = user.profile ? this.profilePricing(user.profile) : null;
-    const pct = profile?.rideCommissionPct ?? this.config.unspecifiedProfile.rideCommissionPct;
-    return this.percentOf(rideAmount, pct);
+    return this.platformCommission(rideAmount);
+  }
+
+  /** Taux de la commission de l'entreprise (en %). */
+  platformCommissionPct(): number {
+    return this.config.platformCommission?.pct ?? 15;
+  }
+
+  /** Commission de l'entreprise sur un montant (FCFA, arrondi). */
+  platformCommission(amount: number): number {
+    return this.percentOf(amount, this.platformCommissionPct());
+  }
+
+  /* ------------------------------------------------------------ Coursier personnel */
+
+  /** Durées de réservation proposées (heures). */
+  personalCourierDurations(): { hours: number; label: string }[] {
+    return this.config.personalCourier?.durations ?? [];
+  }
+
+  /** Tarif (base + km) d'un véhicule de coursier personnel, ou `null` s'il n'est pas proposé. */
+  personalCourierRule(vehicle: string): { base: number; perKm: number } | null {
+    return this.config.personalCourier?.vehicles?.[vehicle] ?? null;
+  }
+
+  /** Prix d'une course de coursier personnel : base + kilomètres × tarif au km. */
+  personalCourierPrice(vehicle: string, km: number): number {
+    const rule = this.personalCourierRule(vehicle);
+    if (!rule) throw new Error(`Véhicule de coursier personnel inconnu : ${vehicle}`);
+    return Math.round(rule.base + Math.max(km, 0) * rule.perKm);
   }
 
   /* ------------------------------------------------------------------ Livraison */
 
   /** Livraison : non décrite par la spécification, taux conservé en configuration. */
   deliveryCommission(amount: number): number {
-    return this.percentOf(amount, this.config.delivery?.commissionPct ?? 0);
+    return this.platformCommission(amount);
   }
 
   /* ------------------------------------------------------------------ Outils */

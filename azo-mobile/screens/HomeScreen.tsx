@@ -61,7 +61,6 @@ const OTHER_SERVICES: { id: string; labelKey: MessageKey; icon: keyof typeof Mat
   { id: "coursier", labelKey: "home.other.courier", icon: "directions-run", bg: colors.secondaryFixed, fg: colors.secondary },
   { id: "location", labelKey: "home.other.rent", icon: "key", bg: colors.tertiaryFixed, fg: colors.tertiary },
   { id: "marketplace", labelKey: "home.other.shop", icon: "storefront", bg: colors.secondaryFixed, fg: colors.secondary },
-  { id: "agence", labelKey: "home.other.agency", icon: "apartment", bg: colors.primaryFixed, fg: colors.primary },
   { id: "courses", labelKey: "home.other.rides", icon: "receipt-long", bg: colors.primaryFixed, fg: colors.primary },
 ];
 
@@ -249,7 +248,7 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
               <View style={[styles.smallTileIcon, { backgroundColor: s.bg }]}>
                 <MaterialIcons name={s.icon} size={24} color={s.fg} />
               </View>
-              <Text style={styles.smallTileLabel} numberOfLines={1}>
+              <Text style={styles.smallTileLabel} numberOfLines={2}>
                 {t(s.labelKey)}
               </Text>
             </Pressable>
@@ -514,12 +513,13 @@ const styles = StyleSheet.create({
   otherServicesGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    justifyContent: "center", // 5 tuiles : la dernière ligne reste centrée
     rowGap: spacing.sm,
     marginBottom: spacing.lg,
   },
   smallTile: {
-    width: "31.5%",
+    width: "30%",
+    marginHorizontal: "1.6%",
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.lg,
     paddingVertical: 12,

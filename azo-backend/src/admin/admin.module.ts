@@ -11,7 +11,7 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { Role, UserStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -22,6 +22,7 @@ import { WalletModule, WalletService } from "../wallet/wallet.module";
 import { PricingModule, PricingService } from "../pricing/pricing.module";
 import { UsersModule } from "../users/users.module";
 import { NpiCryptoService } from "../common/npi-crypto.service";
+import { FinanceService, MIN_COMPANY_WITHDRAWAL } from "./finance.service";
 
 class MonthlySettlementDto {
   /** Mois à prélever, format AAAA-MM (par défaut : mois en cours). */
@@ -29,6 +30,34 @@ class MonthlySettlementDto {
   @IsString()
   @MaxLength(7)
   period?: string;
+}
+
+class WithdrawalDto {
+  @IsInt({ message: "Le montant doit être un nombre entier de FCFA" })
+  @Min(MIN_COMPANY_WITHDRAWAL, { message: `Le retrait minimum est de ${MIN_COMPANY_WITHDRAWAL} FCFA` })
+  amount: number;
+
+  /** Compte Mobile Money qui reçoit l'argent (10 chiffres, 01…). */
+  @IsString()
+  @MaxLength(20)
+  phone: string;
+
+  @IsOptional()
+  @IsIn(["MTN", "MOOV", "CELTIIS"])
+  method?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  note?: string;
+}
+
+class MarkPaidDto {
+  /** Référence de l'opération Mobile Money. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  reference?: string;
 }
 
 class UpdateUserStatusDto {
@@ -231,7 +260,36 @@ export class AdminService {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
 export class AdminController {
-  constructor(private svc: AdminService) {}
+  constructor(private svc: AdminService, private finance: FinanceService) {}
+
+  // GET /admin/finance — gains de l'entreprise (par source et par mois), retraits et montant disponible
+  @Get("finance")
+  financeSummary() {
+    return this.finance.summary();
+  }
+
+  @Get("finance/withdrawals")
+  withdrawals() {
+    return this.finance.listWithdrawals();
+  }
+
+  // POST /admin/finance/withdrawals { amount, phone, method?, note? } — demande de retrait (refusée au-delà du disponible)
+  @Post("finance/withdrawals")
+  requestWithdrawal(@CurrentUser() u, @Body() dto: WithdrawalDto) {
+    return this.finance.requestWithdrawal(u.userId, dto);
+  }
+
+  // POST /admin/finance/withdrawals/:id/paid { reference? } — l'argent a été versé
+  @Post("finance/withdrawals/:id/paid")
+  markWithdrawalPaid(@CurrentUser() u, @Param("id") id: string, @Body() dto: MarkPaidDto) {
+    return this.finance.markPaid(u.userId, id, dto.reference);
+  }
+
+  // POST /admin/finance/withdrawals/:id/cancel — annule une demande en attente
+  @Post("finance/withdrawals/:id/cancel")
+  cancelWithdrawal(@CurrentUser() u, @Param("id") id: string) {
+    return this.finance.cancel(u.userId, id);
+  }
 
   @Get("stats")
   stats() {
@@ -275,6 +333,6 @@ export class AdminController {
 @Module({
   imports: [WalletModule, PricingModule, UsersModule],
   controllers: [AdminController],
-  providers: [AdminService],
+  providers: [AdminService, FinanceService],
 })
 export class AdminModule {}

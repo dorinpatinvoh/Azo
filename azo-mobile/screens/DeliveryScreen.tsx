@@ -25,13 +25,6 @@ const PACKAGE_TYPES = [
   { id: "doc", label: "Document / Pli", note: "Pli urgent < 1 kg", price: 1000, icon: "drafts" as const },
   { id: "small", label: "Petit Colis", note: "Sac / Repas < 5 kg", price: 1500, icon: "shopping-bag" as const },
   { id: "medium", label: "Colis Moyen", note: "Carton < 15 kg", price: 2500, icon: "inventory-2" as const },
-  {
-    id: "personal",
-    label: "Coursier Personnel",
-    note: "Courses, pharmacie, achats personnels",
-    price: 2000,
-    icon: "directions-run" as const,
-  },
 ];
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -165,6 +158,13 @@ export default function DeliveryScreen({ onBack }: Props) {
                     <Text style={styles.activePrice}>{fcfa(d.price)}</Text>
                   </View>
 
+                  {d.mode === "PERSONAL" ? (
+                    <Text style={styles.activeRoute}>
+                      <Text style={{ fontFamily: FONT.bold }}>Coursier personnel · </Text>
+                      {d.vehicleType ?? ""}
+                      {d.bookedUntil ? ` · réservé jusqu'au ${new Date(d.bookedUntil).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : d.bookingHours ? ` · ${d.bookingHours} h` : ""}
+                    </Text>
+                  ) : null}
                   <Text style={styles.activeRoute} numberOfLines={1}>
                     <Text style={{ fontFamily: FONT.bold }}>De : </Text>
                     {d.pickupAddress}

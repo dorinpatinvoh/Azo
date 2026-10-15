@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AdminTabBar, { type AdminTab } from "../components/AdminTabBar";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
@@ -26,13 +27,14 @@ import { formatBeninPhoneDisplay } from "../utils/phone";
 type Props = {
   onBack: () => void;
   onOpenProviders?: () => void;
+  onNavigateTab?: (tab: AdminTab) => void;
 };
 
 type Tab = "OVERVIEW" | "USERS" | "AUDIT";
 
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
 
-export default function AdminDashboardScreen({ onBack, onOpenProviders }: Props) {
+export default function AdminDashboardScreen({ onBack, onOpenProviders, onNavigateTab }: Props) {
   const [tab, setTab] = useState<Tab>("OVERVIEW");
   const [stats, setStats] = useState<AdminGlobalStats | null>(null);
   const [users, setUsers] = useState<AdminUserItem[]>([]);
@@ -383,6 +385,7 @@ export default function AdminDashboardScreen({ onBack, onOpenProviders }: Props)
           )}
         </ScrollView>
       )}
+      <AdminTabBar active="dashboard" onNavigate={onNavigateTab} />
     </SafeAreaView>
   );
 }

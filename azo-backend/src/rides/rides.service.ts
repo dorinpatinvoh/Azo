@@ -1631,6 +1631,8 @@ export class RidesService {
           { walletId: driverWallet.id, type: "CREDIT", amount: driverGain, label: "Gain de course", labelKey: "TRANSACTION_RIDE_EARNING", labelParams: { ref, commission }, meta: ref },
         ],
       });
+      // 15 % pour l'entreprise : versés au portefeuille administrateur dans la même transaction
+      await this.wallet.creditPlatformInTx(tx, commission, ref);
 
       const where: Prisma.RideWhereInput = { id: rideId, driverId, status: "IN_PROGRESS" };
       if (options.stopRequestAt) {

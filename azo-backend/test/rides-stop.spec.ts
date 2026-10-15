@@ -78,7 +78,7 @@ function makeService(rideOverrides: Record<string, unknown> = {}) {
     emitRideSettled: jest.fn(),
   };
   return {
-    service: new RidesService(prisma, {} as any, notifications as any, pricing, gateway),
+    service: new RidesService(prisma, { creditPlatformInTx: jest.fn().mockResolvedValue(true) } as any, notifications as any, pricing, gateway),
     ride,
     prisma,
     tx,

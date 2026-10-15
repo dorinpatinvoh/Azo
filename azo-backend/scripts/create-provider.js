@@ -4,15 +4,14 @@
  *
  *   node --env-file=.env scripts/create-provider.js 0197000301 --profile spider-essence
  *   node --env-file=.env scripts/create-provider.js 0197000304 --profile voiture --vehicle KOALA --balance 20000
- *   node --env-file=.env scripts/create-provider.js 0197000305 --profile livreur --allow-remote
+ *   node --env-file=.env scripts/create-provider.js 0197000305 --profile livreur-express --allow-remote
  *
  * Profils (--profile) :
  *   spider-essence      Spider (Zem) à essence
  *   spider-electrique   Spider (Zem) électrique
  *   voiture             Conducteur de voiture ; --vehicle GAZELLE (défaut), KOALA ou LEOPARD
- *   coursier-express    Coursier express (plis urgents, petits paquets)
- *   coursier-personnel  Coursier personnel (courses, marché, pharmacie)
- *   livreur             Livreur de colis (double code OTP)
+ *   coursier-personnel  Coursier personnel (réservé pour une durée) ; --vehicle ZEM_ESSENCE (défaut), ZEM_ELECTRIC, GAZELLE, KOALA ou LEOPARD
+ *   livreur-express     Livreur express (plis, documents, colis ; double code OTP)
  *
  * Options : --name "<nom>" · --balance <F> (solde AZƆ̀ Pay, défaut 5 000) · --allow-remote (base non locale, ex. Render)
  * Le dossier est créé déjà APPROUVÉ : le compte entre directement dans son espace professionnel (connexion : numéro + code OTP).
@@ -33,9 +32,8 @@ const PROFILES = {
   "spider-essence": { label: "Spider à essence", type: "DRIVER", vehicleType: "ZEM_ESSENCE", model: "Bajaj Boxer" },
   "spider-electrique": { label: "Spider électrique", type: "DRIVER", vehicleType: "ZEM_ELECTRIC", model: "Moto électrique" },
   voiture: { label: "Conducteur de voiture", type: "DRIVER", vehicleType: "GAZELLE", model: "Toyota Corolla" },
-  "coursier-express": { label: "Coursier express", type: "COURIER", vehicleType: "GAZELLE", model: "Moto", categoryId: "COURSIER_EXPRESS" },
-  "coursier-personnel": { label: "Coursier personnel", type: "COURIER", vehicleType: "GAZELLE", model: "Moto", categoryId: "COURSIER_PERSONNEL" },
-  livreur: { label: "Livreur de colis", type: "COURIER", vehicleType: "KOALA", model: "Toyota Yaris", categoryId: "LIVREUR_COLIS" },
+  "coursier-personnel": { label: "Coursier personnel", type: "COURIER", vehicleType: "ZEM_ESSENCE", model: "Moto", categoryId: "COURSIER_PERSONNEL" },
+  "livreur-express": { label: "Livreur express", type: "COURIER", vehicleType: "GAZELLE", model: "Moto", categoryId: "COURSIER_EXPRESS" },
 };
 
 const profileKey = option("profile");
@@ -46,10 +44,11 @@ if (!raw || !profile) {
   );
   process.exit(1);
 }
-if (profileKey === "voiture" && option("vehicle")) {
+if ((profileKey === "voiture" || profileKey === "coursier-personnel") && option("vehicle")) {
   const v = option("vehicle").toUpperCase();
-  if (!["GAZELLE", "KOALA", "LEOPARD"].includes(v)) {
-    console.error("--vehicle doit valoir GAZELLE, KOALA ou LEOPARD.");
+  const allowed = profileKey === "voiture" ? ["GAZELLE", "KOALA", "LEOPARD"] : ["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"];
+  if (!allowed.includes(v)) {
+    console.error("--vehicle doit valoir " + allowed.join(", ") + ".");
     process.exit(1);
   }
   profile.vehicleType = v;

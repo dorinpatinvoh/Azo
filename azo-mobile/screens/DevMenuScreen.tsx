@@ -11,7 +11,7 @@ export type ScreenId =
   | "driver-home" | "courier-home" | "agency-dashboard"
   | "provider-onboarding" | "provider-status" | "admin-providers"
   | "admin-dashboard" | "marketplace" | "notifications"
-  | "assist-offer" | "language" | "profile-info" | "help" | "messages" | "support" | "admin-support";
+  | "assist-offer" | "language" | "profile-info" | "help" | "messages" | "support" | "admin-support" | "admin-finance" | "personal-courier";
 
 const SCREENS: { id: ScreenId; label: string; group: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
   { id: "splash", label: "1. Splash / Onboarding", group: "Client", icon: "rocket-launch" },

@@ -54,7 +54,7 @@ import {
 type Step = "phone" | "code" | "register";
 
 type Props = {
-  onVerified: (role: string, provider?: ProviderRef | null, startType?: ProviderType | null) => void;
+  onVerified: (role: string, provider?: ProviderRef | null, startType?: ProviderType | null, startCategory?: string | null) => void;
   /** Plus utilisé : l'écran de connexion n'a plus de retour vers l'onboarding. */
   onBack?: () => void;
   /** Application rouverte alors que l'inscription n'était pas terminée (session déjà ouverte). */
@@ -250,7 +250,8 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
         firstName: normalizeName(firstName),
         gender,
         npi: cleanNpi(npi),
-        accountKind,
+        // Le serveur ne connaît que 4 types de compte : Coursier personnel et Livreur express sont deux spécialités du même type
+        accountKind: accountKind === "COURIER_PERSONAL" || accountKind === "COURIER_EXPRESS" ? "COURIER" : accountKind,
       });
       // Le serveur doit confirmer l'enregistrement : sinon (serveur pas à jour) on ne laisse
       // pas l'utilisateur entrer comme si tout était sauvegardé.
@@ -263,7 +264,12 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
       spokenDone.current = true;
       if (talk) speakKey("voice.done", voiceLang);
       await SecureStore.setItemAsync("lastLoginPhone", digits).catch(() => undefined);
-      onVerified("CLIENT", null, accountKind === "CLIENT" ? null : accountKind);
+      // Profil choisi : le dossier d'inscription dédié s'ouvre ensuite (type d'activité + spécialité du coursier)
+      const startType: ProviderType | null =
+        accountKind === "CLIENT" ? null : accountKind === "COURIER_PERSONAL" || accountKind === "COURIER_EXPRESS" ? "COURIER" : accountKind;
+      const startCategory =
+        accountKind === "COURIER_PERSONAL" ? "COURSIER_PERSONNEL" : accountKind === "COURIER_EXPRESS" ? "COURSIER_EXPRESS" : null;
+      onVerified("CLIENT", null, startType, startCategory);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         notify(t("auth.alert.outdatedTitle"), t("auth.alert.outdatedBody"));

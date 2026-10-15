@@ -59,6 +59,11 @@ export type TarificationConfig = {
   profiles: Record<string, { category?: string; monthlyRevenueSharePct?: number; withdrawalFeePct?: number }>;
   legacyVehicleMapping: Record<string, VehicleKey>;
   agencyActivation: { requiredForOperations: boolean };
+  /** Coursier personnel : durées de réservation et tarif (base + km) par véhicule. */
+  personalCourier?: {
+    durations: { hours: number; label: string }[];
+    vehicles: Partial<Record<VehicleKey, { base: number; perKm: number }>>;
+  };
 };
 
 let current: TarificationConfig = reference as unknown as TarificationConfig;

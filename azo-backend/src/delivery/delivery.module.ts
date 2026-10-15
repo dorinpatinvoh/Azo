@@ -11,8 +11,9 @@ import {
   Post,
   UseGuards,
 } from "@nestjs/common";
-import { IsEnum, IsInt, IsString, MaxLength, Min } from "class-validator";
-import { Delivery, Payer } from "@prisma/client";
+import { IsEnum, IsIn, IsInt, IsLatitude, IsLongitude, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { Delivery, Payer, Prisma, VehicleType } from "@prisma/client";
+import { haversineKm } from "../rides/radar";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -27,7 +28,17 @@ class CreateDeliveryDto {
   @IsString() @MaxLength(200) pickupAddress: string;
   @IsString() @MaxLength(200) dropAddress: string;
   @IsEnum(Payer) payer: Payer;
-  @IsInt() @Min(200) price: number;
+  /** Livraison express : prix proposé par le client. Coursier personnel : ignoré, le serveur calcule le prix. */
+  @IsOptional() @IsInt() @Min(200) price?: number;
+
+  /** "PERSONAL" = réservation d'un coursier personnel (véhicule + durée) ; par défaut "EXPRESS". */
+  @IsOptional() @IsIn(["EXPRESS", "PERSONAL"]) mode?: "EXPRESS" | "PERSONAL";
+  @IsOptional() @IsEnum(VehicleType) vehicleType?: VehicleType;
+  @IsOptional() @IsInt() @Min(1) @Max(24 * 14) bookingHours?: number;
+  @IsOptional() @IsLatitude() pickupLat?: number;
+  @IsOptional() @IsLongitude() pickupLng?: number;
+  @IsOptional() @IsLatitude() dropLat?: number;
+  @IsOptional() @IsLongitude() dropLng?: number;
 }
 
 class ConfirmCodeDto {
@@ -62,17 +73,53 @@ export class DeliveryService {
   }
 
   // Double sécurité OTP : un code au ramassage, un code à la remise
+  /** Distance de route (OSRM) entre deux points ; à défaut, vol d'oiseau × 1,3. */
+  private async routeKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): Promise<number> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    try {
+      const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false&steps=false`, { signal: controller.signal });
+      if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
+      const body = (await res.json()) as { routes?: { distance?: number }[] };
+      const meters = body.routes?.[0]?.distance;
+      if (typeof meters === "number" && Number.isFinite(meters) && meters > 0) return meters / 1000;
+      throw new Error("OSRM sans itinéraire");
+    } catch {
+      return haversineKm({ latitude: a.lat, longitude: a.lng }, { latitude: b.lat, longitude: b.lng }) * 1.3;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async create(clientId: string, dto: CreateDeliveryDto) {
-    if (dto.payer === "SENDER") {
+    const { mode, vehicleType, bookingHours, pickupLat, pickupLng, dropLat, dropLng, price: askedPrice, ...base } = dto;
+    const personal = mode === "PERSONAL";
+    let price = askedPrice ?? 0;
+    let extra: Prisma.DeliveryUncheckedCreateInput | Record<string, never> = {};
+    if (personal) {
+      if (!vehicleType || !this.pricing.personalCourierRule(vehicleType)) throw new BadRequestException("Choisis un véhicule pour ton coursier personnel.");
+      if (!bookingHours || !this.pricing.personalCourierDurations().some((d) => d.hours === bookingHours)) {
+        throw new BadRequestException("Choisis une durée de réservation proposée (environ 5 heures, 1 jour, 3 jours).");
+      }
+      if (pickupLat === undefined || pickupLng === undefined || dropLat === undefined || dropLng === undefined) {
+        throw new BadRequestException("Choisis le départ et la destination dans la liste de suggestions pour que la distance soit calculée.");
+      }
+      const km = Math.round((await this.routeKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng })) * 10) / 10;
+      price = this.pricing.personalCourierPrice(vehicleType, km);
+      extra = { mode: "PERSONAL", vehicleType, bookingHours, distanceKm: km } as Prisma.DeliveryUncheckedCreateInput;
+    } else if (!askedPrice) {
+      throw new BadRequestException("Le prix de la livraison est obligatoire.");
+    }
+    if (dto.payer === "SENDER" || personal) {
       const w = await this.wallet.getWallet(clientId);
-      if (w.balance < dto.price) {
+      if (w.balance < price) {
         throw new BadRequestException(
-          `Solde AZƆ̀ Pay insuffisant (${w.balance.toLocaleString("fr-FR")} F pour ${dto.price.toLocaleString("fr-FR")} F). Recharge ton portefeuille ou choisis « Par destinataire ».`
+          `Solde AZƆ̀ Pay insuffisant (${w.balance.toLocaleString("fr-FR")} F pour ${price.toLocaleString("fr-FR")} F). Recharge ton portefeuille${personal ? "" : " ou choisis « Par destinataire »"}.`
         );
       }
     }
     const created = await this.prisma.delivery.create({
-      data: { ...dto, clientId, pickupCode: code4(), deliveryCode: code4() },
+      data: { ...base, ...(personal ? { payer: "SENDER" as Payer } : {}), ...extra, price, clientId, pickupCode: code4(), deliveryCode: code4() },
       include: { client: { select: { fullName: true, phone: true } } },
     });
     const [enriched] = await this.enrich([created]);
@@ -91,9 +138,19 @@ export class DeliveryService {
   }
 
   // Missions disponibles pour les coursiers / livreurs (sans code secret exposé !)
-  async pending() {
+  /** Spécialité du coursier : un coursier personnel ne voit que les réservations de son véhicule, les autres que les colis express. */
+  private async courierScope(courierId?: string): Promise<Prisma.DeliveryWhereInput> {
+    const profile = courierId ? await this.prisma.providerProfile.findUnique({ where: { userId: courierId }, select: { type: true, categoryId: true, vehicleType: true } }) : null;
+    if (profile?.type === "COURIER" && profile.categoryId === "COURSIER_PERSONNEL") {
+      return { mode: "PERSONAL", ...(profile.vehicleType ? { vehicleType: profile.vehicleType } : {}) };
+    }
+    return { mode: "EXPRESS" };
+  }
+
+  async pending(courierId?: string) {
+    const scope = await this.courierScope(courierId);
     const items = await this.prisma.delivery.findMany({
-      where: { status: "PENDING", courierId: null },
+      where: { status: "PENDING", courierId: null, ...scope },
       include: { client: { select: { fullName: true, phone: true } } },
       orderBy: { createdAt: "desc" },
       take: 40,
@@ -133,15 +190,29 @@ export class DeliveryService {
       throw new BadRequestException("Tu as déjà une livraison en cours. Termine-la avant d'en accepter une autre.");
     }
 
+    // Coursier personnel : réservé jusqu'à la fin de sa dernière réservation (même terminée plus tôt)
+    const reserved = await this.prisma.delivery.findFirst({
+      where: { courierId, mode: "PERSONAL", bookedUntil: { gt: new Date() }, status: { in: ["MATCHED", "IN_PROGRESS", "COMPLETED"] }, NOT: { id } },
+      orderBy: { bookedUntil: "desc" },
+    });
+    if (reserved?.bookedUntil) {
+      const until = reserved.bookedUntil.toLocaleString("fr-FR", { timeZone: "Africa/Porto-Novo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      throw new BadRequestException(`Tu es réservé par un client jusqu'au ${until}. Tu pourras accepter une autre course ensuite.`);
+    }
+
     const existing = await this.prisma.delivery.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Mission de livraison introuvable");
+    const scope = await this.courierScope(courierId);
+    if (existing.mode !== (scope.mode as string) || (existing.vehicleType && scope.vehicleType && existing.vehicleType !== scope.vehicleType)) {
+      throw new BadRequestException("Cette mission ne correspond pas à ton activité ou à ton véhicule.");
+    }
     if (existing.clientId === courierId) {
       throw new BadRequestException("Tu ne peux pas accepter ta propre demande de livraison");
     }
 
     const updated = await this.prisma.delivery.updateMany({
       where: { id, status: "PENDING", courierId: null },
-      data: { courierId, status: "MATCHED" },
+      data: { courierId, status: "MATCHED", ...(existing.mode === "PERSONAL" && existing.bookingHours ? { bookedUntil: new Date(Date.now() + existing.bookingHours * 3600_000) } : {}) },
     });
     if (updated.count === 0) {
       throw new BadRequestException("Cette mission vient d'être prise par un autre coursier ou a été annulée");
@@ -235,19 +306,16 @@ export class DeliveryService {
     const commission = this.pricing.deliveryCommission(d.price);
     const net = d.price - commission;
 
-    if (d.payer === "SENDER" && courierId !== d.clientId) {
-      await this.wallet.transfer(
-        d.clientId,
+    if (courierId !== d.clientId) {
+      await this.wallet.settleDelivery({
+        clientId: d.payer === "SENDER" ? d.clientId : null,
         courierId,
-        d.price,
+        price: d.price,
         net,
-        `Livraison colis (${d.dropAddress})`,
-        `Gain livraison (${d.dropAddress})`,
-        id
-      );
-    } else if (courierId !== d.clientId) {
-      // Paiement par le destinataire : on crédite le gain net sur le wallet AZƆ̀ Pay du coursier
-      await this.wallet.credit(courierId, net, `Gain livraison destinataire (${d.dropAddress})`, id);
+        commission,
+        dropAddress: d.dropAddress,
+        ref: id,
+      });
     }
 
     const updated = await this.prisma.delivery.update({
@@ -311,7 +379,7 @@ export class DeliveryService {
       }
       const updated = await this.prisma.delivery.update({
         where: { id },
-        data: { status: "PENDING", courierId: null },
+        data: { status: "PENDING", courierId: null, bookedUntil: null },
         include: { client: { select: { fullName: true, phone: true } } },
       });
       await this.notifications.push(
@@ -346,8 +414,8 @@ export class DeliveryController {
   }
 
   @Get("pending")
-  pending() {
-    return this.svc.pending();
+  pending(@CurrentUser() u) {
+    return this.svc.pending(u.userId);
   }
 
   @Get("courier")

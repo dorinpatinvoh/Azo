@@ -63,7 +63,7 @@ function makeService(overrides: Record<string, unknown> = {}) {
   };
   const $transaction = jest.fn((callback) => callback(tx));
   (prisma as any).$transaction = $transaction;
-  const wallet = { transfer: jest.fn().mockResolvedValue(undefined) };
+  const wallet = { transfer: jest.fn().mockResolvedValue(undefined), creditPlatformInTx: jest.fn().mockResolvedValue(true) };
   const notifications = { push: jest.fn().mockResolvedValue({}) };
   const pricing = {
     isZem: jest.fn().mockReturnValue(true),

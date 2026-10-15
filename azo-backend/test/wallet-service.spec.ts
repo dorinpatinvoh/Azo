@@ -98,6 +98,16 @@ describe("WalletService monthly Spider settlement", () => {
     expect(tx.wallet.updateMany).not.toHaveBeenCalled();
   });
 
+  it("reconnaît aussi un prélèvement enregistré avec l'ancien libellé « Zem » (jamais de double prélèvement)", async () => {
+    const { service, tx } = makeWalletService({ balance: 850, existingSettlement: { amount: 150 } });
+    await service.chargeMonthlyIndependentZem("2026-09");
+    expect(tx.transaction.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ label: { in: expect.arrayContaining(["Prélèvement mensuel Zem", "Prélèvement mensuel Spider"]) }, meta: "zem-monthly:2026-09" }),
+      })
+    );
+  });
+
   it("rejects periods that are not valid YYYY-MM values", async () => {
     const { service, prisma } = makeWalletService({});
 

@@ -61,7 +61,7 @@ import { PLANS, PLAN_LABELS } from "../agencies/plans";
 
 // Types ouverts au dépôt de dossier sur AZƆ̀ :
 // - DRIVER  : Spider, Spider indépendant (moto-taxi / électrique), Voiture indépendante
-// - COURIER : Coursier express, Coursier personnel (courses/achats), Livreur de colis
+// - COURIER : Coursier personnel (courses/achats), Livreur express (plis, documents, colis)
 // - AGENCY  : Agence de flotte (Spider, Voitures, Livreurs)
 // (Pas d'activité Artisan sur AZƆ̀.)
 export const ENABLED_PROVIDER_TYPES: ProviderType[] = ["DRIVER", "COURIER", "AGENCY"];
@@ -113,11 +113,21 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 const TYPE_LABELS: Record<ProviderType, string> = {
-  DRIVER: "Spider & Conducteur indépendant",
-  COURIER: "Coursier, Coursier personnel & Livreur",
+  DRIVER: "Spider (Zem)",
+  COURIER: "Coursier", // générique : le libellé réel suit la spécialité (voir typeLabelOf)
   AGENCY: "Agence de flotte",
   ARTISAN: "Prestataire",
 };
+
+// « Coursier personnel » et « Livreur express » sont deux métiers distincts : le libellé d'un dossier de coursier suit sa spécialité.
+const COURIER_CATEGORY_LABELS: Record<string, string> = {
+  COURSIER_PERSONNEL: "Coursier personnel",
+  COURSIER_EXPRESS: "Livreur express",
+  LIVREUR_COLIS: "Livreur express", // ancien libellé des dossiers déjà créés
+};
+function typeLabelOf(provider: { type: ProviderType; categoryId?: string | null }): string {
+  return provider.type === "COURIER" ? (COURIER_CATEGORY_LABELS[provider.categoryId ?? ""] ?? TYPE_LABELS.COURIER) : typeLabelOf(provider);
+}
 
 const DOCUMENT_LABELS: Record<DocumentKind, string> = {
   CNI: "carte d'identité ou CIP",
@@ -188,16 +198,18 @@ const DRIVER_VEHICLE_CHOICES: {
 // Filière coursier / livreur (colis) : choix volontairement INCHANGÉS pour l'instant
 // (décision du 5 octobre 2026 — l'harmonisation « moto essence / moto électrique » de la
 // livraison est renvoyée à un chantier ultérieur, elle toucherait les dossiers existants).
-const COURIER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
-  { value: "GAZELLE", label: "Gazelle — Moto / Spider (coursier)", hint: "Plis, courses personnelles et colis en ville" },
-  { value: "KOALA", label: "Koala — Voiture climatisée (livreur)", hint: "Colis moyens, achats et marchandises" },
-  { value: "LEOPARD", label: "Léopard — Berline haut de gamme (livreur)", hint: "Livraisons premium et clients VIP" },
+const COURIER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string; family: "ZEM" | "CAR" }[] = [
+  { value: "ZEM_ESSENCE", label: "Moto à essence", hint: "Moto thermique — plis, courses et colis en ville", family: "ZEM" },
+  { value: "ZEM_ELECTRIC", label: "Moto électrique", hint: "Moto électrique — mêmes missions, zéro émission", family: "ZEM" },
+  { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme", family: "CAR" },
+  { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire climatisée", family: "CAR" },
+  { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée", family: "CAR" },
 ];
 
+// Deux spécialités : « Coursier personnel » et « Livreur express » (COURSIER_EXPRESS ; l'ancien LIVREUR_COLIS reste accepté pour les dossiers déjà créés).
 const COURIER_SPECIALTIES: { id: string; label: string; hint: string }[] = [
-  { id: "COURSIER_EXPRESS", label: "Coursier express", hint: "Plis urgents, documents et petits paquets" },
   { id: "COURSIER_PERSONNEL", label: "Coursier personnel", hint: "Courses personnelles, marché, pharmacie & achats" },
-  { id: "LIVREUR_COLIS", label: "Livreur de colis", hint: "Livraison de colis et marchandises avec double OTP" },
+  { id: "COURSIER_EXPRESS", label: "Livreur express", hint: "Plis urgents, documents et colis livrés vite, avec double code OTP" },
 ];
 
 // Une agence choisit directement son niveau (voir agencies/plans.ts) : Pro, Silver, Or, Diamant, Platine ou Elite.
@@ -262,8 +274,8 @@ function parseAgencyDetails(provider: {
 }
 
 const TYPE_DESCRIPTIONS: Record<ProviderType, string> = {
-  DRIVER: "Spider, Spider indépendant (moto-taxi), Spider électrique ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
-  COURIER: "Coursier express, coursier personnel (courses, marché, pharmacie) ou livreur de colis avec double code OTP.",
+  DRIVER: "Spider (moto-taxi à essence ou électrique) ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
+  COURIER: "Coursier personnel (courses, marché, pharmacie) ou livreur express (plis, documents, colis) avec double code OTP.",
   AGENCY: "Gère une flotte de conducteurs Spider, voitures ou coursiers-livreurs, suis leur activité et bénéficie d'une commission réduite.",
   ARTISAN: "",
 };
@@ -469,7 +481,7 @@ export class ProvidersService {
     return {
       id: provider.id,
       type: provider.type,
-      typeLabel: TYPE_LABELS[provider.type],
+      typeLabel: typeLabelOf(provider),
       status: provider.status,
       identity: {
         fullName: provider.fullName,
@@ -756,7 +768,7 @@ export class ProvidersService {
     const allowed = [...REQUIRED_DOCUMENTS[provider.type], ...OPTIONAL_DOCUMENTS[provider.type]];
     if (!allowed.includes(dto.kind))
       throw new BadRequestException(
-        `La pièce « ${DOCUMENT_LABELS[dto.kind]} » n'est pas demandée pour un dossier ${TYPE_LABELS[provider.type]}`
+        `La pièce « ${DOCUMENT_LABELS[dto.kind]} » n'est pas demandée pour un dossier ${typeLabelOf(provider)}`
       );
 
     const document = await this.prisma.providerDocument.upsert({
@@ -837,12 +849,12 @@ export class ProvidersService {
       },
       include: { documents: true },
     });
-    await this.log(updated.id, null, "SUBMITTED", `Dossier ${TYPE_LABELS[provider.type]} déposé`);
+    await this.log(updated.id, null, "SUBMITTED", `Dossier ${typeLabelOf(provider)} déposé`);
 
     const who = updated.fullName ?? updated.agencyName ?? "un candidat";
     await this.notifyAdmins(
       "Nouveau dossier prestataire",
-      `${who} (${TYPE_LABELS[provider.type]}) attend une validation. Réponse attendue sous ${REVIEW_SLA_HOURS} h.`
+      `${who} (${typeLabelOf(provider)}) attend une validation. Réponse attendue sous ${REVIEW_SLA_HOURS} h.`
     );
 
     return { ...this.serialize(updated), missingDocumentsCount: missing.length };
@@ -1058,12 +1070,12 @@ export class ProvidersService {
       provider.userId,
       isReject ? "Dossier refusé" : "Information manquante",
       isReject
-        ? `Ton dossier ${TYPE_LABELS[provider.type]} a été refusé. Motif : ${reason}`
-        : `Ton dossier ${TYPE_LABELS[provider.type]} est en attente : ${reason}`,
+        ? `Ton dossier ${typeLabelOf(provider)} a été refusé. Motif : ${reason}`
+        : `Ton dossier ${typeLabelOf(provider)} est en attente : ${reason}`,
       "PROVIDER_REVIEW",
       {
         titleKey: isReject ? "NOTIFICATION_PROVIDER_REJECTED" : "NOTIFICATION_PROVIDER_NEED_INFO",
-        params: { type: TYPE_LABELS[provider.type], reason },
+        params: { type: typeLabelOf(provider), reason },
         data: { event: "provider-status" },
       }
     );
@@ -1180,9 +1192,9 @@ export class ProvidersService {
     await this.notifications.push(
       provider.userId,
       "Ton compte prestataire est actif 🎉",
-      `AZƆ̀ a validé ton dossier ${TYPE_LABELS[provider.type]}. Ton espace métier est ouvert.`,
+      `AZƆ̀ a validé ton dossier ${typeLabelOf(provider)}. Ton espace métier est ouvert.`,
       "PROVIDER_APPROVED",
-      { titleKey: "NOTIFICATION_PROVIDER_APPROVED", params: { type: TYPE_LABELS[provider.type] }, data: { event: "provider-status" } }
+      { titleKey: "NOTIFICATION_PROVIDER_APPROVED", params: { type: typeLabelOf(provider) }, data: { event: "provider-status" } }
     );
     return this.serialize(result);
   }
@@ -1359,7 +1371,7 @@ export class ProvidersService {
     const allowed = [...REQUIRED_DOCUMENTS[provider.type], ...OPTIONAL_DOCUMENTS[provider.type]];
     if (!allowed.includes(kind))
       throw new BadRequestException(
-        `La pièce « ${DOCUMENT_LABELS[kind]} » n'est pas demandée pour un dossier ${TYPE_LABELS[provider.type]}`
+        `La pièce « ${DOCUMENT_LABELS[kind]} » n'est pas demandée pour un dossier ${typeLabelOf(provider)}`
       );
 
     if (!file || !file.buffer || file.buffer.length === 0)

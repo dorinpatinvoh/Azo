@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AdminTabBar, { type AdminTab } from "../components/AdminTabBar";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
@@ -35,6 +36,7 @@ type Props = {
   onBack: () => void;
   onOpenDashboard?: () => void;
   onOpenSupport?: () => void;
+  onNavigateTab?: (tab: AdminTab) => void;
 };
 
 type Filter = { id: ProviderStatus | "ALL"; label: string };
@@ -49,10 +51,13 @@ const FILTERS: Filter[] = [
   { id: "ALL", label: "Tous" },
 ];
 
-const TYPE_FILTERS: { id: ProviderType | "ALL"; label: string }[] = [
+type TypeFilterId = ProviderType | "ALL" | "COURIER_PERSONAL" | "COURIER_EXPRESS";
+
+const TYPE_FILTERS: { id: TypeFilterId; label: string }[] = [
   { id: "ALL", label: "Toutes activités" },
-  { id: "DRIVER", label: "Spider / Chauffeur" },
-  { id: "COURIER", label: "Coursier / Livreur" },
+  { id: "DRIVER", label: "Spider (Zem)" },
+  { id: "COURIER_PERSONAL", label: "Coursier personnel" },
+  { id: "COURIER_EXPRESS", label: "Livreur express" },
   { id: "AGENCY", label: "Agence" },
 ];
 
@@ -184,9 +189,9 @@ function ReasonModal(props: {
   );
 }
 
-export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSupport }: Props) {
+export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSupport, onNavigateTab }: Props) {
   const [filter, setFilter] = useState<ProviderStatus | "ALL">("SUBMITTED");
-  const [typeFilter, setTypeFilter] = useState<ProviderType | "ALL">("ALL");
+  const [typeFilter, setTypeFilter] = useState<TypeFilterId>("ALL");
   const [queue, setQueue] = useState<AdminProviderQueue | null>(null);
   const [stats, setStats] = useState<AdminProviderStats | null>(null);
   const [detail, setDetail] = useState<AdminProviderDetail | null>(null);
@@ -209,11 +214,14 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
     const [q, s] = await Promise.all([
       adminProvidersApi.queue({
         ...(filter === "ALL" ? {} : { status: filter }),
-        ...(typeFilter === "ALL" ? {} : { type: typeFilter }),
+        ...(typeFilter === "ALL" ? {} : { type: typeFilter === "COURIER_PERSONAL" || typeFilter === "COURIER_EXPRESS" ? "COURIER" : typeFilter }),
       }),
       adminProvidersApi.stats(),
     ]);
-    setQueue(q);
+    // Coursier personnel et Livreur express sont deux métiers : le serveur filtre par type, on sépare ensuite par spécialité
+    const personal = (item: AdminProviderQueue["items"][number]) => item.activity?.categoryId === "COURSIER_PERSONNEL";
+    const items = typeFilter === "COURIER_PERSONAL" ? q.items.filter(personal) : typeFilter === "COURIER_EXPRESS" ? q.items.filter((item) => !personal(item)) : q.items;
+    setQueue({ ...q, items, total: items.length });
     setStats(s);
   }, [filter, typeFilter]);
 
@@ -795,6 +803,7 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
         onCancel={() => setReason(null)}
         onConfirm={confirmReason}
       />
+      <AdminTabBar active="providers" onNavigate={onNavigateTab} />
     </SafeAreaView>
   );
 }

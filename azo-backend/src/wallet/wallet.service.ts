@@ -6,6 +6,9 @@ import { FedaPayService } from "./fedapay.service";
 import { Prisma, TransactionStatus, TransactionType } from "@prisma/client";
 
 const MONTHLY_ZEM_SETTLEMENT_LABEL = "Prélèvement mensuel Spider";
+// Ancien libellé (avant le renommage « Zem » → « Spider ») : les prélèvements déjà enregistrés le portent encore. Il reste reconnu
+// pour qu'un mois déjà prélevé ne soit JAMAIS prélevé une seconde fois.
+const MONTHLY_ZEM_SETTLEMENT_LABELS = [MONTHLY_ZEM_SETTLEMENT_LABEL, "Prélèvement mensuel Zem"];
 
 /** Recharge minimale par FedaPay (FCFA). Le mobile applique la même valeur (config/wallet.ts). */
 export const MIN_RECHARGE = 300;
@@ -235,6 +238,58 @@ export class WalletService {
     return { debited: debitAmount, credited: creditAmount };
   }
 
+  /**
+   * Verse la commission de l'entreprise (15 %) sur le portefeuille de l'administrateur, DANS la transaction de la course
+   * ou de la livraison (tout réussit ou rien). Sans compte administrateur actif, ne fait rien (le gain reste calculé
+   * côté finances de l'entreprise).
+   */
+  async creditPlatformInTx(tx: Prisma.TransactionClient, amount: number, ref: string): Promise<boolean> {
+    if (!(amount > 0)) return false;
+    const admin = await tx.user.findFirst({ where: { role: "ADMIN", status: "ACTIVE" }, orderBy: { createdAt: "asc" }, select: { id: true } });
+    if (!admin) return false;
+    const wallet = await tx.wallet.upsert({ where: { userId: admin.id }, create: { userId: admin.id }, update: {} });
+    await tx.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: amount } } });
+    await tx.transaction.create({
+      data: {
+        walletId: wallet.id,
+        type: TransactionType.CREDIT,
+        amount,
+        label: "Commission AZƆ̀",
+        meta: ref,
+      },
+    });
+    return true;
+  }
+
+  /**
+   * Règlement d'une livraison, en une seule transaction : le client est débité du prix (si c'est lui qui paie), le coursier
+   * reçoit le net et l'entreprise sa commission (portefeuille administrateur).
+   */
+  async settleDelivery(p: { clientId: string | null; courierId: string; price: number; net: number; commission: number; dropAddress: string; ref: string }) {
+    await this.getWallet(p.courierId);
+    if (p.clientId) await this.getWallet(p.clientId);
+    await this.prisma.$transaction(async (tx) => {
+      const courierWallet = await tx.wallet.findUniqueOrThrow({ where: { userId: p.courierId } });
+      if (p.clientId) {
+        const clientWallet = await tx.wallet.findUniqueOrThrow({ where: { userId: p.clientId } });
+        const debit = await tx.wallet.updateMany({ where: { id: clientWallet.id, balance: { gte: p.price } }, data: { balance: { decrement: p.price } } });
+        if (debit.count !== 1) throw new BadRequestException("Solde insuffisant");
+        await tx.transaction.create({ data: { walletId: clientWallet.id, type: TransactionType.DEBIT, amount: p.price, label: `Livraison colis (${p.dropAddress})`, meta: p.ref } });
+      }
+      await tx.wallet.update({ where: { id: courierWallet.id }, data: { balance: { increment: p.net } } });
+      await tx.transaction.create({
+        data: {
+          walletId: courierWallet.id,
+          type: TransactionType.CREDIT,
+          amount: p.net,
+          label: p.clientId ? `Gain livraison (${p.dropAddress})` : `Gain livraison destinataire (${p.dropAddress})`,
+          meta: p.ref,
+        },
+      });
+      await this.creditPlatformInTx(tx, p.commission, p.ref);
+    });
+  }
+
   async debit(userId: string, amount: number, label: string, meta?: string, labelKey?: string, labelParams?: Prisma.InputJsonValue) {
     const wallet = await this.getWallet(userId);
     if (wallet.balance < amount) throw new BadRequestException("Solde insuffisant");
@@ -329,7 +384,7 @@ export class WalletService {
                 where: {
                   walletId: wallet.id,
                   type: TransactionType.DEBIT,
-                  label: MONTHLY_ZEM_SETTLEMENT_LABEL,
+                  label: { in: MONTHLY_ZEM_SETTLEMENT_LABELS },
                   meta,
                 },
                 select: { amount: true },

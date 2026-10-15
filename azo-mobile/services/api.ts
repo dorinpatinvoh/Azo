@@ -684,6 +684,11 @@ export type Delivery = {
   pickupCode: string;
   deliveryCode: string;
   createdAt: string;
+  /** "PERSONAL" = coursier personnel réservé pour une durée. */
+  mode?: "EXPRESS" | "PERSONAL";
+  vehicleType?: VehicleType | null;
+  bookingHours?: number | null;
+  bookedUntil?: string | null;
   client?: RidePerson | null;
   courier?: RidePerson | null;
 };
@@ -695,7 +700,15 @@ export const deliveryApi = {
     pickupAddress: string;
     dropAddress: string;
     payer: "SENDER" | "RECIPIENT";
-    price: number;
+    /** Livraison express : prix proposé. Coursier personnel : calculé par le serveur. */
+    price?: number;
+    mode?: "EXPRESS" | "PERSONAL";
+    vehicleType?: VehicleType;
+    bookingHours?: number;
+    pickupLat?: number;
+    pickupLng?: number;
+    dropLat?: number;
+    dropLng?: number;
   }) => api.post<Delivery>(`${P}/deliveries`, body),
   mine: () => api.get<Delivery[]>(`${P}/deliveries`),
   cancel: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/cancel`),
@@ -1141,6 +1154,32 @@ export type AdminGlobalStats = {
   blockedUsers?: number;
 };
 
+/** Gains de l'entreprise (calculés par le serveur) et montant disponible au retrait. */
+export type AdminFinanceSummary = {
+  currency: string;
+  sources: { key: string; label: string; total: number; thisMonth: number }[];
+  total: number;
+  thisMonth: number;
+  months: { month: string; total: number }[];
+  withdrawn: number;
+  pendingWithdrawals: number;
+  paidWithdrawals: number;
+  available: number;
+  minWithdrawal: number;
+};
+
+export type AdminCompanyWithdrawal = {
+  id: string;
+  amount: number;
+  phone: string;
+  method: string | null;
+  note: string | null;
+  status: "REQUESTED" | "PAID" | "CANCELLED";
+  reference: string | null;
+  paidAt: string | null;
+  createdAt: string;
+};
+
 export type AdminUserItem = {
   id: string;
   phone: string;
@@ -1182,6 +1221,14 @@ export const adminApi = {
       ...(reason ? { reason } : {}),
     }),
   auditLog: () => api.get<AdminAuditEvent[]>(`${P}/admin/audit-log`),
+  /** Finances de l'entreprise : gains par source et par mois, retraits, disponible. */
+  financeSummary: () => api.get<AdminFinanceSummary>(`${P}/admin/finance`),
+  withdrawals: () => api.get<AdminCompanyWithdrawal[]>(`${P}/admin/finance/withdrawals`),
+  requestWithdrawal: (body: { amount: number; phone: string; method?: string; note?: string }) =>
+    api.post<AdminCompanyWithdrawal>(`${P}/admin/finance/withdrawals`, body),
+  markWithdrawalPaid: (id: string, reference?: string) =>
+    api.post<AdminCompanyWithdrawal>(`${P}/admin/finance/withdrawals/${id}/paid`, { ...(reference ? { reference } : {}) }),
+  cancelWithdrawal: (id: string) => api.post<AdminCompanyWithdrawal>(`${P}/admin/finance/withdrawals/${id}/cancel`),
 };
 
 /* ---- Console administrateur (validation des dossiers) ---- */
