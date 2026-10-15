@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import Svg, { Rect } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 import * as SecureStore from "expo-secure-store";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
@@ -337,12 +338,63 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* En-tête épuré : flèche retour à gauche, rien qui encombre à droite */}
+          {/* Bandeau d'accueil de l'écran du numéro : aucun retour, jamais vers l'onboarding */}
+          {step === "phone" ? (
+            <LinearGradient
+              colors={[colors.onPrimaryFixed, colors.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.hero}
+            >
+              <View style={styles.heroCircleA} pointerEvents="none" />
+              <View style={styles.heroCircleB} pointerEvents="none" />
+              <View style={styles.heroTop}>
+              {voiceAssist && (
+                <>
+                  {talk && (
+                    <Pressable
+                      onPress={() => speakKey(stepKey as VoiceKey, voiceLang)}
+                      style={styles.heroIcon}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("voice.replay")}
+                    >
+                      <MaterialIcons name="volume-up" size={20} color={colors.onPrimary} />
+                    </Pressable>
+                  )}
+                  <Pressable
+                    onPress={() => {
+                      if (talk) stopSpeaking();
+                      setPaused(talk);
+                    }}
+                    style={styles.heroIcon}
+                    accessibilityRole="button"
+                    accessibilityLabel={talk ? t("voice.pause") : t("voice.resume")}
+                  >
+                    <MaterialIcons name={talk ? "pause" : "play-arrow"} size={22} color={colors.onPrimary} />
+                  </Pressable>
+                </>
+              )}
+              </View>
+              <Text style={styles.heroBrand}>AZƆ̀</Text>
+              <Text style={styles.heroTitle}>{signupMode ? t("auth.signup.title") : t("auth.phone.title")}</Text>
+              <Text style={styles.heroSub}>{signupMode ? t("auth.signup.subtitle") : t("auth.hero.tagline")}</Text>
+              <View style={styles.perks}>
+                {([
+                  ["flash-on", "auth.perk.fast"],
+                  ["verified-user", "auth.perk.safe"],
+                  ["account-balance-wallet", "auth.perk.pay"],
+                ] as const).map(([icon, key]) => (
+                  <View key={key} style={styles.perk}>
+                    <MaterialIcons name={icon} size={14} color={colors.onPrimary} />
+                    <Text style={styles.perkText}>{t(key)}</Text>
+                  </View>
+                ))}
+              </View>
+            </LinearGradient>
+          ) : (
+            <>
+          {/* En-tête épuré : flèche retour à gauche (code), verrou (inscription) */}
           <View style={styles.topRow}>
-            {step === "phone" ? (
-              // Écran du numéro : aucun retour (on ne revient jamais à l'onboarding)
-              <View style={styles.iconButton} />
-            ) : (
             <Pressable
               onPress={step === "code" ? () => setStep("phone") : undefined}
               style={styles.iconButton}
@@ -355,7 +407,6 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
                 color={step === "register" ? colors.outline : colors.onSurface}
               />
             </Pressable>
-            )}
             <View style={{ flexDirection: "row", gap: spacing.sm }}>
               {voiceAssist && (
                 <>
@@ -389,7 +440,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
           <View style={styles.headerBlock}>
             <Text style={styles.brand}>AZƆ̀</Text>
             <Text style={styles.headline}>
-              {step === "phone" ? (signupMode ? t("auth.signup.title") : t("auth.phone.title")) : step === "code" ? t("auth.code.title") : t("auth.register.title")}
+              {step === "code" ? t("auth.code.title") : t("auth.register.title")}
             </Text>
             {step === "code" ? (
               <Text style={styles.subtitle}>
@@ -399,13 +450,14 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
               <Text style={styles.subtitle}>
                 {t("auth.register.subtitle")}
               </Text>
-            ) : step === "phone" && signupMode ? (
-              <Text style={styles.subtitle}>{t("auth.signup.subtitle")}</Text>
             ) : null}
           </View>
 
+
+            </>
+          )}
           {step === "phone" ? (
-            <View style={styles.card}>
+            <View style={[styles.card, styles.cardOverlap]}>
               {signupMode ? (
                 <View style={{ marginBottom: spacing.md, gap: spacing.sm }}>
                   <View style={styles.kindLabelRow}>
@@ -632,6 +684,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  hero: { borderRadius: 28, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl + spacing.lg, overflow: "hidden", alignItems: "center", marginTop: spacing.xs },
+  heroCircleA: { position: "absolute", width: 190, height: 190, borderRadius: 95, right: -60, top: -70, backgroundColor: "rgba(255,255,255,0.09)" },
+  heroCircleB: { position: "absolute", width: 130, height: 130, borderRadius: 65, left: -45, bottom: -40, backgroundColor: "rgba(255,255,255,0.07)" },
+  heroTop: { alignSelf: "stretch", flexDirection: "row", justifyContent: "flex-end", gap: spacing.sm, minHeight: 38 },
+  heroIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
+  heroBrand: { ...typography.displayLgMobile, color: colors.onPrimary, fontSize: 40, lineHeight: 46, letterSpacing: 3, textAlign: "center" },
+  heroTitle: { ...typography.headlineLg, color: colors.onPrimary, textAlign: "center", marginTop: spacing.xs },
+  heroSub: { ...typography.bodyMd, color: "rgba(255,255,255,0.88)", textAlign: "center", marginTop: 4 },
+  perks: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, marginTop: spacing.md },
+  perk: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.16)" },
+  perkText: { ...typography.labelSm, color: colors.onPrimary, fontWeight: "700" },
+  cardOverlap: { marginTop: -spacing.lg },
   headerBlock: { alignItems: "center", marginTop: spacing.lg, marginBottom: spacing.xl },
   brand: {
     ...typography.headlineLg,
