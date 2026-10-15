@@ -54,7 +54,8 @@ type Step = "phone" | "code" | "register";
 
 type Props = {
   onVerified: (role: string, provider?: ProviderRef | null, startType?: ProviderType | null) => void;
-  onBack: () => void;
+  /** Plus utilisé : l'écran de connexion n'a plus de retour vers l'onboarding. */
+  onBack?: () => void;
   /** Application rouverte alors que l'inscription n'était pas terminée (session déjà ouverte). */
   resumeRegistration?: boolean;
 };
@@ -65,25 +66,22 @@ export const REGISTRATION_PENDING_KEY = "registrationPending";
 
 const SMS_BANNER_DURATION_SEC = 5;
 
-export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration = false }: Props) {
+export default function OtpLoginScreen({ onVerified, resumeRegistration = false }: Props) {
   const [step, setStep] = useState<Step>(resumeRegistration ? "register" : "phone");
   // Type de compte choisi à l'inscription : « Agence » ouvre ensuite le dossier d'agence (seul endroit où l'on peut en créer une)
   const [accountKind, setAccountKind] = useState<AccountKind>("CLIENT");
-  // Bouton retour du téléphone : code → numéro, numéro → écran précédent de l'entrée ; pendant l'inscription (étape obligatoire) il quitte l'application
+  // Bouton retour du téléphone : code → numéro ; sur le numéro et pendant l'inscription (étape obligatoire) il quitte l'application
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (step === "code") {
         setStep("phone");
         return true;
       }
-      if (step === "phone") {
-        onBack();
-        return true;
-      }
+      // Écran du numéro et inscription : le retour du téléphone quitte l'application (pas de retour à l'onboarding)
       return false;
     });
     return () => sub.remove();
-  }, [step, onBack]);
+  }, [step]);
 
   // « Créer un compte » depuis l'écran du numéro : le profil est choisi avant le numéro et le code, puis le parcours dédié suit
   const [signupMode, setSignupMode] = useState(false);
@@ -341,8 +339,12 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
         >
           {/* En-tête épuré : flèche retour à gauche, rien qui encombre à droite */}
           <View style={styles.topRow}>
+            {step === "phone" ? (
+              // Écran du numéro : aucun retour (on ne revient jamais à l'onboarding)
+              <View style={styles.iconButton} />
+            ) : (
             <Pressable
-              onPress={step === "phone" ? onBack : step === "code" ? () => setStep("phone") : undefined}
+              onPress={step === "code" ? () => setStep("phone") : undefined}
               style={styles.iconButton}
               accessibilityLabel={step === "register" ? t("auth.mandatoryStep") : t("common.back")}
               disabled={step === "register"}
@@ -353,6 +355,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
                 color={step === "register" ? colors.outline : colors.onSurface}
               />
             </Pressable>
+            )}
             <View style={{ flexDirection: "row", gap: spacing.sm }}>
               {voiceAssist && (
                 <>

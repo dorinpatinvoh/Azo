@@ -295,11 +295,7 @@ function AppInner() {
         goTo("home");
         return true;
       }
-      // Parcours d'entrée : on revient d'un écran à l'autre (la connexion gère elle-même ses étapes)
-      if (current === "assist-offer") {
-        goTo("splash");
-        return true;
-      }
+      // Parcours d'entrée : plus de retour vers l'onboarding ; seul le choix de la langue revient à la question sur l'aide vocale
       if (current === "language") {
         goTo("assist-offer");
         return true;
@@ -576,7 +572,6 @@ function AppInner() {
 
         {route === "assist-offer" && (
           <AssistOfferScreen
-            onBack={() => goTo("splash")}
             onYes={() => {
               setVoiceAssist(true);
               goTo("language");
@@ -613,7 +608,6 @@ function AppInner() {
                 return;
               }              void resolveStartRoute(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null)).then(goTo);
             }}
-            onBack={() => goTo("splash")}
           />
         )}
 

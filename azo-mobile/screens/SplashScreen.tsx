@@ -8,13 +8,14 @@ import {
   StyleSheet,
   Animated,
   useWindowDimensions,
+  type LayoutChangeEvent,
   type ImageSourcePropType,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
@@ -70,10 +71,12 @@ const LAST = SLIDES.length - 1;
 
 export default function SplashScreen({ onStart }: Props) {
   const { t } = useI18n();
-  const { width, height } = useWindowDimensions();
-  // Cadre photo en portrait 3:4, borné par la hauteur de l'écran (petits téléphones).
-  const cardHeight = Math.min(Math.round(width * 0.78 * (4 / 3)), Math.round(height * 0.46));
-  const cardWidth = Math.round(cardHeight * (3 / 4));
+  const { width, height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // Hauteur réelle de la zone d'affichage (sous la barre d'état et la barre de navigation comprises) : les images la remplissent entièrement
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+  const pageHeight = measuredHeight || windowHeight;
+  const onRootLayout = (e: LayoutChangeEvent) => setMeasuredHeight(Math.round(e.nativeEvent.layout.height));
 
   const listRef = useRef<FlatList<Slide>>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -97,85 +100,85 @@ export default function SplashScreen({ onStart }: Props) {
   };
 
   return (
-    // Fond sombre de la charte : violet profond qui s'éclaircit vers le bas.
-    <LinearGradient
-      colors={[colors.onPrimaryFixed, colors.onPrimaryFixed, colors.primary]}
-      locations={[0, 0.55, 1]}
-      style={styles.root}
-    >
-      {/* Fond sombre : l'heure et la batterie doivent être en clair */}
+    // Les images occupent TOUT l'écran (derrière la barre d'état et la barre de navigation) ; le texte et les boutons se posent par-dessus
+    <View style={styles.root} onLayout={onRootLayout}>
       <StatusBar style="light" />
-      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        <View style={styles.header}>
-          <Text style={styles.brand}>AZƆ̀</Text>
-          {/* Toujours présent (invisible à la dernière page) : la mise en page ne saute pas */}
-          <Pressable
-            onPress={onStart}
-            disabled={isLast}
-            style={[styles.skip, isLast && styles.skipHidden]}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t("onboarding.skipLabel")}
-          >
-            <Text style={styles.skipText}>{t("common.skip")}</Text>
-          </Pressable>
-        </View>
 
-        <FlatList
-          ref={listRef}
-          data={SLIDES}
-          keyExtractor={(slide) => slide.id}
-          horizontal
-          pagingEnabled
-          bounces={false}
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          onScroll={onScroll}
-          onMomentumScrollEnd={onMomentumEnd}
-          getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-          renderItem={({ item }) => (
-            <View style={[styles.page, { width }]}>
-              <View style={[styles.photoCard, { width: cardWidth, height: cardHeight }]}>
-                <Image
-                  source={item.image}
-                  style={styles.photo}
-                  resizeMode="cover"
-                  accessibilityLabel={t(item.titleKey)}
-                />
-              </View>
-              <View style={styles.texts}>
-                <Text style={styles.title}>{t(item.titleKey)}</Text>
-                <Text style={styles.subtitle}>{t(item.subtitleKey)}</Text>
-              </View>
+      <FlatList
+        ref={listRef}
+        data={SLIDES}
+        keyExtractor={(slide) => slide.id}
+        horizontal
+        pagingEnabled
+        bounces={false}
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={onScroll}
+        onMomentumScrollEnd={onMomentumEnd}
+        getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+        style={StyleSheet.absoluteFill}
+        renderItem={({ item }) => (
+          <View style={{ width, height: pageHeight }}>
+            <Image source={item.image} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel={t(item.titleKey)} />
+            {/* Voile sombre en haut (logo, « Passer ») et en bas (texte, boutons) pour que tout reste lisible */}
+            <LinearGradient colors={["rgba(20,0,34,0.65)", "rgba(20,0,34,0)"]} style={[styles.shadeTop, { height: insets.top + 110 }]} pointerEvents="none" />
+            <LinearGradient
+              colors={["rgba(20,0,34,0)", "rgba(20,0,34,0.82)", "rgba(20,0,34,0.96)"]}
+              locations={[0, 0.55, 1]}
+              style={[styles.shadeBottom, { height: insets.bottom + 340 }]}
+              pointerEvents="none"
+            />
+            <View style={[styles.texts, { bottom: insets.bottom + 150 }]}>
+              <Text style={styles.title}>{t(item.titleKey)}</Text>
+              <Text style={styles.subtitle}>{t(item.subtitleKey)}</Text>
             </View>
-          )}
-        />
-
-        <View style={styles.dock}>
-          <View style={styles.dots} accessibilityLabel={t("onboarding.page", { current: index + 1, total: SLIDES.length })}>
-            {SLIDES.map((slide, i) => {
-              const range = [(i - 1) * width, i * width, (i + 1) * width];
-              const dotWidth = scrollX.interpolate({ inputRange: range, outputRange: [8, 26, 8], extrapolate: "clamp" });
-              const dotOpacity = scrollX.interpolate({ inputRange: range, outputRange: [0.35, 1, 0.35], extrapolate: "clamp" });
-              return <Animated.View key={slide.id} style={[styles.dot, { width: dotWidth, opacity: dotOpacity }]} />;
-            })}
           </View>
-          <PrimaryButton label={isLast ? t("common.start") : t("common.next")} onPress={goNext} />
+        )}
+      />
+
+      <View style={[styles.header, { paddingTop: insets.top + spacing.xs }]} pointerEvents="box-none">
+        <Text style={styles.brand}>AZƆ̀</Text>
+        {/* Toujours présent (invisible à la dernière page) : la mise en page ne saute pas */}
+        <Pressable
+          onPress={onStart}
+          disabled={isLast}
+          style={[styles.skip, isLast && styles.skipHidden]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t("onboarding.skipLabel")}
+        >
+          <Text style={styles.skipText}>{t("common.skip")}</Text>
+        </Pressable>
+      </View>
+
+      <View style={[styles.dock, { paddingBottom: insets.bottom + spacing.md }]} pointerEvents="box-none">
+        <View style={styles.dots} accessibilityLabel={t("onboarding.page", { current: index + 1, total: SLIDES.length })}>
+          {SLIDES.map((slide, i) => {
+            const range = [(i - 1) * width, i * width, (i + 1) * width];
+            const dotWidth = scrollX.interpolate({ inputRange: range, outputRange: [8, 26, 8], extrapolate: "clamp" });
+            const dotOpacity = scrollX.interpolate({ inputRange: range, outputRange: [0.35, 1, 0.35], extrapolate: "clamp" });
+            return <Animated.View key={slide.id} style={[styles.dot, { width: dotWidth, opacity: dotOpacity }]} />;
+          })}
         </View>
-      </SafeAreaView>
-    </LinearGradient>
+        <PrimaryButton label={isLast ? t("common.start") : t("common.next")} onPress={goNext} />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  safe: { flex: 1 },
+  root: { flex: 1, backgroundColor: colors.onPrimaryFixed },
+  shadeTop: { position: "absolute", top: 0, left: 0, right: 0 },
+  shadeBottom: { position: "absolute", bottom: 0, left: 0, right: 0 },
   header: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
     paddingBottom: spacing.sm,
   },
   brand: { ...typography.displayLgMobile, color: colors.onPrimary, fontSize: 28, lineHeight: 34, letterSpacing: 1.5 },
@@ -183,32 +186,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     height: 36,
     borderRadius: radius.full,
-    backgroundColor: `${colors.onPrimary}26`,
+    backgroundColor: "rgba(20,0,34,0.45)",
     alignItems: "center",
     justifyContent: "center",
   },
   skipHidden: { opacity: 0 },
   skipText: { ...typography.labelMd, color: colors.onPrimary },
 
-  page: { alignItems: "center", paddingTop: spacing.md, gap: spacing.lg },
-  photoCard: {
-    borderRadius: 28,
-    overflow: "hidden",
-    backgroundColor: colors.primaryContainer,
-    borderWidth: 1.5,
-    borderColor: `${colors.onPrimary}33`,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-  },
-  photo: { width: "100%", height: "100%" },
-  texts: { paddingHorizontal: spacing.xl, alignItems: "center", gap: spacing.xs },
+  texts: { position: "absolute", left: 0, right: 0, paddingHorizontal: spacing.xl, alignItems: "center", gap: spacing.xs },
   title: { ...typography.headlineLg, color: colors.onPrimary, textAlign: "center" },
-  subtitle: { ...typography.bodyLg, color: `${colors.onPrimary}D9`, textAlign: "center" },
+  subtitle: { ...typography.bodyLg, color: `${colors.onPrimary}E6`, textAlign: "center" },
 
-  dock: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.lg },
+  dock: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.lg },
   dots: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 10 },
   dot: { height: 8, borderRadius: 4, backgroundColor: colors.onPrimary },
 });
