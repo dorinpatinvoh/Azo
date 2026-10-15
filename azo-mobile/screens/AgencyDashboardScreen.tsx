@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Linking,
   Modal,
   Pressable,
@@ -15,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import Svg, { Rect } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import {
@@ -22,13 +24,21 @@ import {
   AgencyRosterMember,
   agenciesApi,
   errorMessage,
+  userApi,
+  type UserProfile,
 } from "../services/api";
 import {
   agencyLevelPricing,
   tarification,
   type AgencyLevel,
 } from "../services/tarification";
-import { useI18n } from "../i18n";
+import { languageInfo, useI18n } from "../i18n";
+import PillTabBar, { type PillTabItem } from "../components/PillTabBar";
+import Avatar from "../components/Avatar";
+import AvatarSheet from "../components/AvatarSheet";
+import LanguageSheet from "../components/LanguageSheet";
+import { useAvatar } from "../utils/avatar";
+import { displayName, initials } from "./ProfileScreen";
 import { agencyPlanName } from "../utils/agencyPlan";
 import {
   cleanBeninDigits,
@@ -44,7 +54,21 @@ type Props = {
   onOpenWallet?: () => void;
   /** Ouvre l'assistance (tickets avec l'équipe AZƆ̀). */
   onOpenSupport?: () => void;
+  /** Informations personnelles du gérant : nom, e-mail, contact d'urgence, numéro, photo, langue (écran partagé). */
+  onOpenInfo?: () => void;
 };
+
+// Barre du bas de l'espace agence : « AZƆ̀ Pay » ouvre le portefeuille, les autres onglets restent dans cet écran.
+type AgencyTab = "home" | "fleet" | "wallet" | "profile";
+const AGENCY_TABS: PillTabItem<AgencyTab>[] = [
+  { id: "home", label: "Accueil", icon: "business-outline", iconActive: "business" },
+  { id: "fleet", label: "Flotte", icon: "people-outline", iconActive: "people" },
+  { id: "wallet", label: "AZƆ̀ Pay", icon: "wallet-outline", iconActive: "wallet" },
+  { id: "profile", label: "Profil", icon: "person-outline", iconActive: "person" },
+];
+
+// Garde l'onglet quand on ouvre une autre page (portefeuille, informations…)
+const rememberedAgencyTab: { tab: AgencyTab } = { tab: "home" };
 
 type RosterFilter = "ALL" | "EN_COURSE" | "DISPONIBLE";
 
@@ -61,8 +85,32 @@ const OFFICIAL_AGENCY_GRID = (Object.keys(tarification().agencyLevels) as Agency
   };
 });
 
-export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWallet, onOpenSupport }: Props) {
-  const { t, locale } = useI18n();
+export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWallet, onOpenSupport, onOpenInfo }: Props) {
+  const { t, locale, lang } = useI18n();
+  const avatarUri = useAvatar();
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [langOpen, setLangOpen] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  useEffect(() => {
+    userApi.me().then(setUser).catch(() => undefined);
+  }, []);
+  const [tab, setTab] = useState<AgencyTab>(rememberedAgencyTab.tab === "wallet" ? "home" : rememberedAgencyTab.tab);
+  useEffect(() => {
+    rememberedAgencyTab.tab = tab;
+  }, [tab]);
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [tab]);
+  // Bouton retour du téléphone : d'abord l'accueil, puis la sortie de l'application
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (tab === "home") return false;
+      setTab("home");
+      return true;
+    });
+    return () => sub.remove();
+  }, [tab]);
   const fcfa = (n: number) => `${n.toLocaleString(locale)} F`;
   const num = (n: number, opts?: Intl.NumberFormatOptions) => n.toLocaleString(locale, opts);
   const [data, setData] = useState<AgencyDashboardData | null>(null);
@@ -237,7 +285,14 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
     Alert.alert(t("ag.logout.title"), t("ag.logout.body"), [
       { text: t("common.cancel"), style: "cancel" },
       ...(onOpenDossier ? [{ text: t("ag.logout.dossier"), onPress: onOpenDossier }] : []),
-      { text: t("ag.logout.confirm"), style: "destructive", onPress: onBack },
+      {
+        text: t("ag.logout.confirm"),
+        style: "destructive",
+        onPress: () => {
+          rememberedAgencyTab.tab = "home";
+          onBack();
+        },
+      },
     ]);
   }
 
@@ -255,12 +310,12 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
-        <Pressable onPress={confirmLogout} style={styles.iconButton} accessibilityLabel={t("ag.menuLabel")}>
-          <MaterialIcons name="arrow-back-ios-new" size={18} color={colors.onSurface} />
+        <Pressable onPress={() => setTab("profile")} accessibilityRole="button" accessibilityLabel="Mon profil">
+          <Avatar uri={avatarUri} initials={initials(user)} size={42} fontSize={15} />
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {t("ag.title")}
+            {tab === "home" ? t("ag.title") : tab === "fleet" ? "Ma flotte" : "Mon profil"}
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>
             {data
@@ -268,27 +323,6 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
               : t("ag.subtitleFleet")}
           </Text>
         </View>
-        {onOpenSupport ? (
-          <Pressable style={styles.kycBtn} onPress={onOpenSupport} accessibilityLabel={t("sup.title")}>
-            <MaterialIcons name="support-agent" size={15} color={colors.primary} />
-          </Pressable>
-        ) : null}
-        {onOpenWallet ? (
-          <Pressable style={styles.kycBtn} onPress={onOpenWallet}>
-            <MaterialIcons name="account-balance-wallet" size={15} color={colors.primary} />
-            <Text style={styles.kycBtnText}>{t("ag.wallet")}</Text>
-          </Pressable>
-        ) : null}
-        {onOpenDossier ? (
-          <Pressable style={styles.kycBtn} onPress={onOpenDossier}>
-            <MaterialIcons name="verified-user" size={15} color={colors.primary} />
-            <Text style={styles.kycBtnText}>{t("ag.dossier")}</Text>
-          </Pressable>
-        ) : (
-          <View style={styles.b2bBadge}>
-            <Text style={styles.b2bText}>{t("ag.proBadge")}</Text>
-          </View>
-        )}
       </View>
 
       {/* Activation : paiement unique des frais du niveau, obligatoire pour opérer */}
@@ -320,6 +354,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
         </View>
       ) : (
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scroll}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
         >
@@ -343,6 +378,8 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
 
           {data ? (
             <>
+              {tab === "home" && (
+              <>
               {/* Identité de l'agence */}
               <View style={styles.agencyCard}>
                 <View style={styles.agencyTop}>
@@ -428,6 +465,11 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                 </View>
               </View>
 
+              </>
+              )}
+
+              {tab === "fleet" && (
+              <>
               {/* En-tête Équipe + bouton d'ajout */}
               <View style={styles.sectionHeaderRow}>
                 <View>
@@ -542,6 +584,11 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                 </View>
               )}
 
+              </>
+              )}
+
+              {tab === "home" && (
+              <>
               {/* Grille officielle AZƆ̀ */}
               <Text style={[styles.sectionTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>
                 {t("ag.grid")}
@@ -590,10 +637,112 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                   );
                 })}
               </View>
+              </>
+              )}
             </>
           ) : null}
+
+          {tab === "profile" && (
+            <View style={{ gap: spacing.md }}>
+              <View style={styles.pfIdentity}>
+                <Pressable onPress={() => setAvatarOpen(true)} accessibilityRole="button" accessibilityLabel="Changer la photo">
+                  <LinearGradient colors={[colors.primary, colors.secondaryContainer]} style={styles.pfRing}>
+                    <View style={styles.pfAvatar}>
+                      <Avatar uri={avatarUri} initials={initials(user)} size={70} />
+                    </View>
+                  </LinearGradient>
+                  <View style={styles.pfBadge}>
+                    <MaterialIcons name="photo-camera" size={14} color={colors.onPrimary} />
+                  </View>
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pfName} numberOfLines={2}>{displayName(user) || "Gérant"}</Text>
+                  {data ? <Text style={styles.pfPhone} numberOfLines={1}>{data.agency.name}</Text> : null}
+                  {data ? (
+                    <View style={styles.pfPills}>
+                      <View style={styles.pfPill}>
+                        <MaterialIcons name="workspace-premium" size={13} color={colors.primary} />
+                        <Text style={styles.pfPillText}>{agencyPlanName(data.agency.plan)}</Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+
+              {data ? (
+                <View style={styles.pfStats}>
+                  <View style={styles.pfStat}>
+                    <Text style={styles.pfStatValue}>{data.roster.length}</Text>
+                    <Text style={styles.pfStatLabel}>Chauffeurs</Text>
+                  </View>
+                  <View style={styles.pfStat}>
+                    <Text style={styles.pfStatValue} numberOfLines={1} adjustsFontSizeToFit>{typeof data.walletBalance === "number" ? fcfa(data.walletBalance) : "—"}</Text>
+                    <Text style={styles.pfStatLabel}>Solde AZƆ̀ Pay</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.pfMenu}>
+                {onOpenInfo ? (
+                  <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={onOpenInfo} accessibilityRole="button">
+                    <View style={styles.pfIcon}><MaterialIcons name="badge" size={20} color={colors.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pfLabel}>Modifier mes informations</Text>
+                      <Text style={styles.pfHint}>Nom, e-mail, contact d'urgence, numéro</Text>
+                    </View>
+                    <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                  </Pressable>
+                ) : null}
+                <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={() => setAvatarOpen(true)} accessibilityRole="button">
+                  <View style={styles.pfIcon}><MaterialIcons name="photo-camera" size={20} color={colors.primary} /></View>
+                  <Text style={styles.pfLabel}>Photo de profil</Text>
+                  <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                </Pressable>
+                {onOpenDossier ? (
+                  <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={onOpenDossier} accessibilityRole="button">
+                    <View style={styles.pfIcon}><MaterialIcons name="verified-user" size={20} color={colors.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pfLabel}>Mon dossier</Text>
+                      <Text style={styles.pfHint}>Pièces, statut de validation</Text>
+                    </View>
+                    <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                  </Pressable>
+                ) : null}
+                <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={() => setLangOpen(true)} accessibilityRole="button">
+                  <View style={styles.pfIcon}><MaterialIcons name="translate" size={20} color={colors.primary} /></View>
+                  <Text style={styles.pfLabel}>Langue</Text>
+                  <Text style={styles.pfMeta} numberOfLines={1}>{languageInfo(lang).flag} {languageInfo(lang).native}</Text>
+                  <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                </Pressable>
+                {onOpenSupport ? (
+                  <Pressable style={styles.pfRow} onPress={onOpenSupport} accessibilityRole="button">
+                    <View style={styles.pfIcon}><MaterialIcons name="support-agent" size={20} color={colors.primary} /></View>
+                    <Text style={styles.pfLabel}>Assistance</Text>
+                    <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <Pressable style={styles.pfLogout} onPress={confirmLogout} accessibilityRole="button">
+                <MaterialIcons name="logout" size={20} color={colors.error} />
+                <Text style={styles.pfLogoutText}>Se déconnecter</Text>
+              </Pressable>
+            </View>
+          )}
         </ScrollView>
       )}
+
+      <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
+      <AvatarSheet visible={avatarOpen} onClose={() => setAvatarOpen(false)} />
+
+      <PillTabBar
+        items={AGENCY_TABS}
+        active={tab}
+        onNavigate={(next) => {
+          if (next === "wallet") onOpenWallet?.();
+          else setTab(next);
+        }}
+      />
 
       {/* Modale d'ajout d'un conducteur / coursier par numéro à 10 chiffres */}
       <Modal visible={addVisible} transparent animationType="fade" onRequestClose={() => setAddVisible(false)}>
@@ -723,6 +872,28 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
 }
 
 const styles = StyleSheet.create({
+  pfIdentity: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, borderWidth: 1, borderColor: colors.surfaceContainer },
+  pfRing: { width: 84, height: 84, borderRadius: 42, alignItems: "center", justifyContent: "center" },
+  pfAvatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: colors.surfaceContainerLowest, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  pfBadge: { position: "absolute", right: -2, bottom: -2, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surfaceContainerLowest },
+  pfName: { ...typography.headlineSm, color: colors.onSurface },
+  pfPhone: { ...typography.bodyMd, color: colors.onSurfaceVariant, marginTop: 2 },
+  pfPills: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: spacing.xs },
+  pfPill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 },
+  pfPillText: { ...typography.labelSm, color: colors.primary, fontWeight: "700" },
+  pfStats: { flexDirection: "row", gap: spacing.sm },
+  pfStat: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, borderWidth: 1, borderColor: colors.surfaceContainer },
+  pfStatValue: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  pfStatLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
+  pfMenu: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.surfaceContainer, overflow: "hidden" },
+  pfRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm + 2, paddingHorizontal: spacing.md, minHeight: 60 },
+  pfDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceContainer },
+  pfIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
+  pfLabel: { ...typography.bodyLg, color: colors.onSurface, flex: 1 },
+  pfHint: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  pfMeta: { ...typography.labelMd, color: colors.onSurfaceVariant, maxWidth: 130 },
+  pfLogout: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 52, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.error },
+  pfLogoutText: { ...typography.labelLg, color: colors.error, fontWeight: "700" },
   activationBanner: {
     flexDirection: "row",
     alignItems: "center",

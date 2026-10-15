@@ -49,7 +49,6 @@ import {
   providersApi,
   ProviderRef,
   ProviderType,
-  setApiUrl,
   wakeServer,
   setToken,
   userApi,
@@ -462,8 +461,8 @@ function AppInner() {
     async function restoreSession() {
       try {
         await loadI18n();
-        const customUrl = await SecureStore.getItemAsync("customApiUrl");
-        if (customUrl) setApiUrl(customUrl);
+        // Plus de réglage manuel du serveur : une ancienne adresse enregistrée sur ce téléphone est effacée (l'application utilise celle de la version installée)
+        await SecureStore.deleteItemAsync("customApiUrl").catch(() => undefined);
         const savedRole = await SecureStore.getItemAsync("userRole");
         const savedToken = await SecureStore.getItemAsync("userToken");
         if (savedToken) setToken(savedToken);
@@ -716,6 +715,7 @@ function AppInner() {
             onOpenDossier={() => goTo("provider-status")}
             onOpenWallet={() => goTo("wallet")}
             onOpenSupport={() => goTo("support")}
+            onOpenInfo={() => goTo("profile-info")}
           />
         )}
 

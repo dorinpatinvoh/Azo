@@ -3,7 +3,6 @@ import {
   Alert,
   Animated,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -24,14 +23,11 @@ import { useI18n, type MessageKey } from "../i18n";
 import { speakKey, speakText, stopSpeaking, type VoiceKey } from "../i18n/voice";
 import {
   ApiError,
-  DEFAULT_API_URL,
   ProviderRef,
   type ProviderType,
   authApi,
   needsRegistration,
   errorMessage,
-  getApiUrl,
-  setApiUrl,
   userApi,
 } from "../services/api";
 import {
@@ -122,10 +118,6 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
   const [simulatedOtp, setSimulatedOtp] = useState<string | null>(null);
   const [bannerSecondsLeft, setBannerSecondsLeft] = useState<number>(0);
   const bannerAnim = useRef(new Animated.Value(-140)).current;
-
-  // Modale discrète pour configurer l'URL du serveur (Render / IP locale)
-  const [serverModalOpen, setServerModalOpen] = useState(false);
-  const [serverUrlDraft, setServerUrlDraft] = useState(getApiUrl());
 
   const digits = cleanBeninDigits(phone);
   const isPhoneValid = isValidBeninPhone(digits);
@@ -287,23 +279,6 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
     }
   }
 
-  async function saveCustomServerUrl() {
-    const trimmed = serverUrlDraft.trim();
-    setApiUrl(trimmed || null);
-    try {
-      if (trimmed) {
-        await SecureStore.setItemAsync("customApiUrl", trimmed);
-      } else {
-        await SecureStore.deleteItemAsync("customApiUrl");
-      }
-    } catch {
-      // ignore
-    }
-    setServerUrlDraft(getApiUrl());
-    setServerModalOpen(false);
-    Alert.alert("Serveur configuré", `Connecté à :\n${getApiUrl()}`);
-  }
-
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       {/* Bannière SMS simulée : apparaît 5 secondes puis disparaît automatiquement */}
@@ -387,29 +362,12 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
                   </Pressable>
                 </>
               )}
-              <Pressable
-                onPress={() => {
-                  setServerUrlDraft(getApiUrl());
-                  setServerModalOpen(true);
-                }}
-                style={styles.iconButton}
-                accessibilityLabel="Paramètres serveur"
-              >
-                <MaterialIcons name="tune" size={19} color={colors.onSurfaceVariant} />
-              </Pressable>
             </View>
           </View>
 
           {/* Titre aéré (sans le sous-titre sur l'étape téléphone) */}
           <View style={styles.headerBlock}>
-            <Pressable
-              onLongPress={() => {
-                setServerUrlDraft(getApiUrl());
-                setServerModalOpen(true);
-              }}
-            >
-              <Text style={styles.brand}>AZƆ̀</Text>
-            </Pressable>
+            <Text style={styles.brand}>AZƆ̀</Text>
             <Text style={styles.headline}>
               {step === "phone" ? t("auth.phone.title") : step === "code" ? t("auth.code.title") : t("auth.register.title")}
             </Text>
@@ -617,62 +575,6 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Modale de configuration Serveur (Render / IP) & accès rapide Admin */}
-      <Modal
-        visible={serverModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setServerModalOpen(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Connexion au serveur AZƆ̀</Text>
-            <Text style={styles.modalHint}>
-              Colle ici ton adresse Render (ex. https://azo-backend.onrender.com) ou l'IP locale de
-              ton ordinateur.
-            </Text>
-            <TextInput
-              style={styles.modalInput}
-              value={serverUrlDraft}
-              onChangeText={setServerUrlDraft}
-              placeholder={DEFAULT_API_URL}
-              placeholderTextColor={colors.outline}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-            />
-            <Pressable
-              style={styles.adminQuickBtn}
-              onPress={() => {
-                setPhone("01 97 00 00 00");
-                setServerModalOpen(false);
-              }}
-            >
-              <MaterialIcons name="admin-panel-settings" size={18} color={colors.primary} />
-              <Text style={styles.adminQuickText}>
-                Se connecter en Administrateur (01 97 00 00 00)
-              </Text>
-            </Pressable>
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.modalCancelBtn}
-                onPress={() => setServerUrlDraft(DEFAULT_API_URL)}
-              >
-                <Text style={styles.modalCancelText}>Par défaut</Text>
-              </Pressable>
-              <Pressable
-                style={styles.modalCancelBtn}
-                onPress={() => setServerModalOpen(false)}
-              >
-                <Text style={styles.modalCancelText}>Fermer</Text>
-              </Pressable>
-              <Pressable style={styles.modalSaveBtn} onPress={saveCustomServerUrl}>
-                <Text style={styles.modalSaveText}>Enregistrer</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -848,30 +750,6 @@ const styles = StyleSheet.create({
   resend: { alignSelf: "center", marginTop: spacing.md },
   resendText: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
 
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    padding: spacing.md,
-  },
-  modalSheet: {
-    backgroundColor: colors.surfaceContainerLowest,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  modalTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
-  modalHint: { ...typography.bodySm, color: colors.onSurfaceVariant },
-  modalInput: {
-    height: 48,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceContainerLow,
-    paddingHorizontal: 12,
-    ...typography.bodyMd,
-    color: colors.onSurface,
-    borderWidth: 1,
-    borderColor: colors.surfaceContainerHigh,
-  },
   nameInput: {
     height: 52,
     borderRadius: radius.md,
@@ -903,43 +781,4 @@ const styles = StyleSheet.create({
   genderChipActive: { borderColor: colors.primary, backgroundColor: colors.surfaceContainerLowest },
   genderText: { ...typography.bodyMd, color: colors.onSurfaceVariant },
   genderTextActive: { color: colors.primary, fontWeight: "700" },
-  adminQuickBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: radius.md,
-    backgroundColor: colors.primaryFixed,
-  },
-  adminQuickText: {
-    ...typography.labelMd,
-    color: colors.primary,
-    fontWeight: "700",
-    flex: 1,
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 8,
-    marginTop: spacing.xs,
-  },
-  modalCancelBtn: {
-    height: 40,
-    paddingHorizontal: 12,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceContainerLow,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalCancelText: { ...typography.labelMd, color: colors.onSurfaceVariant, fontWeight: "700" },
-  modalSaveBtn: {
-    height: 40,
-    paddingHorizontal: 16,
-    borderRadius: radius.md,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalSaveText: { ...typography.labelMd, color: "#fff", fontWeight: "800" },
 });
