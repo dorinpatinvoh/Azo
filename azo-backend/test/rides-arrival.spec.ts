@@ -129,7 +129,7 @@ describe("sécurisation de l'arrivée et du démarrage d'une course", () => {
     });
     expect(notifications.push).toHaveBeenCalledWith(
       clientId,
-      "Ton Zem est arrivé",
+      "Ton Spider est arrivé",
       expect.stringContaining("code Bouclier"),
       "ride",
       expect.objectContaining({ sendPush: true })

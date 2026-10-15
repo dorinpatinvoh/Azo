@@ -34,7 +34,7 @@ function makeWalletService(options: {
   return { service, prisma, pricing, tx };
 }
 
-describe("WalletService monthly Zem settlement", () => {
+describe("WalletService monthly Spider settlement", () => {
   it("charges 15% of credited ride earnings and records the period", async () => {
     const { service, prisma, tx } = makeWalletService({ balance: 1000 });
 

@@ -131,11 +131,11 @@ const DEFAULT_COURIER_SPECIALTIES = [
 type VehicleChoice = { value: VehicleType; label: string; hint: string; family?: "ZEM" | "CAR" };
 
 // Repli hors ligne : mêmes choix que ceux servis par le backend (/providers/requirements).
-// Filière Zem (motos-taxis) puis filière Voiture — le radar ne présente ensuite au
+// Filière Spider (motos-taxis) puis filière Voiture — le radar ne présente ensuite au
 // chauffeur que les demandes correspondant exactement au véhicule déclaré ici.
 const DEFAULT_DRIVER_VEHICLES: VehicleChoice[] = [
-  { value: "ZEM_ESSENCE", label: "Zem à essence", hint: "Moto-taxi thermique — courses rapides et économiques", family: "ZEM" },
-  { value: "ZEM_ELECTRIC", label: "Zem électrique", hint: "Moto-taxi électrique — même tarif, zéro émission", family: "ZEM" },
+  { value: "ZEM_ESSENCE", label: "Spider à essence", hint: "Moto-taxi thermique — courses rapides et économiques", family: "ZEM" },
+  { value: "ZEM_ELECTRIC", label: "Spider électrique", hint: "Moto-taxi électrique — même tarif, zéro émission", family: "ZEM" },
   { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme, trajets en ville", family: "CAR" },
   { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire, confort avec climatisation", family: "CAR" },
   { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée, trajets VIP", family: "CAR" },
@@ -151,7 +151,7 @@ function vehicleIcon(value: VehicleType): keyof typeof MaterialIcons.glyphMap {
 
 // Filière coursier / livreur : choix inchangés pour l'instant (harmonisation à venir).
 const DEFAULT_COURIER_VEHICLES: VehicleChoice[] = [
-  { value: "GAZELLE", label: "Gazelle — Moto / Zem (coursier)", hint: "Plis, courses personnelles et colis en ville" },
+  { value: "GAZELLE", label: "Gazelle — Moto / Spider (coursier)", hint: "Plis, courses personnelles et colis en ville" },
   { value: "KOALA", label: "Koala — Voiture climatisée (livreur)", hint: "Colis moyens, achats et marchandises" },
   { value: "LEOPARD", label: "Léopard — Berline haut de gamme (livreur)", hint: "Livraisons premium et clients VIP" },
 ];
@@ -222,9 +222,9 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         return {
           ...t,
           enabled: true,
-          label: "Zem & Conducteur indépendant",
+          label: "Spider & Conducteur indépendant",
           description:
-            "Zem, Zem indépendant (moto-taxi), Zem électrique ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
+            "Spider, Spider indépendant (moto-taxi), Spider électrique ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
           vehicleChoices: t.vehicleChoices?.length ? t.vehicleChoices : DEFAULT_DRIVER_VEHICLES,
         };
       }
@@ -242,7 +242,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       return {
         ...t,
         enabled: true,
-        label: "Agence (Flotte Zem, Voitures & Livreurs)",
+        label: "Agence (Flotte Spider, Voitures & Livreurs)",
       };
     });
   }, [req]);
@@ -640,10 +640,10 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             <Text style={styles.title}>Que veux-tu faire sur AZƆ̀ ?</Text>
             <Text style={styles.muted}>
               {lockedType === "AGENCY"
-                ? "Inscription de ton agence de flotte (Zem, voitures ou livreurs)."
+                ? "Inscription de ton agence de flotte (Spider, voitures ou livreurs)."
                 : lockedType
                   ? "Voici le parcours d'inscription dédié à ton activité."
-                  : "Choisis ton profil professionnel : Zem / Conducteur indépendant, ou Coursier / Coursier personnel / Livreur."}
+                  : "Choisis ton profil professionnel : Spider / Conducteur indépendant, ou Coursier / Coursier personnel / Livreur."}
             </Text>
 
             {choosableTypes.map((t) => {
@@ -744,7 +744,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
               </View>
             )}
 
-            {/* Zem / Zem indépendant / Moto / Voiture */}
+            {/* Spider / Spider indépendant / Moto / Voiture */}
             {!isAgency && currentType && (
               <View style={styles.subSection}>
                 <Text style={styles.sectionTitle}>Avec quel véhicule vas-tu travailler ?</Text>
@@ -753,11 +753,11 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                     typeConfig?.vehicleChoices && typeConfig.vehicleChoices.length > 0
                       ? typeConfig.vehicleChoices
                       : DEFAULT_DRIVER_VEHICLES;
-                  // Deux familles affichées séparément : motos-taxis (Zem) puis voitures.
+                  // Deux familles affichées séparément : motos-taxis (Spider) puis voitures.
                   const groups: { key: "ZEM" | "CAR"; title: string; items: VehicleChoice[] }[] = [
                     {
                       key: "ZEM",
-                      title: "Moto-taxi (Zem)",
+                      title: "Moto-taxi (Spider)",
                       items: choices.filter((v) =>
                         v.family ? v.family === "ZEM" : v.value === "ZEM_ESSENCE" || v.value === "ZEM_ELECTRIC"
                       ),

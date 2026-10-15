@@ -136,7 +136,7 @@ export class RidesController {
     return this.rides.history(user.userId);
   }
 
-  // GET /rides/offers/pending — propositions de Zem en attente de ma décision (rattrapage de la popup).
+  // GET /rides/offers/pending — propositions de Spider en attente de ma décision (rattrapage de la popup).
   // Déclaré AVANT @Get(":id") pour ne pas être pris pour un identifiant de course.
   @Get("offers/pending")
   @Roles(Role.CLIENT)
@@ -144,7 +144,7 @@ export class RidesController {
     return this.rides.pendingOffers(user.userId);
   }
 
-  // GET /rides/offers/current — ma proposition en cours + la dernière terminée (reprise après redémarrage du Zem).
+  // GET /rides/offers/current — ma proposition en cours + la dernière terminée (reprise après redémarrage du Spider).
   @Get("offers/current")
   @Roles(Role.DRIVER)
   currentOffer(@CurrentUser() user) {
@@ -230,35 +230,35 @@ export class RidesController {
     return this.rides.accept(id, user.userId);
   }
 
-  /** Client confirme la proposition du Zem → MATCHED */
+  /** Client confirme la proposition du Spider → MATCHED */
   @Post(":id/approve-driver")
   @Roles(Role.CLIENT)
   approveDriver(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.approveDriver(id, user.userId);
   }
 
-  /** Le client a ouvert la popup : le Zem le voit (« Le client regarde ton profil »). Idempotent. */
+  /** Le client a ouvert la popup : le Spider le voit (« Le client regarde ton profil »). Idempotent. */
   @Post(":id/offer-seen")
   @Roles(Role.CLIENT)
   offerSeen(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.offerSeen(id, user.userId);
   }
 
-  /** Client refuse la proposition du Zem → PENDING */
+  /** Client refuse la proposition du Spider → PENDING */
   @Post(":id/decline-driver")
   @Roles(Role.CLIENT)
   declineDriver(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.declineDriver(id, user.userId);
   }
 
-  /** Zem retire sa proposition → PENDING */
+  /** Spider retire sa proposition → PENDING */
   @Post(":id/withdraw-offer")
   @Roles(Role.DRIVER)
   withdrawOffer(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.withdrawOffer(id, user.userId);
   }
 
-  /** Profil public du Zem, accessible au client de la course */
+  /** Profil public du Spider, accessible au client de la course */
   @Get(":id/driver-profile")
   @Roles(Role.CLIENT)
   driverProfile(@Param("id") id: string, @CurrentUser() user) {
@@ -277,14 +277,14 @@ export class RidesController {
     return this.rides.start(id, user.userId, dto?.pin);
   }
 
-  // POST /rides/:id/drop-code -> le Zem déclenche le code d'arrivée, visible du client
+  // POST /rides/:id/drop-code -> le Spider déclenche le code d'arrivée, visible du client
   @Post(":id/drop-code")
   @Roles(Role.DRIVER)
   requestDropCode(@Param("id") id: string, @CurrentUser() user) {
     return this.rides.requestDropCode(id, user.userId);
   }
 
-  // POST /rides/:id/complete  { "pin": "1234" } (ou "code") -> le Zem saisit le code donné par le client
+  // POST /rides/:id/complete  { "pin": "1234" } (ou "code") -> le Spider saisit le code donné par le client
   @Post(":id/complete")
   @Roles(Role.DRIVER)
   complete(@Param("id") id: string, @CurrentUser() user, @Body() dto: CompleteRideDto) {
@@ -326,7 +326,7 @@ export class RidesController {
     return this.messages.markAsRead(id, user.userId);
   }
 
-  // POST /rides/:id/tip -> Envoyer un pourboire au Zem
+  // POST /rides/:id/tip -> Envoyer un pourboire au Spider
   @Post(":id/tip")
   @Roles(Role.CLIENT)
   @UseGuards(RegistrationCompleteGuard)

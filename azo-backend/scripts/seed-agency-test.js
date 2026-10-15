@@ -6,7 +6,7 @@
  * Crée, sans doublon si relancé :
  *   - une agence « Flotte Test Cotonou », niveau Pro, NON activée, dont le gérant a 150 000 F (de quoi payer l'activation
  *     de 100 000 F puis recharger des chauffeurs) ;
- *   - deux conducteurs Zem approuvés, pas encore rattachés (l'agence les ajoute par numéro dans l'application) ;
+ *   - deux conducteurs Spider approuvés, pas encore rattachés (l'agence les ajoute par numéro dans l'application) ;
  *   - le compte administrateur n'est PAS touché (voir `npm run seed`).
  *
  * Connexion dans l'application : numéro puis code OTP affiché par le serveur.

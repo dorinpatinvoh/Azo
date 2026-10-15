@@ -191,7 +191,7 @@ export default function AdminDashboardScreen({ onBack, onOpenProviders }: Props)
                   <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                     {stats?.rides ?? 0}
                   </Text>
-                  <Text style={styles.statLabel}>Courses Zem & Voiture</Text>
+                  <Text style={styles.statLabel}>Courses Spider & Voiture</Text>
                   <Text style={styles.statDelta}>{stats?.completedRides ?? 0} terminée(s)</Text>
                 </View>
 
@@ -295,7 +295,7 @@ export default function AdminDashboardScreen({ onBack, onOpenProviders }: Props)
                   [
                     ["", "Tous"],
                     ["CLIENT", "Clients"],
-                    ["DRIVER", "Zem / Coursiers"],
+                    ["DRIVER", "Spider / Coursiers"],
                     ["AGENCY", "Agences"],
                     ["ADMIN", "Admins"],
                   ] as const

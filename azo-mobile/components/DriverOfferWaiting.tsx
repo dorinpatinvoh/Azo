@@ -11,7 +11,7 @@ import OSMMapView, { type LatLng, type OSMMarker } from "./OSMMapView";
 type Props = { ride: Ride; busy: boolean; onWithdraw: () => void; position?: LatLng | null; heading?: number };
 
 /**
- * Le Zem a appuyé sur « Accepter » : le client regarde son profil avant de le choisir. Cet écran
+ * Le Spider a appuyé sur « Accepter » : le client regarde son profil avant de le choisir. Cet écran
  * affiche le compte à rebours et permet de retirer sa proposition. La course démarre dès que le
  * client confirme ; sinon la demande repart sur les radars.
  */

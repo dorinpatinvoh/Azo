@@ -24,7 +24,7 @@ type Props = {
   onPress?: (coord: LatLng) => void;
   followMarkerId?: string;
   /**
-   * Identifiants de marqueurs à garder TOUS visibles (ex. le Zem, le client et le point de départ
+   * Identifiants de marqueurs à garder TOUS visibles (ex. le Spider, le client et le point de départ
    * avant la prise en charge). La carte ne se recadre que si l un d eux approche du bord ou si le
    * groupe devient trop petit à l écran. Ignoré si `followMarkerId` est fourni.
    */

@@ -9,10 +9,10 @@
 import { api } from "./api";
 import reference from "../config/tarification.json";
 
-/** Filière du véhicule : moto-taxi (Zem) ou voiture. */
+/** Filière du véhicule : moto-taxi (Spider) ou voiture. */
 export type VehicleFamily = "ZEM" | "CAR";
 
-/** Véhicules facturables : les deux Zem (motos-taxis) puis les voitures. */
+/** Véhicules facturables : les deux Spider (motos-taxis) puis les voitures. */
 export type VehicleKey = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | "LEOPARD";
 
 /** Les types historiques restent acceptés (anciennes courses en base). */
@@ -22,7 +22,7 @@ export type AgencyLevel = "PRO" | "SILVER" | "OR" | "DIAMANT" | "PLATINE" | "ELI
 /** Palier kilométrique : `upToKm` inclus, `null` pour le dernier palier (illimité). */
 export type VehicleBracket = { upToKm: number | null; perKm: number };
 
-/** Remise sur la base appliquée au-delà d'une distance (Zem : −25 % après 10 km). */
+/** Remise sur la base appliquée au-delà d'une distance (Spider : −25 % après 10 km). */
 export type BaseDiscount = { pct: number; aboveKm: number };
 
 export type VehiclePricing = {
@@ -67,7 +67,7 @@ export function tarification(): TarificationConfig {
   return current;
 }
 
-/** Les deux types de Zem (motos-taxis), proposés à l'étape 1 de la commande. */
+/** Les deux types de Spider (motos-taxis), proposés à l'étape 1 de la commande. */
 export const ZEM_VEHICLES: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC"];
 
 /** Les trois voitures. */
@@ -81,7 +81,7 @@ export function resolveVehicleKey(vehicle: VehicleKey | string): VehicleKey {
   return "ZEM_ESSENCE";
 }
 
-/** Vrai pour un moto-taxi (Zem essence ou électrique). */
+/** Vrai pour un moto-taxi (Spider essence ou électrique). */
 export function isZem(vehicle?: VehicleKey | string | null): boolean {
   if (!vehicle) return false;
   return vehicleFamily(vehicle) === "ZEM";
@@ -113,7 +113,7 @@ export type PriceBreakdown = {
   distanceKm: number;
   /** Base effectivement facturée (après remise). */
   base: number;
-  /** Base du barème avant remise (150 F pour un Zem à essence, 100 F en électrique). */
+  /** Base du barème avant remise (150 F pour un Spider à essence, 100 F en électrique). */
   baseFull: number;
   baseDiscountPct: number;
   baseDiscountApplied: boolean;

@@ -169,7 +169,7 @@ function AppInner() {
     userApi.setLanguage(lang).catch(() => undefined);
   }, [lang, sessionToken]);
 
-  // Popup « un Zem a accepté ta course » : par-dessus n'importe quel écran du client
+  // Popup « un Spider a accepté ta course » : par-dessus n'importe quel écran du client
   const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "rental"];
   const offerWatcher = useOfferWatcher(!!sessionToken && clientRoutes.includes(route), route === "ride-tracking");
   // Session ouverte mais inscription (nom, prénom, sexe, NPI) pas terminée : on rouvre le formulaire.
@@ -184,7 +184,7 @@ function AppInner() {
       .then((me) => {
         const draft = me.provider;
         if (!draft || draft.status !== "DRAFT") return;
-        const label = draft.type === "AGENCY" ? "Agence de flotte" : draft.type === "COURIER" ? "Coursier, Coursier personnel & Livreur" : "Zem & Conducteur indépendant";
+        const label = draft.type === "AGENCY" ? "Agence de flotte" : draft.type === "COURIER" ? "Coursier, Coursier personnel & Livreur" : "Spider & Conducteur indépendant";
         Alert.alert(
           "Inscription en cours",
           `Tu as commencé une inscription « ${label} » sans la terminer. Que veux-tu faire ?`,
@@ -232,7 +232,7 @@ function AppInner() {
     return () => sub.remove();
   }, []);
 
-  // Activité choisie à l'inscription (Zem, coursier, agence) : le parcours dédié reste imposé jusqu'au dépôt du dossier
+  // Activité choisie à l'inscription (Spider, coursier, agence) : le parcours dédié reste imposé jusqu'au dépôt du dossier
   const [signupType, setSignupType] = useState<ProviderType | null>(null);
   useEffect(() => {
     SecureStore.getItemAsync(SIGNUP_TYPE_KEY)
@@ -355,7 +355,7 @@ function AppInner() {
   );
 
   /**
-   * Toucher une notification poussée ouvre l'écran qui correspond : la course pour un client, l'espace métier pour un Zem, un coursier
+   * Toucher une notification poussée ouvre l'écran qui correspond : la course pour un client, l'espace métier pour un Spider, un coursier
    * ou une agence, le portefeuille, l'assistance, le dossier prestataire… Le serveur envoie `type` et, selon l'événement, `rideId`.
    */
   const handleRideNotification = useCallback(
@@ -390,7 +390,7 @@ function AppInner() {
     return () => { active = false; };
   }, [sessionToken]);
 
-  // Notification reçue application ouverte : la proposition d'un Zem ouvre sa fenêtre tout de suite ; la notification silencieuse
+  // Notification reçue application ouverte : la proposition d'un Spider ouvre sa fenêtre tout de suite ; la notification silencieuse
   // `ride-offer-ended` ferme la fenêtre et retire l'alerte périmée de la barre du téléphone
   useEffect(() => {
     return subscribeNotificationReceived((notification: any) => {
@@ -600,7 +600,7 @@ function AppInner() {
             onVerified={(role?: string | null, provider?: ProviderRef | null, startType?: ProviderType | null) => {
               setResumeRegistration(false);
               setSessionToken(getToken());
-              // Inscription avec une activité (Zem, coursier, agence) : on enchaîne sur le dossier dédié (mémorisé jusqu'au dépôt)
+              // Inscription avec une activité (Spider, coursier, agence) : on enchaîne sur le dossier dédié (mémorisé jusqu'au dépôt)
               if (startType) {
                 setSignupType(startType);
                 SecureStore.setItemAsync(SIGNUP_TYPE_KEY, startType).catch(() => undefined);
@@ -788,7 +788,7 @@ function AppInner() {
             onClose={offerWatcher.dismiss}
             onChanged={(next) => {
               offerWatcher.dismiss();
-              // Zem choisi : on suit la course ; refusé : la recherche continue, on reste où on est
+              // Spider choisi : on suit la course ; refusé : la recherche continue, on reste où on est
               if (next.status !== "PENDING" && next.status !== "OFFERED" && next.status !== "CANCELLED") {
                 setRideId(next.id);
                 setRideLabel(undefined);

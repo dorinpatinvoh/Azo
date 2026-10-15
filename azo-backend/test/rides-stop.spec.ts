@@ -135,7 +135,7 @@ describe("accord bilatéral d'arrêt anticipé", () => {
     await expect(service.acceptStop(rideId, driverId)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it("le Zem saisit le code : le client est débité du prix de la demande, sans exiger d'être à destination", async () => {
+  it("le Spider saisit le code : le client est débité du prix de la demande, sans exiger d'être à destination", async () => {
     const requestedAt = new Date();
     const { service, prisma, tx, pricing, gateway } = makeService({
       traveledMeters: 2_500,

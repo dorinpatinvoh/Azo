@@ -51,7 +51,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const { t, lang, locale } = useI18n();
   const [ride, setRide] = useState<Ride | null>(null);
   const [driverPos, setDriverPos] = useState<(LatLng & { heading?: number }) | null>(null);
-  // Ma propre position (le client), affichée sur ma carte et envoyée au Zem avant la prise en charge.
+  // Ma propre position (le client), affichée sur ma carte et envoyée au Spider avant la prise en charge.
   const [myPos, setMyPos] = useState<LatLng | null>(null);
   const [driverRoute, setDriverRoute] = useState<{ coordinates: LatLng[]; durationMinutes: number; start: LatLng; target: LatLng } | null>(null);
   const [pendingRoute, setPendingRoute] = useState<DrivingRoute | null>(null);
@@ -72,10 +72,10 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   const socketRef = useRef<Socket | null>(null);
   const lastDriverAtRef = useRef(0);
-  // Statut précédent : un Zem déjà assigné qui disparaît (retour en recherche) = il a annulé
+  // Statut précédent : un Spider déjà assigné qui disparaît (retour en recherche) = il a annulé
   const prevStatusRef = useRef<string | null>(null);
 
-  // Position du Zem reçue par socket, par l'accusé de `ride:join` ou par le suivi périodique.
+  // Position du Spider reçue par socket, par l'accusé de `ride:join` ou par le suivi périodique.
   // Une position plus ancienne que celle déjà affichée est ignorée (réseau mobile instable :
   // sans cela le curseur recule). En dessous de ~1 m/s (arrêt, demi-tour) le cap GPS n'est
   // pas fiable : la flèche est masquée plutôt que de tourner au hasard.
@@ -178,7 +178,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
             console.warn("Suivi AZƆ̀ : la course n'a pas pu être rejointe, positions non reçues");
             return;
           }
-          // Si le serveur conserve la dernière position, le Zem apparaît tout de suite,
+          // Si le serveur conserve la dernière position, le Spider apparaît tout de suite,
           // sans attendre sa prochaine émission.
           applyDriverLocation(res.driverLocation);
         }
@@ -188,7 +188,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
       applyDriverLocation(p)
     );
     socket.on("ride:status", (p: { status: RideStatus }) => setRide((r) => (r ? { ...r, status: p.status } : r)));
-    // Course partielle : distance parcourue en direct et demande d'arrêt du Zem.
+    // Course partielle : distance parcourue en direct et demande d'arrêt du Spider.
     socket.on(
       "ride:progress",
       (p: {
@@ -217,8 +217,8 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   }, [rideId, applyDriverLocation]);
 
   // Ma position : suivie dès que la course est active (recherche, approche, trajet) pour l’afficher
-  // sur ma carte ; envoyée au Zem SEULEMENT avant la prise en charge (le serveur n’accepte pas
-  // `client:location` ensuite : sur la moto, ma position est celle du Zem).
+  // sur ma carte ; envoyée au Spider SEULEMENT avant la prise en charge (le serveur n’accepte pas
+  // `client:location` ensuite : sur la moto, ma position est celle du Spider).
   const trackingSelf =
     ride?.status === "PENDING" || ride?.status === "OFFERED" || ride?.status === "MATCHED" || ride?.status === "ARRIVED" || ride?.status === "IN_PROGRESS";
   const sharingPosition = ride?.status === "MATCHED" || ride?.status === "ARRIVED";
@@ -238,7 +238,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
         lng: pos.coords.longitude,
         ts: Date.now(),
         ...(typeof pos.coords.accuracy === "number" ? { accuracy: Math.round(pos.coords.accuracy) } : {}),
-        // Cap et vitesse : le Zem voit dans quelle direction je marche. Le serveur ne les relaie pas
+        // Cap et vitesse : le Spider voit dans quelle direction je marche. Le serveur ne les relaie pas
         // encore (voir PROJECT_SUMMARY/DEMANDE_BACKEND_SUIVI_TEMPS_REEL.md) : sans effet en attendant.
         ...(typeof pos.coords.heading === "number" && pos.coords.heading >= 0 && pos.coords.heading < 360
           ? { heading: Math.round(pos.coords.heading) }
@@ -261,7 +261,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
         );
         if (cancelled) sub.remove();
       } catch {
-        // Localisation indisponible : pas de point sur ma carte, et le Zem ne voit que le départ choisi.
+        // Localisation indisponible : pas de point sur ma carte, et le Spider ne voit que le départ choisi.
       }
     })();
     // À l arrêt le GPS n’émet rien : on renvoie la dernière position toutes les 2 s (avant la prise en charge).
@@ -355,7 +355,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
       { id: "origin", coordinate: origin, title: t("live.marker.origin"), color: "green" },
       { id: "destination", coordinate: destination, title: t("live.marker.dest"), color: "red" },
     ];
-    // Avant la prise en charge, je me vois sur la carte ; sur la moto mon point se confond avec celui du Zem.
+    // Avant la prise en charge, je me vois sur la carte ; sur la moto mon point se confond avec celui du Spider.
     if (myPos && ride?.status !== "IN_PROGRESS") {
       list.push({ id: "me", coordinate: myPos, title: t("live.marker.me"), color: "orange" });
     }
@@ -478,7 +478,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
         center={driverPos || myPos || origin}
         markers={osmMarkers}
         polyline={trackingPolyline}
-        // Pendant le trajet la caméra suit le Zem ; avant la prise en charge elle garde le Zem, moi et
+        // Pendant le trajet la caméra suit le Spider ; avant la prise en charge elle garde le Spider, moi et
         // le point de départ TOUS visibles (elle ne se recadre que si l’un d’eux approche du bord).
         followMarkerId={driverPos && ride.status === "IN_PROGRESS" ? "driver" : undefined}
         fitMarkerIds={ride.status === "MATCHED" || ride.status === "ARRIVED" ? ["driver", "me", "origin"] : undefined}

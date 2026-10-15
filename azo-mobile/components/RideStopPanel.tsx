@@ -19,7 +19,7 @@ const km = (meters: number) =>
 
 /**
  * Course partielle : le prix est « base (prise en charge) + kilomètres parcourus », avec l'accord du
- * client ET du Zem. Les montants viennent toujours du serveur, jamais calculés ici.
+ * client ET du Spider. Les montants viennent toujours du serveur, jamais calculés ici.
  * Affiche la distance et le prix en direct, et gère la demande d'arrêt des deux côtés.
  *
  * Tant que le serveur n'envoie pas `traveledMeters`, le panneau reste invisible : aucune

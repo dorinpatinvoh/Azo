@@ -44,7 +44,7 @@ type Slide = {
 /**
  * Les trois pages. Pour changer une image : remplacer le `require(...)` ; pour changer un
  * texte : modifier la clé `onboarding.slideN.*` dans i18n/fr.ts (et dans les autres langues). Chaque promesse correspond à une fonction réelle de
- * l'application (commande rapide, chauffeurs vérifiés + code de sécurité, Zem électrique).
+ * l'application (commande rapide, chauffeurs vérifiés + code de sécurité, Spider électrique).
  */
 const SLIDES: Slide[] = [
   {

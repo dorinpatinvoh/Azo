@@ -1,5 +1,5 @@
 /**
- * Popup de proposition du Zem (PROJECT_SUMMARY/DEMANDE_BACKEND_POPUP_PROPOSITION_ZEM.md) :
+ * Popup de proposition du Spider (PROJECT_SUMMARY/DEMANDE_BACKEND_POPUP_PROPOSITION_ZEM.md) :
  * événement `ride:offered`, notification dédiée non bloquante, rattrapage, « vu par le client »,
  * marge de confirmation et fermeture de la popup quand la proposition se termine.
  */
@@ -107,7 +107,7 @@ function makeService(initial: Partial<State> = {}, opts: { pushNever?: boolean }
                   fullName: "Romaric Soglo",
                   city: "Cotonou",
                   zones: ["Cadjèhoun"],
-                  bio: "Zem depuis 4 ans",
+                  bio: "Spider depuis 4 ans",
                   experienceYears: 4,
                   vehicleType: "ZEM_ELECTRIC",
                   vehicleModel: "Bajaj Boxer",
@@ -153,7 +153,7 @@ function makeService(initial: Partial<State> = {}, opts: { pushNever?: boolean }
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 describe("accept : annonce au client", () => {
-  it("émet ride:offered avec le profil public, sans téléphone ni identifiant du Zem", async () => {
+  it("émet ride:offered avec le profil public, sans téléphone ni identifiant du Spider", async () => {
     const { service, gateway } = makeService();
     const accepted = await service.accept(rideId, driverId);
     await flush();
@@ -185,7 +185,7 @@ describe("accept : annonce au client", () => {
     const [to, title, body, type, options] = notifications.push.mock.calls[0];
     expect(to).toBe(clientId);
     expect(type).toBe("ride");
-    expect(title).toBe("Un Zem a accepté ta course");
+    expect(title).toBe("Un Spider a accepté ta course");
     expect(body).toMatch(/il te reste \d+ s/);
     expect(options).toMatchObject({ sendPush: true, channelId: "ride-offers" });
     expect(options.ttlSeconds).toBeGreaterThan(40);
@@ -194,7 +194,7 @@ describe("accept : annonce au client", () => {
     expect(JSON.stringify(options.data)).not.toContain("driver");
   });
 
-  it("répond au Zem sans attendre la notification (l'API Expo peut mettre 6 s)", async () => {
+  it("répond au Spider sans attendre la notification (l'API Expo peut mettre 6 s)", async () => {
     const { service } = makeService({}, { pushNever: true });
     const result = await Promise.race([
       service.accept(rideId, driverId).then(() => "done"),
@@ -220,10 +220,10 @@ describe("rattrapage : GET /rides/offers/pending", () => {
   });
 });
 
-describe("offer-seen : le Zem sait que le client regarde son profil", () => {
+describe("offer-seen : le Spider sait que le client regarde son profil", () => {
   const offered = () => ({ status: "OFFERED", driverId, offerExpiresAt: new Date(Date.now() + 30_000) });
 
-  it("enregistre l'ouverture et prévient le Zem, une seule fois (idempotent)", async () => {
+  it("enregistre l'ouverture et prévient le Spider, une seule fois (idempotent)", async () => {
     const { service, gateway } = makeService(offered());
     const first = await service.offerSeen(rideId, clientId);
     const second = await service.offerSeen(rideId, clientId);
@@ -246,7 +246,7 @@ describe("offer-seen : le Zem sait que le client regarde son profil", () => {
 });
 
 describe("marge de confirmation", () => {
-  it("accepte « Choisir ce Zem » 3 s après la fin du compte à rebours (dans la marge de 5 s)", async () => {
+  it("accepte « Choisir ce Spider » 3 s après la fin du compte à rebours (dans la marge de 5 s)", async () => {
     const { service, gateway, state } = makeService({ status: "OFFERED", driverId, offerExpiresAt: new Date(Date.now() - 3_000) });
     const ride = await service.approveDriver(rideId, clientId);
     expect(state.status).toBe("MATCHED");
@@ -281,7 +281,7 @@ describe("marge de confirmation", () => {
 describe("fin de proposition : la popup se ferme", () => {
   const offered = () => ({ status: "OFFERED", driverId, offerExpiresAt: new Date(Date.now() + 30_000), offerSeenAt: new Date() });
 
-  it("le Zem retire sa proposition : événement + notification silencieuse au client", async () => {
+  it("le Spider retire sa proposition : événement + notification silencieuse au client", async () => {
     const { service, gateway, notifications, state } = makeService(offered());
     await service.withdrawOffer(rideId, driverId);
     await flush();
@@ -376,10 +376,10 @@ describe("NotificationsService : canal, durée de vie et push silencieux", () =>
 
 describe("offerPushText", () => {
   it.each([
-    ["fr", "Un Zem a accepté ta course"],
-    ["en", "A Zem accepted your ride"],
-    ["es", "Un Zem aceptó tu viaje"],
-    ["de", "Ein Zem hat deine Fahrt angenommen"],
+    ["fr", "Un Spider a accepté ta course"],
+    ["en", "A Spider accepted your ride"],
+    ["es", "Un Spider aceptó tu viaje"],
+    ["de", "Ein Spider hat deine Fahrt angenommen"],
   ])("texte %s", (lang, title) => {
     const text = offerPushText(lang, 30);
     expect(text.title).toBe(title);
@@ -387,12 +387,12 @@ describe("offerPushText", () => {
   });
 
   it("retombe sur le français pour une langue inconnue ou absente", () => {
-    expect(offerPushText("xx", 10).title).toBe("Un Zem a accepté ta course");
-    expect(offerPushText(null, 10).title).toBe("Un Zem a accepté ta course");
+    expect(offerPushText("xx", 10).title).toBe("Un Spider a accepté ta course");
+    expect(offerPushText(null, 10).title).toBe("Un Spider a accepté ta course");
   });
 });
 
-describe("fin de proposition : le Zem est informé (DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md)", () => {
+describe("fin de proposition : le Spider est informé (DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md)", () => {
   const offered = () => ({ status: "OFFERED", driverId, offerExpiresAt: new Date(Date.now() + 30_000) });
 
   it("accept crée la trace de la proposition", async () => {
@@ -402,7 +402,7 @@ describe("fin de proposition : le Zem est informé (DEMANDE_BACKEND_FIN_PROPOSIT
     expect(offers[0]).toMatchObject({ rideId, driverId, status: "OFFERED" });
   });
 
-  it("le client refuse : le Zem lit offerOutcome=declined (jamais 403) et reçoit ride:offer-ended", async () => {
+  it("le client refuse : le Spider lit offerOutcome=declined (jamais 403) et reçoit ride:offer-ended", async () => {
     const { service, gateway } = makeService();
     await service.accept(rideId, driverId);
     await service.declineDriver(rideId, clientId);
@@ -420,7 +420,7 @@ describe("fin de proposition : le Zem est informé (DEMANDE_BACKEND_FIN_PROPOSIT
     for (const secret of ["clientLat", "phone", "Adjovi", "+2290", "originLat"]) expect(serialized).not.toContain(secret);
   });
 
-  it("expiration : offerOutcome=expired + notification push au Zem", async () => {
+  it("expiration : offerOutcome=expired + notification push au Spider", async () => {
     const { service, notifications, gateway, state } = makeService();
     await service.accept(rideId, driverId);
     await flush();
@@ -435,7 +435,7 @@ describe("fin de proposition : le Zem est informé (DEMANDE_BACKEND_FIN_PROPOSIT
     expect(await service.findOne(rideId, driverId)).toMatchObject({ offerOutcome: "expired" });
   });
 
-  it("retrait par le Zem : offerOutcome=withdrawn", async () => {
+  it("retrait par le Spider : offerOutcome=withdrawn", async () => {
     const { service, gateway } = makeService();
     await service.accept(rideId, driverId);
     await service.withdrawOffer(rideId, driverId);
@@ -443,7 +443,7 @@ describe("fin de proposition : le Zem est informé (DEMANDE_BACKEND_FIN_PROPOSIT
     expect(await service.findOne(rideId, driverId)).toMatchObject({ offerOutcome: "withdrawn" });
   });
 
-  it("le client choisit ce Zem : ride:offer-approved vers le Zem, sans room de course", async () => {
+  it("le client choisit ce Spider : ride:offer-approved vers le Spider, sans room de course", async () => {
     const { service, gateway, offers } = makeService();
     await service.accept(rideId, driverId);
     await service.approveDriver(rideId, clientId);
@@ -451,7 +451,7 @@ describe("fin de proposition : le Zem est informé (DEMANDE_BACKEND_FIN_PROPOSIT
     expect(offers[0].status).toBe("APPROVED");
   });
 
-  it("un Zem sans aucune proposition sur cette course reçoit 403", async () => {
+  it("un Spider sans aucune proposition sur cette course reçoit 403", async () => {
     const { service } = makeService(offered());
     await expect(service.findOne(rideId, "intrus")).rejects.toBeInstanceOf(ForbiddenException);
   });

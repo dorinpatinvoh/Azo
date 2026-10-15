@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from "@nestjs/commo
 import { RidesService } from "./rides.service";
 
 /**
- * Tâche périodique qui expire les propositions Zem (statut OFFERED) dont le délai
+ * Tâche périodique qui expire les propositions Spider (statut OFFERED) dont le délai
  * est dépassé. Sans `@nestjs/schedule`, on utilise un simple `setInterval`.
  *
  * Exécution toutes les 5 secondes : une offre de 45 s ne restera jamais bloquée

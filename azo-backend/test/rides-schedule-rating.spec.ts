@@ -65,7 +65,7 @@ function makeRidesService(opts: { due?: any[]; releasedCount?: number; check?: a
     radarSettings: jest.fn().mockReturnValue({ pendingExpiryMinutes: 20, driverNotificationMax: 20 }),
     rideSettings: jest.fn().mockReturnValue({ offerExpirySeconds: 45, requireClientApproval: true, offerApprovalGraceSeconds: 5 }),
     rideVisibleFor: jest.fn().mockReturnValue(true),
-    vehicleLabel: jest.fn().mockReturnValue("Zem"),
+    vehicleLabel: jest.fn().mockReturnValue("Spider"),
   };
   const gateway: any = { emitNewRequest: jest.fn(), invalidateRideLocationContext: jest.fn() };
   return { service: new RidesService(prisma, {} as any, notifications, pricing, gateway), prisma, notifications, gateway };
@@ -91,7 +91,7 @@ describe("ouverture des courses programmées", () => {
     expect(gateway.emitNewRequest).not.toHaveBeenCalled();
   });
 
-  it("un Zem ne peut pas accepter une course programmée pas encore ouverte", async () => {
+  it("un Spider ne peut pas accepter une course programmée pas encore ouverte", async () => {
     const { service } = makeRidesService({
       check: { id: "r1", status: "PENDING", declinedDriverIds: [], createdAt: new Date(), scheduledAt: inMinutes(120), scheduledReleasedAt: null },
     });

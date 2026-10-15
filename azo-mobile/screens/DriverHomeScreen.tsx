@@ -48,10 +48,10 @@ type Props = {
   onOpenNotifications?: () => void;
 };
 
-// Mémorise l'état de l'espace Zem quand on ouvre une autre page (portefeuille, informations…) : au retour il reste en ligne, sur le même onglet.
+// Mémorise l'état de l'espace Spider quand on ouvre une autre page (portefeuille, informations…) : au retour il reste en ligne, sur le même onglet.
 const rememberedZem: { online: boolean; tab: "home" | "gains" | "activity" | "wallet" | "profile" } = { online: false, tab: "home" };
 
-// Barre du bas de l'espace Zem : « Portefeuille » ouvre l'écran AZƆ̀ Pay, les autres onglets restent dans cet écran.
+// Barre du bas de l'espace Spider : « Portefeuille » ouvre l'écran AZƆ̀ Pay, les autres onglets restent dans cet écran.
 type ZemTab = "home" | "gains" | "activity" | "wallet" | "profile";
 const ZEM_TABS: PillTabItem<ZemTab>[] = [
   { id: "home", label: "Accueil", icon: "radio-outline", iconActive: "radio" },
@@ -60,7 +60,7 @@ const ZEM_TABS: PillTabItem<ZemTab>[] = [
   { id: "wallet", label: "AZƆ̀ Pay", icon: "wallet-outline", iconActive: "wallet" },
   { id: "profile", label: "Profil", icon: "person-outline", iconActive: "person" },
 ];
-const ZEM_TITLES: Record<ZemTab, string> = { home: "Zém Radar", gains: "Mes gains", activity: "Mon activité", wallet: "AZƆ̀ Pay", profile: "Mon profil" };
+const ZEM_TITLES: Record<ZemTab, string> = { home: "Spider Radar", gains: "Mes gains", activity: "Mon activité", wallet: "AZƆ̀ Pay", profile: "Mon profil" };
 type LatLng = { latitude: number; longitude: number };
 type GpsStatus = "idle" | "ok" | "denied" | "error";
 
@@ -74,7 +74,7 @@ const isToday = (iso: string) => {
   return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
 };
 
-// Issues de proposition déjà annoncées au Zem (évite de répéter l'alerte à chaque réouverture).
+// Issues de proposition déjà annoncées au Spider (évite de répéter l'alerte à chaque réouverture).
 const announcedEndings = new Set<string>();
 
 export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet, onOpenInfo, onOpenNotifications }: Props) {
@@ -108,13 +108,13 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   useEffect(() => {
     rememberedZem.online = online;
   }, [online]);
-  // Course terminée : le Zem note son client (null = rien à noter)
+  // Course terminée : le Spider note son client (null = rien à noter)
   const [rateTarget, setRateTarget] = useState<{ rideId: string; name: string } | null>(null);
   const [pending, setPending] = useState<Ride[]>([]);
   const [history, setHistory] = useState<Ride[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [activeRide, setActiveRide] = useState<Ride | null>(null);
-  // Le Zem a accepté : le client regarde son profil avant de le choisir (statut OFFERED)
+  // Le Spider a accepté : le client regarde son profil avant de le choisir (statut OFFERED)
   const [offered, setOffered] = useState<Ride | null>(null);
   // Trajet « course » (client -> destination), tracé en pointillés tant que le client n'est pas monté
   const [tripRoute, setTripRoute] = useState<{ rideId: string; coordinates: LatLng[] } | null>(null);
@@ -122,7 +122,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   const [summary, setSummary] = useState<{ count: number; nearestKm: number | null } | null>(null);
   const [summaryTick, setSummaryTick] = useState(0);
   // Véhicule déclaré dans le dossier prestataire : le radar ne présente que les
-  // demandes correspondantes (Zem essence ≠ Zem électrique ; Gazelle ≠ Koala ≠ Léopard).
+  // demandes correspondantes (Spider essence ≠ Spider électrique ; Gazelle ≠ Koala ≠ Léopard).
   const [myVehicle, setMyVehicle] = useState<VehicleType | null>(null);
   const [position, setPosition] = useState<LatLng | null>(null);
   // Cap du GPS (degrés) : fait pivoter la flèche de mon curseur sur ma carte.
@@ -207,7 +207,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     loadAccount().finally(() => setLoading(false));
   }, [loadAccount]);
 
-  // Reprise après redémarrage : proposition encore en cours, ou issue de la dernière (le Zem n'est plus rattaché à la course).
+  // Reprise après redémarrage : proposition encore en cours, ou issue de la dernière (le Spider n'est plus rattaché à la course).
   useEffect(() => {
     let cancelled = false;
     ridesApi
@@ -246,7 +246,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     setRefreshing(false);
   }, [loadAccount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---------- Courses en attente (Zém Radar) ----------
+  /* ---------- Courses en attente (Spider Radar) ----------
    * La position du chauffeur est transmise au serveur : il écarte les demandes hors du
    * rayon de recherche (`radar.searchRadiusKm` de la configuration) et les classent de la demande la plus
    * récente à la plus ancienne. Sans GPS, le radar reste utilisable.
@@ -258,17 +258,17 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     return rides;
   }, []);
 
-  // La proposition est terminée sans que le client ait choisi ce Zem : on libère l'écran et on explique.
+  // La proposition est terminée sans que le client ait choisi ce Spider : on libère l'écran et on explique.
   const endOfferRef = useRef<(id: string, outcome?: string | null) => void>(() => undefined);
   const endOffer = useCallback(
     (id: string, outcome?: string | null) => {
       setOffered((current) => (current && current.id === id ? null : current));
       const message =
-        outcome === "declined" ? "Le client a choisi un autre Zem."
+        outcome === "declined" ? "Le client a choisi un autre Spider."
         : outcome === "withdrawn" ? "Tu as retiré ta proposition."
         : outcome === "cancelled" ? "Le client a annulé sa demande."
         : outcome === "expired" ? "Le client n'a pas répondu à temps."
-        : "Le client a choisi un autre Zem ou n'a pas répondu à temps.";
+        : "Le client a choisi un autre Spider ou n'a pas répondu à temps.";
       Alert.alert("Proposition terminée", message + " Tu peux accepter une autre demande.");
       loadPending().catch(() => undefined);
     },
@@ -333,7 +333,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     socket.on("connect", () => {
       const p = positionRef.current;
       const r = activeRideRef.current;
-      // Sans `ride:join`, le Zem ne reçoit rien de la room de la course (position du client).
+      // Sans `ride:join`, le Spider ne reçoit rien de la room de la course (position du client).
       if (r) joinRide(socket, r.id);
       if (p && r) socket.emit("driver:location", { rideId: r.id, lat: p.latitude, lng: p.longitude, ts: Date.now() });
     });
@@ -344,9 +344,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
       loadPending().catch(() => undefined);
       setSummaryTick((n) => n + 1);
     });
-    // Une demande a quitté le radar (prise par un autre Zem, annulée, expirée) : son point disparaît.
-    // Fin de la proposition du Zem / choix du client (voir DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md)
-    // Le client a ouvert la popup : l'écran d'attente du Zem le dit
+    // Une demande a quitté le radar (prise par un autre Spider, annulée, expirée) : son point disparaît.
+    // Fin de la proposition du Spider / choix du client (voir DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md)
+    // Le client a ouvert la popup : l'écran d'attente du Spider le dit
     socket.on("ride:offer-seen", (p: { rideId?: string; at?: string }) => {
       if (!p?.rideId) return;
       setOffered((prev) => (prev && prev.id === p.rideId ? { ...prev, offerSeenAt: p.at ?? new Date().toISOString() } : prev));
@@ -388,7 +388,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   }, [online, endOffer]);
 
   // Pendant la course, on relit son état toutes les 3 s : le client peut avoir demandé ou
-  // accepté l'arrêt, ce qui termine la course sans action du Zem. Filet si le socket tombe.
+  // accepté l'arrêt, ce qui termine la course sans action du Spider. Filet si le socket tombe.
   useEffect(() => {
     if (!online || !activeRide || !["MATCHED", "ARRIVED", "IN_PROGRESS"].includes(activeRide.status)) return;
     const id = activeRide.id;
@@ -448,7 +448,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
           endOffer(id, fresh.offerOutcome ?? (fresh.status === "CANCELLED" ? "cancelled" : null));
         }
       } catch (e) {
-        // Le serveur répond 403/404 au Zem dont la proposition est terminée (il n'est plus rattaché à la
+        // Le serveur répond 403/404 au Spider dont la proposition est terminée (il n'est plus rattaché à la
         // course) : ce n'est PAS une coupure réseau. Avant, ce cas était ignoré et l'écran restait figé.
         if (!cancelled && e instanceof ApiError && (e.status === 403 || e.status === 404)) endOffer(id, null);
         // Autre erreur (réseau coupé) : on réessaie au prochain cycle.
@@ -537,7 +537,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     return () => { cancelled = true; sub?.remove(); };
   }, [online, hasActiveRide, emitPosition]);
 
-  // Le GPS n'émet que si le Zem a bougé d'au moins 5 m : à l'arrêt (il attend le client,
+  // Le GPS n'émet que si le Spider a bougé d'au moins 5 m : à l'arrêt (il attend le client,
   // feu rouge), plus rien ne partait et le client ne voyait aucune position. Pendant une
   // course on renvoie donc la dernière position connue toutes les 2 s.
   useEffect(() => {
@@ -567,7 +567,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     if (activeRide?.id && socket?.connected) joinRide(socket, activeRide.id);
   }, [activeRide?.id, joinRide]);
 
-  /* ---------- Carte du Zem : son déplacement, le client, la destination ---------- */
+  /* ---------- Carte du Spider : son déplacement, le client, la destination ---------- */
   // Étape en cours : vers le client tant qu'il n'est pas monté, puis vers la destination.
   const routeTarget = useMemo<LatLng | null>(() => {
     if (!activeRide) return null;
@@ -615,7 +615,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
       { id: "destination", coordinate: { latitude: activeRide.destLat, longitude: activeRide.destLng }, title: "Arrivée", color: "red" },
     ];
     // Le client n'est montré en direct que tant qu'il rejoint le point de départ : une fois sur la
-    // moto, sa position est celle du Zem.
+    // moto, sa position est celle du Spider.
     if (liveClient && clientPos) {
       list.push({ id: "client", coordinate: clientPos, title: who, color: "orange", heading: clientPos.heading });
     }
@@ -927,7 +927,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     );
   }
 
-  // Une course ou une proposition en cours ramène sur l'accueil : c'est là que le Zem agit
+  // Une course ou une proposition en cours ramène sur l'accueil : c'est là que le Spider agit
   useEffect(() => {
     if (activeRide || offered) setTab("home");
   }, [activeRide?.id, offered?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -954,7 +954,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      {/* Barre d'application du Zem : photo, titre de l'onglet, état en ligne, notifications */}
+      {/* Barre d'application du Spider : photo, titre de l'onglet, état en ligne, notifications */}
       <View style={[styles.appBar, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => setTab("profile")} accessibilityRole="button" accessibilityLabel="Mon profil">
           <Avatar uri={avatarUri} initials={initials(user)} size={44} fontSize={16} />
@@ -1402,7 +1402,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
                 </View>
               </Pressable>
               <View style={{ flex: 1 }}>
-                <Text style={styles.pfName} numberOfLines={2}>{displayName(user) || "Zem AZƆ̀"}</Text>
+                <Text style={styles.pfName} numberOfLines={2}>{displayName(user) || "Spider AZƆ̀"}</Text>
                 <Text style={styles.pfPhone}>{user ? formatBeninPhoneDisplay(user.phone) : ""}</Text>
                 <View style={styles.pfPills}>
                   {myVehicle ? (

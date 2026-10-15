@@ -88,7 +88,7 @@ async function fetchRoute(server: string, origin: LatLng, destination: LatLng, s
 }
 
 /**
- * Trajet d'une course, du départ du client à la destination (ligne pointillée de la carte du Zem).
+ * Trajet d'une course, du départ du client à la destination (ligne pointillée de la carte du Spider).
  * Demandé d'abord au serveur (`?stage=trip`, mis en cache 10 min) ; repli sur OSRM si le serveur
  * ne le fournit pas encore.
  */

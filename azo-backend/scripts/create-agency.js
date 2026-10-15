@@ -10,7 +10,7 @@
  *   --plan <niveau>    PRO (défaut), SILVER, OR, DIAMANT, PLATINE ou ELITE : frais d'activation, commission et plafond viennent de tarification.json
  *   --balance <F>      solde AZƆ̀ Pay du gérant (défaut : de quoi payer l'activation du niveau + 50 000 F)
  *   --activated        agence DÉJÀ activée (frais réglés). Sans cela, le testeur voit et paie l'activation lui-même.
- *   --with-drivers     crée aussi deux Zem approuvés (0197000101 et 0197000102) que l'agence peut rattacher par numéro
+ *   --with-drivers     crée aussi deux Spider approuvés (0197000101 et 0197000102) que l'agence peut rattacher par numéro
  *   --allow-remote     nécessaire si DATABASE_URL ne vise pas une base locale (ex. la base de production sur Render)
  *
  * - Sans danger si relancé : un compte existant est complété, jamais dupliqué ; un solde déjà positif n'est pas modifié.
@@ -131,7 +131,7 @@ async function main() {
   console.log(`  Gérant : ${phone} — connexion dans l'application avec le numéro ${local} puis le code OTP.`);
   console.log(`  Solde AZƆ̀ Pay du gérant : ${balance.toLocaleString("fr-FR")} F · ${activated ? "agence déjà activée" : `activation à payer : ${level.activationFee.toLocaleString("fr-FR")} F (le testeur le fait dans l'application)`}`);
 
-  // --- Conducteurs Zem à rattacher (facultatif) ---
+  // --- Conducteurs Spider à rattacher (facultatif) ---
   if (flag("with-drivers")) {
     const drivers = [
       { phone: "+2290197000101", fullName: "Romaric Soglo", plate: "RB-1001-AX", balance: 10000 },
@@ -150,7 +150,7 @@ async function main() {
         });
       }
       await ensureWallet(user.id, d.balance);
-      console.log(`  Zem à rattacher par numéro : ${d.phone.slice(4)} (${d.fullName})`);
+      console.log(`  Spider à rattacher par numéro : ${d.phone.slice(4)} (${d.fullName})`);
     }
   }
 }

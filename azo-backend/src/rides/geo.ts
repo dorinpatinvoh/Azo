@@ -19,7 +19,7 @@ export const lerp = (a: LatLng, b: LatLng, t: number): LatLng => ({
   lng: a.lng + (b.lng - a.lng) * t,
 });
 
-/** Tarifs FCFA — le Zem est nettement moins cher que la Voiture. À ajuster. */
+/** Tarifs FCFA — le Spider est nettement moins cher que la Voiture. À ajuster. */
 export const TARIFFS: Record<
   ServiceType,
   { base: number; perKm: number; perMin: number; min: number; speedKmh: number }

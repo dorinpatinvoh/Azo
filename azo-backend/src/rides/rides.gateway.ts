@@ -101,7 +101,7 @@ export class RidesGateway implements OnGatewayConnection {
       try {
         const payload = this.jwt.verify(raw);
         client.data.user = { userId: payload.sub, role: payload.role, phone: payload.phone };
-        // Room personnelle dès la connexion : le client reçoit la popup « un Zem a accepté », quel que soit
+        // Room personnelle dès la connexion : le client reçoit la popup « un Spider a accepté », quel que soit
         // l'écran affiché, sans avoir à ouvrir le suivi de la course (ride:join).
         client.join(`user:${payload.sub}`);
         // Les chauffeurs rejoignent la room "drivers" pour recevoir les événements radar
@@ -183,7 +183,7 @@ export class RidesGateway implements OnGatewayConnection {
     return result;
   }
 
-  // Autoriser la position du Zem pendant OFFERED (client voit sa distance)
+  // Autoriser la position du Spider pendant OFFERED (client voit sa distance)
   @SubscribeMessage("driver:location")
   async location(
     @ConnectedSocket() client: Socket,
@@ -739,7 +739,7 @@ export class RidesGateway implements OnGatewayConnection {
     this.server?.to("drivers").emit("ride:new", { ...payload, at: new Date().toISOString() });
   }
 
-  /** Un Zem a accepté la course : le client reçoit le profil du Zem (popup) dans sa room personnelle. */
+  /** Un Spider a accepté la course : le client reçoit le profil du Spider (popup) dans sa room personnelle. */
   emitOffered(clientId: string, payload: Record<string, unknown>) {
     this.server?.to(`user:${clientId}`).emit("ride:offered", payload);
   }
@@ -749,18 +749,18 @@ export class RidesGateway implements OnGatewayConnection {
     this.server?.to(`user:${clientId}`).emit("ride:offer-ended", { rideId, outcome, at: new Date().toISOString() });
   }
 
-  /** Le client a annulé la course : le Zem assigné est prévenu même s'il n'a pas rejoint la room de la course. */
+  /** Le client a annulé la course : le Spider assigné est prévenu même s'il n'a pas rejoint la room de la course. */
   emitRideCancelled(driverId: string, rideId: string) {
     this.server?.to(`user:${driverId}`).emit("ride:cancelled", { rideId, at: new Date().toISOString() });
   }
 
-  /** Le client a choisi ce Zem : il passe à la carte sans avoir rejoint la room de la course. */
+  /** Le client a choisi ce Spider : il passe à la carte sans avoir rejoint la room de la course. */
   emitOfferApproved(driverId: string, rideId: string) {
     this.server?.to(`user:${driverId}`).emit("ride:offer-approved", { rideId, at: new Date().toISOString() });
     this.server?.to(`user:${driverId}`).emit("ride:status", { rideId, status: "MATCHED" });
   }
 
-  /** Le client a ouvert la popup : le Zem peut afficher « Le client regarde ton profil ». */
+  /** Le client a ouvert la popup : le Spider peut afficher « Le client regarde ton profil ». */
   emitOfferSeen(driverId: string, rideId: string, at: string) {
     this.server?.to(`user:${driverId}`).emit("ride:offer-seen", { rideId, at });
   }

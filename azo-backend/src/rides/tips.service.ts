@@ -160,7 +160,7 @@ export class TipsService {
           throw new BadRequestException({ code: "WALLET_INSUFFICIENT", message: "Solde insuffisant pour envoyer ce pourboire." });
         }
 
-        // Crédit du Zem (pas de commission, 100 % reversé)
+        // Crédit du Spider (pas de commission, 100 % reversé)
         const driverWallet = await tx.wallet.upsert({
           where: { userId: driverId },
           create: { userId: driverId },
@@ -180,7 +180,7 @@ export class TipsService {
               amount,
               label: `Pourboire pour la course ${rideRef}`,
               labelKey: "TRANSACTION_TIP_SENT",
-              labelParams: { ride: rideRef, driver: driverDisplayName ?? "Zem" },
+              labelParams: { ride: rideRef, driver: driverDisplayName ?? "Spider" },
               meta: `tip:${rideId}`,
               kind: "TIP",
             },
@@ -222,7 +222,7 @@ export class TipsService {
       throw error;
     }
 
-    // Notification au Zem
+    // Notification au Spider
     await this.notifications
       .push(
         driverId,

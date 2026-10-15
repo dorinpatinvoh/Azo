@@ -20,7 +20,7 @@ const OPTIONS: { value: AccountKind; labelKey: MessageKey; descKey: MessageKey; 
 type Props = { value: AccountKind; onChange: (kind: AccountKind) => void };
 
 /**
- * Liste déroulante (combobox) du type de compte : Client, Zem & Conducteur indépendant, Coursier & Livreur ou Agence.
+ * Liste déroulante (combobox) du type de compte : Client, Spider & Conducteur indépendant, Coursier & Livreur ou Agence.
  * Chaque profil a son icône et une phrase d'explication. Le choix détermine le parcours d'inscription proposé ensuite.
  */
 export default function AccountKindPicker({ value, onChange }: Props) {

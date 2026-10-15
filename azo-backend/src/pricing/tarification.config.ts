@@ -23,10 +23,10 @@ export type VehicleFamily = "ZEM" | "CAR";
 
 export type VehicleKey = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | "LEOPARD";
 
-/** Clés de la filière Zem (moto-taxi) : mêmes règles de profil, même radar. */
+/** Clés de la filière Spider (moto-taxi) : mêmes règles de profil, même radar. */
 export const ZEM_VEHICLE_KEYS: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC"];
 
-/** Tous les véhicules facturables, dans l'ordre d'affichage (Zem puis voitures). */
+/** Tous les véhicules facturables, dans l'ordre d'affichage (Spider puis voitures). */
 export const VEHICLE_KEYS: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"];
 
 /** Types de véhicules historiques encore présents en base (courses/dossiers passés). */
@@ -77,7 +77,7 @@ export type ProfilePricing = {
   category?: string;
   monthlyRevenueSharePct?: number;
   withdrawalFeePct?: number;
-  /** Commission prélevée sur chaque course (0 pour un Zem indépendant : part mensuelle). */
+  /** Commission prélevée sur chaque course (0 pour un Spider indépendant : part mensuelle). */
   rideCommissionPct?: number;
   _notes?: string;
   /** Valeurs provisoires « règle à définir » (jamais des règles validées). */
@@ -185,7 +185,7 @@ function assertValid(config: TarificationConfig): TarificationConfig {
     }
   }
 
-  // Les deux types de Zem appartiennent obligatoirement à la filière ZEM : le radar
+  // Les deux types de Spider appartiennent obligatoirement à la filière ZEM : le radar
   // chauffeur et les règles de profil ZEM_INDEPENDANT s'appuient sur ce champ.
   for (const zem of ZEM_VEHICLE_KEYS) {
     const family = config.vehicles?.[zem]?.family;

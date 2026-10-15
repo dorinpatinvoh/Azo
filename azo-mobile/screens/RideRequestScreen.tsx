@@ -44,7 +44,7 @@ const VEHICLES: Vehicle[] = [
   },
   {
     id: "zem-elec",
-    name: "Zém Électrique",
+    name: "Spider Électrique",
     badge: "Éco",
     eta: "4 min",
     note: "Silencieux",

@@ -34,9 +34,9 @@ export type RidePriceBreakdown = {
   distanceKm: number;
   /** Base effectivement facturée (après remise). */
   base: number;
-  /** Base du barème avant remise (150 F pour un Zem). */
+  /** Base du barème avant remise (150 F pour un Spider). */
   baseFull: number;
-  /** Remise appliquée à la base (0 ou 25 % pour un Zem au-delà de 10 km). */
+  /** Remise appliquée à la base (0 ou 25 % pour un Spider au-delà de 10 km). */
   baseDiscountPct: number;
   baseDiscountApplied: boolean;
   /** Distance à partir de laquelle la remise de base s'applique. */
@@ -59,7 +59,7 @@ export type WithdrawalFees = {
  *
  * Toutes les règles viennent de `tarification.json` : prix des courses (par gamme
  * de véhicule et par tranche de km), commissions et frais des agences, profils
- * prestataires (part mensuelle des Zem indépendants, frais de retrait).
+ * prestataires (part mensuelle des Spider indépendants, frais de retrait).
  *
  * Convention de montants : FCFA, entiers, **sans arrondi** — troncature des
  * décimales (`Math.floor`) conformément à la spécification.
@@ -85,7 +85,7 @@ export class PricingService {
     return this.config.currency;
   }
 
-  /** Véhicules facturables, dans l'ordre d'affichage (Zem puis voitures). */
+  /** Véhicules facturables, dans l'ordre d'affichage (Spider puis voitures). */
   vehicleKeys(): VehicleKey[] {
     return Object.keys(this.config.vehicles) as VehicleKey[];
   }
@@ -96,7 +96,7 @@ export class PricingService {
     return this.config.vehicles[vehicle].family === "ZEM" ? "ZEM" : "CAR";
   }
 
-  /** Vrai pour un moto-taxi (Zem essence ou électrique). */
+  /** Vrai pour un moto-taxi (Spider essence ou électrique). */
   isZem(vehicleType?: string | null): boolean {
     if (!vehicleType) return false;
     try {
@@ -106,7 +106,7 @@ export class PricingService {
     }
   }
 
-  /** Les deux types de Zem (moto-taxi) : essence et électrique. */
+  /** Les deux types de Spider (moto-taxi) : essence et électrique. */
   zemVehicleKeys(): VehicleKey[] {
     return [...ZEM_VEHICLE_KEYS];
   }
@@ -140,9 +140,9 @@ export class PricingService {
    * Filtrage du radar chauffeur (`GET /rides/pending`) : le prestataire ne reçoit que
    * les demandes correspondant au véhicule qu'il a déclaré.
    *
-   *   * `strictVehicleMatch = true` (défaut) : correspondance EXACTE — un Zem électrique
-   *     ne voit pas les demandes de Zem à essence, et Gazelle ≠ Koala ≠ Léopard.
-   *   * `false` (démarrage / démonstration) : les deux Zem partagent leurs demandes ;
+   *   * `strictVehicleMatch = true` (défaut) : correspondance EXACTE — un Spider électrique
+   *     ne voit pas les demandes de Spider à essence, et Gazelle ≠ Koala ≠ Léopard.
+   *   * `false` (démarrage / démonstration) : les deux Spider partagent leurs demandes ;
    *     les voitures restent filtrées par gamme exacte.
    */
   rideVisibleFor(driverVehicle?: string | null, rideVehicle?: string | null): boolean {
@@ -155,7 +155,7 @@ export class PricingService {
 
     if (this.config.radar?.strictVehicleMatch ?? true) return driver === ride;
 
-    // Mode souple : les deux types de Zem partagent leurs demandes ; les voitures
+    // Mode souple : les deux types de Spider partagent leurs demandes ; les voitures
     // restent filtrées par gamme exacte.
     const driverIsZem = this.vehicleFamily(driver) === "ZEM";
     const rideIsZem = this.vehicleFamily(ride) === "ZEM";
@@ -220,7 +220,7 @@ export class PricingService {
    *
    * Chaque véhicule porte ses paliers dans la configuration (`brackets`) :
    *
-   *   * **Zem** (motos-taxis) : **mêmes paliers** pour les deux types — **70 F/km de 0 à
+   *   * **Spider** (motos-taxis) : **mêmes paliers** pour les deux types — **70 F/km de 0 à
    *     15 km**, **60 F/km de 16 à 25 km**, **50 F/km à partir du 26e km** ; seule la base
    *     diffère (150 F à essence, 100 F en électrique), sans remise ;
    *   * **voitures** : base et deux paliers (ex. Gazelle 800 F, 200 F/km jusqu'à 15 km
@@ -266,7 +266,7 @@ export class PricingService {
       previousLimitMm = bracket.upToKm === null ? kmMm : upperLimitMm;
     }
 
-    // Remise de base : uniquement au-delà de la distance configurée (Zem : plus de 10 km).
+    // Remise de base : uniquement au-delà de la distance configurée (Spider : plus de 10 km).
     const discount = pricing.baseDiscount;
     const discountApplied = !!discount && distanceKm > discount.aboveKm;
     const base = discountApplied
@@ -346,12 +346,12 @@ export class PricingService {
     return this.profilePricing(profile).category ?? null;
   }
 
-  /** Part mensuelle prélevée sur les revenus du mois (15 % pour un Zem indépendant). */
+  /** Part mensuelle prélevée sur les revenus du mois (15 % pour un Spider indépendant). */
   monthlyRevenueShare(profile: string, monthRevenue: number): number {
     return this.percentOf(monthRevenue, this.profilePricing(profile).monthlyRevenueSharePct ?? 0);
   }
 
-  /** Frais prélevés sur chaque retrait (1,5 % pour un Zem indépendant). */
+  /** Frais prélevés sur chaque retrait (1,5 % pour un Spider indépendant). */
   profileWithdrawalFees(profile: string, amount: number): WithdrawalFees {
     return this.withdrawalFees(amount, this.profilePricing(profile).withdrawalFeePct ?? 0);
   }
@@ -378,7 +378,7 @@ export class PricingService {
    * Commission AZƆ̀ d'une course : niveau d'agence si le conducteur est rattaché à une
    * flotte, sinon la règle du profil.
    *
-   * Le Zem indépendant a `rideCommissionPct = 0` — règle validée — car il paie 15 % de
+   * Le Spider indépendant a `rideCommissionPct = 0` — règle validée — car il paie 15 % de
    * ses revenus au mois (voir `monthlyRevenueShare`), jamais par course. Pour LIVREUR et
    * COURSIER la valeur est provisoire (« règle à définir », voir `aDefinir` dans la
    * configuration) : elle ne doit pas être présentée comme une règle validée.

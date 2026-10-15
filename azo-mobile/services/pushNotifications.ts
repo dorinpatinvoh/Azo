@@ -47,10 +47,10 @@ export async function registerForPushNotifications(): Promise<string | null> {
     const Notifications = require("expo-notifications");
 
     if (Platform.OS === "android") {
-      // Canal dédié aux propositions de Zem : son et vibration forts, visible sur l'écran verrouillé.
+      // Canal dédié aux propositions de Spider : son et vibration forts, visible sur l'écran verrouillé.
       // Le serveur l'utilise en envoyant `channelId: "ride-offers"` (voir DEMANDE_BACKEND_POPUP_PROPOSITION_ZEM.md).
       await Notifications.setNotificationChannelAsync("ride-offers", {
-        name: "Propositions de Zem",
+        name: "Propositions de Spider",
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 400, 200, 400],
         lightColor: "#7100AF",

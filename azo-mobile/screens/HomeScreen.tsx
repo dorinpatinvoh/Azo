@@ -74,7 +74,7 @@ const QUICK_DESTINATIONS: { id: string; labelKey: MessageKey; icon: keyof typeof
   { id: "calavi", labelKey: "home.dest.calavi", icon: "school", service: "zem" },
 ];
 
-// Économie du Zem électrique sur un trajet de référence, calculée avec le barème (jamais écrite à la main).
+// Économie du Spider électrique sur un trajet de référence, calculée avec le barème (jamais écrite à la main).
 const PROMO_KM = 5;
 
 export default function HomeScreen({ clientName = "", onSelectService, onNavigateTab }: Props) {
@@ -118,7 +118,7 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
       .finally(() => setLoadingWallet(false));
   }, []);
 
-  // Économie réelle du Zem électrique par rapport à l'essence (0 si le barème ne la justifie pas)
+  // Économie réelle du Spider électrique par rapport à l'essence (0 si le barème ne la justifie pas)
   const promoSavings = Math.max(0, ridePrice(PROMO_KM, "ZEM_ESSENCE") - ridePrice(PROMO_KM, "ZEM_ELECTRIC"));
 
   return (
@@ -256,7 +256,7 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
           ))}
         </View>
 
-        {/* Bannière promo Zem Électrique */}
+        {/* Bannière promo Spider Électrique */}
         <LinearGradient
           colors={["#008751", "#005a36"]}
           start={{ x: 0, y: 0 }}

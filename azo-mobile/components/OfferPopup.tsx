@@ -9,22 +9,22 @@ import DriverOfferCard from "./DriverOfferCard";
 
 type Props = {
   ride: Ride;
-  /** Course mise à jour après la décision du client (MATCHED = Zem choisi, PENDING = refusé). */
+  /** Course mise à jour après la décision du client (MATCHED = Spider choisi, PENDING = refusé). */
   onChanged: (ride: Ride) => void;
   onClose: () => void;
 };
 
 /**
- * Popup plein écran : un Zem a accepté la course. Elle vibre, prévient le Zem que le client la voit
+ * Popup plein écran : un Spider a accepté la course. Elle vibre, prévient le Spider que le client la voit
  * (`offer-seen`) et réutilise la carte de décision de l'écran de suivi (profil, compte à rebours,
- * « Choisir ce Zem » / « Refuser »).
+ * « Choisir ce Spider » / « Refuser »).
  */
 export default function OfferPopup({ ride, onChanged, onClose }: Props) {
   const { t } = useI18n();
 
   useEffect(() => {
     Vibration.vibrate([0, 250, 120, 250]);
-    // Dit au Zem que le client regarde sa proposition (sans effet tant que le serveur n'a pas la route)
+    // Dit au Spider que le client regarde sa proposition (sans effet tant que le serveur n'a pas la route)
     ridesApi.offerSeen(ride.id).catch(() => undefined);
   }, [ride.id]);
 

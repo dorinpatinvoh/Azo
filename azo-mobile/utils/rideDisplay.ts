@@ -8,7 +8,7 @@ const numLocale = () => languageInfo(getLanguage()).locale;
 
 export const fcfa = (n: number) => `${n.toLocaleString(numLocale())} F`;
 
-// Libellés courts d'un véhicule : les deux Zem (motos-taxis) puis les trois voitures.
+// Libellés courts d'un véhicule : les deux Spider (motos-taxis) puis les trois voitures.
 // Lus à chaque accès (accesseurs) : ils suivent la langue choisie sans changer les appels existants.
 export const VEHICLE_LABEL = {} as Record<VehicleType, string>;
 (["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"] as VehicleType[]).forEach((v) => {

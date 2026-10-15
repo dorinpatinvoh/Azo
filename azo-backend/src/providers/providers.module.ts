@@ -60,9 +60,9 @@ import { PLANS, PLAN_LABELS } from "../agencies/plans";
 /* -------------------------------------------------------------------------- */
 
 // Types ouverts au dépôt de dossier sur AZƆ̀ :
-// - DRIVER  : Zem, Zem indépendant (moto-taxi / électrique), Voiture indépendante
+// - DRIVER  : Spider, Spider indépendant (moto-taxi / électrique), Voiture indépendante
 // - COURIER : Coursier express, Coursier personnel (courses/achats), Livreur de colis
-// - AGENCY  : Agence de flotte (Zem, Voitures, Livreurs)
+// - AGENCY  : Agence de flotte (Spider, Voitures, Livreurs)
 // (Pas d'activité Artisan sur AZƆ̀.)
 export const ENABLED_PROVIDER_TYPES: ProviderType[] = ["DRIVER", "COURIER", "AGENCY"];
 export const VISIBLE_PROVIDER_TYPES: ProviderType[] = ["DRIVER", "COURIER", "AGENCY"];
@@ -77,7 +77,7 @@ export const ROLE_FOR_TYPE: Record<ProviderType, Role> = {
 
 // Pièces exigées pour approuver un dossier.
 export const REQUIRED_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
-  // Zem et conducteurs : plus de permis ni de visite technique à l'inscription ; photo de profil obligatoire.
+  // Spider et conducteurs : plus de permis ni de visite technique à l'inscription ; photo de profil obligatoire.
   DRIVER: ["CNI", "SELFIE", "PROFILE_PHOTO", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
   COURIER: ["CNI", "SELFIE", "PROFILE_PHOTO", "PERMIS", "PHOTO_VEHICULE"],
   // Agences : logo obligatoire.
@@ -113,7 +113,7 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 const TYPE_LABELS: Record<ProviderType, string> = {
-  DRIVER: "Zem & Conducteur indépendant",
+  DRIVER: "Spider & Conducteur indépendant",
   COURIER: "Coursier, Coursier personnel & Livreur",
   AGENCY: "Agence de flotte",
   ARTISAN: "Prestataire",
@@ -178,8 +178,8 @@ const DRIVER_VEHICLE_CHOICES: {
   hint: string;
   family: "ZEM" | "CAR";
 }[] = [
-  { value: "ZEM_ESSENCE", label: "Zem à essence", hint: "Moto-taxi thermique — courses rapides et économiques", family: "ZEM" },
-  { value: "ZEM_ELECTRIC", label: "Zem électrique", hint: "Moto-taxi électrique — même tarif, zéro émission", family: "ZEM" },
+  { value: "ZEM_ESSENCE", label: "Spider à essence", hint: "Moto-taxi thermique — courses rapides et économiques", family: "ZEM" },
+  { value: "ZEM_ELECTRIC", label: "Spider électrique", hint: "Moto-taxi électrique — même tarif, zéro émission", family: "ZEM" },
   { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme, trajets en ville", family: "CAR" },
   { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire, confort avec climatisation", family: "CAR" },
   { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée, trajets VIP", family: "CAR" },
@@ -189,7 +189,7 @@ const DRIVER_VEHICLE_CHOICES: {
 // (décision du 5 octobre 2026 — l'harmonisation « moto essence / moto électrique » de la
 // livraison est renvoyée à un chantier ultérieur, elle toucherait les dossiers existants).
 const COURIER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string }[] = [
-  { value: "GAZELLE", label: "Gazelle — Moto / Zem (coursier)", hint: "Plis, courses personnelles et colis en ville" },
+  { value: "GAZELLE", label: "Gazelle — Moto / Spider (coursier)", hint: "Plis, courses personnelles et colis en ville" },
   { value: "KOALA", label: "Koala — Voiture climatisée (livreur)", hint: "Colis moyens, achats et marchandises" },
   { value: "LEOPARD", label: "Léopard — Berline haut de gamme (livreur)", hint: "Livraisons premium et clients VIP" },
 ];
@@ -262,9 +262,9 @@ function parseAgencyDetails(provider: {
 }
 
 const TYPE_DESCRIPTIONS: Record<ProviderType, string> = {
-  DRIVER: "Zem, Zem indépendant (moto-taxi), Zem électrique ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
+  DRIVER: "Spider, Spider indépendant (moto-taxi), Spider électrique ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
   COURIER: "Coursier express, coursier personnel (courses, marché, pharmacie) ou livreur de colis avec double code OTP.",
-  AGENCY: "Gère une flotte de conducteurs Zem, voitures ou coursiers-livreurs, suis leur activité et bénéficie d'une commission réduite.",
+  AGENCY: "Gère une flotte de conducteurs Spider, voitures ou coursiers-livreurs, suis leur activité et bénéficie d'une commission réduite.",
   ARTISAN: "",
 };
 

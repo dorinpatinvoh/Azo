@@ -259,7 +259,7 @@ export type RegistrationPayload = {
   firstName: string;
   gender: "M" | "F";
   npi: string;
-  /** Type de compte choisi à l'inscription (Client, Zem, coursier, agence). */
+  /** Type de compte choisi à l'inscription (Client, Spider, coursier, agence). */
   accountKind?: "CLIENT" | "DRIVER" | "COURIER" | "AGENCY";
 };
 
@@ -362,22 +362,22 @@ export const placesApi = {
 
 /**
  * Véhicules AZƆ̀ (barème tarifaire), en deux filières distinctes :
- *   * ZEM_ESSENCE / ZEM_ELECTRIC → les motos-taxis (Zem), facturés au même tarif ;
+ *   * ZEM_ESSENCE / ZEM_ELECTRIC → les motos-taxis (Spider), facturés au même tarif ;
  *   * GAZELLE / KOALA / LEOPARD  → les voitures proposées pour une course.
  * Les anciens types ZEM / CAR ne sont plus proposés : les courses passées sont
  * rattachées à un véhicule (ZEM → ZEM_ESSENCE ; CAR → KOALA) via `services/tarification`.
  */
 export type VehicleType = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | "LEOPARD";
 
-/** Filière d'un véhicule : moto-taxi (Zem) ou voiture. */
+/** Filière d'un véhicule : moto-taxi (Spider) ou voiture. */
 export type VehicleFamily = "ZEM" | "CAR";
-// OFFERED : un Zem a accepté, le client doit confirmer (voir PROJECT_SUMMARY/DEMANDE_BACKEND_RADAR_PROFIL_ZEM_ET_CARTE.md)
+// OFFERED : un Spider a accepté, le client doit confirmer (voir PROJECT_SUMMARY/DEMANDE_BACKEND_RADAR_PROFIL_ZEM_ET_CARTE.md)
 export type RideStatus = "PENDING" | "OFFERED" | "MATCHED" | "ARRIVED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 // ⚠️ N'ajoute AUCUN autre champ : le backend refuse les champs inconnus.
 export type RideRequest = {
   originLat: number; originLng: number; destLat: number; destLng: number; vehicleType: VehicleType;
-  /** Adresses lisibles (facultatives) : le serveur les renvoie au Zem, qui n'a plus à les géocoder. */
+  /** Adresses lisibles (facultatives) : le serveur les renvoie au Spider, qui n'a plus à les géocoder. */
   originLabel?: string; destLabel?: string;
   /** Course programmée : heure de prise en charge souhaitée (ISO 8601). Absent = tout de suite. */
   scheduledAt?: string;
@@ -409,7 +409,7 @@ export type Estimate = {
 };
 
 /**
- * Profil public d'un Zem, montré au client AVANT qu'il confirme (statut OFFERED).
+ * Profil public d'un Spider, montré au client AVANT qu'il confirme (statut OFFERED).
  * Tous les champs sont facultatifs : l'application affiche seulement ce que le serveur fournit.
  */
 export type DriverPublicProfile = {
@@ -437,11 +437,11 @@ export type RidePerson = {
   /** « Kossi A. » (nom d'affichage fourni par le serveur) et prénom seul. */
   displayName?: string | null;
   firstName?: string | null;
-  /** Sur le radar du Zem : note moyenne donnée par les chauffeurs, nombre de notes, courses terminées. */
+  /** Sur le radar du Spider : note moyenne donnée par les chauffeurs, nombre de notes, courses terminées. */
   rating?: number | null;
   ratedCount?: number;
   rides?: number;
-  /** Présent côté client pour le Zem de la course. */
+  /** Présent côté client pour le Spider de la course. */
   profile?: DriverPublicProfile | null;
 };
 
@@ -482,14 +482,14 @@ export type Ride = {
   priceMode?: "FULL" | "PARTIAL" | null;
   /** Montant réellement débité à la fin (peut différer de `price`, l'estimation initiale). */
   finalPrice?: number;
-  /** Pourquoi la proposition du Zem a pris fin (vue restreinte du Zem) : voir DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md */
+  /** Pourquoi la proposition du Spider a pris fin (vue restreinte du Spider) : voir DEMANDE_BACKEND_FIN_PROPOSITION_ZEM.md */
   offerOutcome?: "approved" | "declined" | "expired" | "withdrawn" | "cancelled" | null;
-  /** Proposition d'un Zem en attente de la confirmation du client (statut OFFERED). */
+  /** Proposition d'un Spider en attente de la confirmation du client (statut OFFERED). */
   offerExpiresAt?: string | null;
   /** Quand le client a ouvert la popup (null = pas encore vu ; absent = le serveur ne le dit pas). */
   offerSeenAt?: string | null;
   offer?: { expiresAt?: string; distanceKm?: number | null; etaMinutes?: number | null } | null;
-  /** Position du client relue par le Zem (MATCHED / ARRIVED), si le serveur la fournit. */
+  /** Position du client relue par le Spider (MATCHED / ARRIVED), si le serveur la fournit. */
   clientLat?: number | null;
   clientLng?: number | null;
   clientLocatedAt?: string | null;
@@ -608,23 +608,23 @@ export const ridesApi = {
             (radiusKm ? `&radiusKm=${radiusKm}` : "")
           : "")
     ),
-  /** Nombre de clients disponibles autour du Zem (absent du serveur = 404 : l'application compte elle-même). */
+  /** Nombre de clients disponibles autour du Spider (absent du serveur = 404 : l'application compte elle-même). */
   pendingSummary: (position: { latitude: number; longitude: number }, radiusKm: number) =>
     api.get<{ radiusKm: number; count: number; nearestKm: number | null }>(
       `${P}/rides/pending/summary?lat=${encodeURIComponent(position.latitude)}&lng=${encodeURIComponent(position.longitude)}&radiusKm=${radiusKm}`
     ),
   /** Le serveur répond OFFERED (le client doit confirmer) ou MATCHED (ancien comportement). */
   accept: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/accept`),
-  /** Le Zem retire sa proposition tant que le client n'a pas confirmé. */
+  /** Le Spider retire sa proposition tant que le client n'a pas confirmé. */
   withdrawOffer: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/withdraw-offer`),
-  /** Propositions de Zem en attente de ma décision (rattrapage de la popup) — 404 tant que le serveur ne l'a pas. */
-  /** Ma proposition en cours + la dernière terminée (10 min) : reprise après redémarrage du Zem. 404 tant que le serveur ne l'a pas. */
+  /** Propositions de Spider en attente de ma décision (rattrapage de la popup) — 404 tant que le serveur ne l'a pas. */
+  /** Ma proposition en cours + la dernière terminée (10 min) : reprise après redémarrage du Spider. 404 tant que le serveur ne l'a pas. */
   currentOffer: () =>
     api.get<{ offer: { rideId: string; status: string; expiresAt: string } | null; lastEnded: { rideId: string; outcome: string; endedAt: string } | null }>(`${P}/rides/offers/current`),
   pendingOffers: () => api.get<{ offers: { rideId: string }[] }>(`${P}/rides/offers/pending`),
-  /** Dit au Zem que le client regarde sa proposition (popup affichée). */
+  /** Dit au Spider que le client regarde sa proposition (popup affichée). */
   offerSeen: (rideId: string) => api.post<{ seenAt?: string }>(`${P}/rides/${rideId}/offer-seen`),
-  /** Le client choisit ce Zem (OFFERED → MATCHED) ou le refuse (OFFERED → PENDING). */
+  /** Le client choisit ce Spider (OFFERED → MATCHED) ou le refuse (OFFERED → PENDING). */
   approveDriver: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/approve-driver`),
   declineDriver: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/decline-driver`),
   driverProfile: (rideId: string) => api.get<DriverPublicProfile>(`${P}/rides/${rideId}/driver-profile`),
@@ -641,7 +641,7 @@ export const ridesApi = {
   declineStop: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/stop-decline`),
   cancelStop: (rideId: string) => api.post<Ride>(`${P}/rides/${rideId}/stop-cancel`),
 
-  /** Pourboire : 100 % reversé au Zem, débité du portefeuille. `Idempotency-Key` évite un double débit. */
+  /** Pourboire : 100 % reversé au Spider, débité du portefeuille. `Idempotency-Key` évite un double débit. */
   tip: (rideId: string, amount: number, idempotencyKey: string) =>
     api.post<{ rideId: string; tipId?: string; amount: number; balance?: number; at?: string }>(
       `${P}/rides/${rideId}/tip`,

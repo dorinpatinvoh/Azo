@@ -42,7 +42,7 @@ export class RideSettlementService {
     if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course doit être en cours");
     const deadline = new Date(Date.now() + CONFIRMATION_MINUTES * 60_000);
     const row = await this.prisma.$queryRawUnsafe<SettlementRow[]>(`INSERT INTO "RideSettlement" ("id","rideId","dropoffAt","confirmationDeadline") VALUES (md5(random()::text || clock_timestamp()::text),$1,NOW(),$2) ON CONFLICT ("rideId") DO UPDATE SET "dropoffAt"=NOW(),"confirmationDeadline"=$2,"problemReportedAt"=NULL,"problemReason"=NULL,"clientConfirmedAt"=NULL RETURNING "rideId","dropoffAt","confirmationDeadline","clientConfirmedAt","problemReportedAt","problemReason"`, rideId, deadline);
-    await this.notifications.push(ride.clientId, "Confirme ton arrivée", `Le Zem indique t'avoir déposé. Confirme dans ${CONFIRMATION_MINUTES} minutes ou signale un problème.`, "payment", {
+    await this.notifications.push(ride.clientId, "Confirme ton arrivée", `Le Spider indique t'avoir déposé. Confirme dans ${CONFIRMATION_MINUTES} minutes ou signale un problème.`, "payment", {
       titleKey: "NOTIFICATION_SETTLEMENT_CONFIRM",
       params: { minutes: CONFIRMATION_MINUTES },
       data: { event: "ride-settlement", rideId },
@@ -55,7 +55,7 @@ export class RideSettlementService {
     const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
     if (!ride || ride.clientId !== clientId) throw new BadRequestException("Course introuvable");
     const settlement = await this.row(rideId);
-    if (!settlement) throw new BadRequestException("Le Zem doit d'abord signaler le dépôt");
+    if (!settlement) throw new BadRequestException("Le Spider doit d'abord signaler le dépôt");
     if (settlement.problemReportedAt) throw new BadRequestException("Cette course est en litige");
     if (settlement.clientConfirmedAt) return { status: "COMPLETED", alreadyConfirmed: true };
     if (new Date(settlement.confirmationDeadline).getTime() < Date.now()) throw new BadRequestException("Le délai de confirmation est dépassé. La course doit être vérifiée par AZƆ̀.");

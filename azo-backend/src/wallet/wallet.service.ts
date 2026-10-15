@@ -5,7 +5,7 @@ import { PricingService } from "../pricing/pricing.service";
 import { FedaPayService } from "./fedapay.service";
 import { Prisma, TransactionStatus, TransactionType } from "@prisma/client";
 
-const MONTHLY_ZEM_SETTLEMENT_LABEL = "Prélèvement mensuel Zem";
+const MONTHLY_ZEM_SETTLEMENT_LABEL = "Prélèvement mensuel Spider";
 
 /** Recharge minimale par FedaPay (FCFA). Le mobile applique la même valeur (config/wallet.ts). */
 export const MIN_RECHARGE = 300;

@@ -50,7 +50,7 @@ export class AdminService {
     private npiCrypto: NpiCryptoService
   ) {}
 
-  // Prélèvement mensuel des Zem indépendants (15 % des revenus du mois), délégué au
+  // Prélèvement mensuel des Spider indépendants (15 % des revenus du mois), délégué au
   // portefeuille pour rester idempotent et auditable.
   chargeZemMonthly(period?: string) {
     return this.wallet.chargeMonthlyIndependentZem(period);
@@ -265,7 +265,7 @@ export class AdminController {
   }
 
   // POST /admin/settlements/zem-monthly  { "period": "2026-09" }
-  // Prélèvement mensuel des Zem indépendants : 15 % des revenus du mois (idempotent).
+  // Prélèvement mensuel des Spider indépendants : 15 % des revenus du mois (idempotent).
   @Post("settlements/zem-monthly")
   zemMonthly(@Body() dto: MonthlySettlementDto) {
     return this.svc.chargeZemMonthly(dto.period);

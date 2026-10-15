@@ -26,12 +26,12 @@ const initialsOf = (name: string) =>
 
 /**
  * Liste de secours tant que le serveur ne fournit pas `GET /messages/conversations` : on retrouve les
- * Zem des courses passées (historique) et on lit les messages que le serveur a encore en mémoire.
+ * Spider des courses passées (historique) et on lit les messages que le serveur a encore en mémoire.
  * Elle est donc incomplète — c'est justement la raison de la demande faite au backend.
  */
 async function conversationsFromHistory(unknownName: string): Promise<Conversation[]> {
   const rides = await ridesApi.history();
-  // Une entrée par Zem : sa course la plus récente (l'historique arrive du plus récent au plus ancien)
+  // Une entrée par Spider : sa course la plus récente (l'historique arrive du plus récent au plus ancien)
   const latestByDriver = new Map<string, Ride>();
   for (const ride of rides) {
     if (!ride.driverId || !ride.driver || ride.status === "PENDING" || ride.status === "OFFERED") continue;
@@ -66,7 +66,7 @@ async function conversationsFromHistory(unknownName: string): Promise<Conversati
     .sort((a, b) => Date.parse(b.lastMessage?.at ?? "") - Date.parse(a.lastMessage?.at ?? ""));
 }
 
-/** Onglet « Messages » : les Zem avec qui le client a déjà échangé, du plus récent au plus ancien. */
+/** Onglet « Messages » : les Spider avec qui le client a déjà échangé, du plus récent au plus ancien. */
 export default function MessagesScreen({ onBack, onNavigateTab }: Props) {
   const insets = useSafeAreaInsets();
   const { t, locale } = useI18n();

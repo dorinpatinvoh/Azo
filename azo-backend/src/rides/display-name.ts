@@ -30,7 +30,7 @@ export function buildDisplayName(user: {
 }
 
 /**
- * Même logique pour le Zem (source : ProviderProfile.fullName, repli User.fullName).
+ * Même logique pour le Spider (source : ProviderProfile.fullName, repli User.fullName).
  */
 export function buildDriverDisplayName(driver: {
   providerFullName?: string | null;

@@ -11,7 +11,7 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   rideId: string;
-  /** Nom déjà connu du Zem (affiché même si le profil détaillé n'est pas disponible). */
+  /** Nom déjà connu du Spider (affiché même si le profil détaillé n'est pas disponible). */
   name: string;
   profile?: DriverPublicProfile | null;
   /** Boutons de décision, présents tant que le client n'a pas confirmé. */
@@ -43,7 +43,7 @@ function Row({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap
 }
 
 /**
- * Profil public du Zem, montré au client AVANT qu'il le choisisse. Le profil vient de la course
+ * Profil public du Spider, montré au client AVANT qu'il le choisisse. Le profil vient de la course
  * (`driver.profile`) ; à défaut, on le demande à `GET /rides/:id/driver-profile`. Le serveur ne
  * fournit jamais le téléphone ni les pièces d'identité : seulement ce qui rassure le client.
  */

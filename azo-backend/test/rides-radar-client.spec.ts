@@ -45,7 +45,7 @@ function makeService() {
   return { service, findMany };
 }
 
-describe("radar du Zem : destination et pseudo du client", () => {
+describe("radar du Spider : destination et pseudo du client", () => {
   it("demande uniquement le fullName du client à la base", async () => {
     const { service, findMany } = makeService();
     await service.pending("driver-1");
@@ -63,7 +63,7 @@ describe("radar du Zem : destination et pseudo du client", () => {
   });
 });
 
-describe("le pseudo du client reste dans les réponses utilisées par l'écran Zem", () => {
+describe("le pseudo du client reste dans les réponses utilisées par l'écran Spider", () => {
   const clientInclude = { client: { select: { fullName: true, phone: true, firstName: true, lastName: true } } };
 
   function makeActiveService(status: string) {

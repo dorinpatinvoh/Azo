@@ -19,7 +19,7 @@
  */
 
 export type RadarSettings = {
-  /** Correspondance exacte des véhicules (Zem essence ≠ Zem électrique, etc.). */
+  /** Correspondance exacte des véhicules (Spider essence ≠ Spider électrique, etc.). */
   strictVehicleMatch: boolean;
   /** Rayon de recherche en km autour du chauffeur — `0` = aucune limite. */
   searchRadiusKm: number;

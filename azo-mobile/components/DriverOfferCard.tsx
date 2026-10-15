@@ -16,8 +16,8 @@ type Props = {
 };
 
 /**
- * Un Zem a accepté la course (statut OFFERED) : le client voit qui c'est, ouvre son profil et décide
- * — le choisir (la course démarre) ou le refuser (la demande repart chez les autres Zem).
+ * Un Spider a accepté la course (statut OFFERED) : le client voit qui c'est, ouvre son profil et décide
+ * — le choisir (la course démarre) ou le refuser (la demande repart chez les autres Spider).
  * Sans réponse dans le délai, le serveur remet lui-même la demande en recherche.
  */
 export default function DriverOfferCard({ ride, onChanged }: Props) {

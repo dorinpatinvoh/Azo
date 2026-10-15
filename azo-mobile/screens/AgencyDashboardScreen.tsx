@@ -470,6 +470,22 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
 
               {tab === "fleet" && (
               <>
+              {/* Résumé de la flotte */}
+              <View style={styles.flSummary}>
+                <View style={styles.flTile}>
+                  <Text style={styles.flTileValue}>{data.roster.length}</Text>
+                  <Text style={styles.flTileLabel}>{t("ag.fleet.total")}</Text>
+                </View>
+                <View style={styles.flTile}>
+                  <Text style={[styles.flTileValue, { color: colors.primary }]}>{data.roster.filter((m) => m.state === "EN_COURSE").length}</Text>
+                  <Text style={styles.flTileLabel}>{t("ag.state.busy")}</Text>
+                </View>
+                <View style={styles.flTile}>
+                  <Text style={styles.flTileValue}>{num(Math.max(data.seatsTotal - data.seatsUsed, 0))}</Text>
+                  <Text style={styles.flTileLabel}>{t("ag.fleet.seatsLeft")}</Text>
+                </View>
+              </View>
+
               {/* En-tête Équipe + bouton d'ajout */}
               <View style={styles.sectionHeaderRow}>
                 <View>
@@ -513,71 +529,75 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                   <Text style={styles.muted}>{t("ag.empty.body")}</Text>
                 </View>
               ) : (
-                <View style={{ gap: spacing.sm }}>
+                <View style={{ gap: spacing.sm + 2 }}>
                   {filteredRoster.map((d) => {
                     const displayName = d.fullName || formatBeninPhoneDisplay(d.phone);
                     const initial = displayName.trim().charAt(0).toUpperCase() || "C";
                     const busyCourse = d.state === "EN_COURSE";
                     return (
-                      <View key={d.id} style={styles.driverRow}>
-                        <View style={styles.driverAvatar}>
-                          <Text style={styles.driverInitial}>{initial}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.driverName} numberOfLines={1}>
-                            {displayName}
-                          </Text>
-                          <Text style={styles.driverMeta} numberOfLines={1}>
-                            {t("ag.row.rides", { phone: formatBeninPhoneDisplay(d.phone), n: d.jobsCompleted })}
-                            {d.rating > 0 ? ` · ★ ${d.rating.toFixed(1)}` : ""}
-                          </Text>
-                          {typeof d.balance === "number" ? (
-                            <Text style={styles.driverMeta} numberOfLines={1}>
-                              {t("ag.balance", { amount: fcfa(d.balance) })}
+                      <View key={d.id} style={styles.flCard}>
+                        <View style={styles.flTop}>
+                          <View>
+                            <LinearGradient colors={[colors.primary, colors.secondaryContainer]} style={styles.flAvatar}>
+                              <Text style={styles.flInitial}>{initial}</Text>
+                            </LinearGradient>
+                            <View style={[styles.flDot, { backgroundColor: busyCourse ? colors.primary : "#1E8E3E" }]} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.flName} numberOfLines={1}>{displayName}</Text>
+                            <Text style={styles.flPhone}>{formatBeninPhoneDisplay(d.phone)}</Text>
+                          </View>
+                          <View style={[styles.statusPill, { backgroundColor: busyCourse ? colors.primaryFixed : colors.surfaceContainer }]}>
+                            <Text style={[styles.statusPillText, { color: busyCourse ? colors.primary : colors.onSurfaceVariant }]}>
+                              {busyCourse ? t("ag.state.busy") : t("ag.state.free")}
                             </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.flChips}>
+                          <View style={styles.flChip}>
+                            <MaterialIcons name="check-circle-outline" size={14} color={colors.onSurfaceVariant} />
+                            <Text style={styles.flChipText}>{d.jobsCompleted}</Text>
+                          </View>
+                          {d.rating > 0 ? (
+                            <View style={styles.flChip}>
+                              <MaterialIcons name="star" size={14} color="#F9AB00" />
+                              <Text style={styles.flChipText}>{d.rating.toFixed(1)}</Text>
+                            </View>
+                          ) : null}
+                          {typeof d.balance === "number" ? (
+                            <View style={[styles.flChip, styles.flChipBalance]}>
+                              <MaterialIcons name="account-balance-wallet" size={14} color={colors.primary} />
+                              <Text style={[styles.flChipText, { color: colors.primary, fontWeight: "800" }]}>{fcfa(d.balance)}</Text>
+                            </View>
                           ) : null}
                         </View>
-                        <View
-                          style={[
-                            styles.statusPill,
-                            { backgroundColor: busyCourse ? colors.primaryFixed : colors.surfaceContainer },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.statusPillText,
-                              { color: busyCourse ? colors.primary : colors.onSurfaceVariant },
-                            ]}
+
+                        <View style={styles.flActions}>
+                          <Pressable style={[styles.flBtn, { flex: 1.3 }]} onPress={() => openTransfer(d)} accessibilityLabel={t("ag.xfer.manage")}>
+                            <MaterialIcons name="account-balance-wallet" size={17} color={colors.primary} />
+                            <Text style={styles.flBtnText} numberOfLines={1}>{t("ag.row.account")}</Text>
+                          </Pressable>
+                          <Pressable style={[styles.flBtn, { flex: 1 }]} onPress={() => Linking.openURL(`tel:${d.phone}`)} accessibilityLabel={t("ag.call")}>
+                            <MaterialIcons name="phone" size={17} color={colors.primary} />
+                            <Text style={styles.flBtnText} numberOfLines={1}>{t("ag.call")}</Text>
+                          </Pressable>
+                          <Pressable
+                            style={[styles.flBtn, { flex: 1, backgroundColor: colors.errorContainer }]}
+                            disabled={detachingId === d.id}
+                            onPress={() => confirmDetach(d)}
+                            accessibilityLabel={t("ag.detachLabel")}
                           >
-                            {busyCourse ? t("ag.state.busy") : t("ag.state.free")}
-                          </Text>
+                            {detachingId === d.id ? (
+                              <ActivityIndicator size="small" color={colors.error} />
+                            ) : (
+                              <>
+                                <MaterialIcons name="person-remove" size={17} color={colors.error} />
+                                <Text style={[styles.flBtnText, { color: colors.error }]} numberOfLines={1}>{t("ag.detach.confirm")}</Text>
+                              </>
+                            )}
+                          </Pressable>
                         </View>
-                        <Pressable
-                          style={styles.smallIconBtn}
-                          onPress={() => openTransfer(d)}
-                          accessibilityLabel={t("ag.xfer.manage")}
-                        >
-                          <MaterialIcons name="account-balance-wallet" size={18} color={colors.primary} />
-                        </Pressable>
-                        <Pressable
-                          style={styles.smallIconBtn}
-                          onPress={() => Linking.openURL(`tel:${d.phone}`)}
-                          accessibilityLabel={t("ag.call")}
-                        >
-                          <MaterialIcons name="phone" size={18} color={colors.primary} />
-                        </Pressable>
-                        <Pressable
-                          style={[styles.smallIconBtn, { backgroundColor: colors.errorContainer }]}
-                          disabled={detachingId === d.id}
-                          onPress={() => confirmDetach(d)}
-                          accessibilityLabel={t("ag.detachLabel")}
-                        >
-                          {detachingId === d.id ? (
-                            <ActivityIndicator size="small" color={colors.error} />
-                          ) : (
-                            <MaterialIcons name="person-remove" size={17} color={colors.error} />
-                          )}
-                        </Pressable>
                       </View>
                     );
                   })}
@@ -744,13 +764,29 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
         }}
       />
 
-      {/* Modale d'ajout d'un conducteur / coursier par numéro à 10 chiffres */}
+      {/* Fenêtre de rattachement d'un conducteur / coursier par numéro à 10 chiffres */}
       <Modal visible={addVisible} transparent animationType="fade" onRequestClose={() => setAddVisible(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{t("ag.modal.title")}</Text>
-            <Text style={styles.modalSub}>{t("ag.modal.sub")}</Text>
+            <LinearGradient colors={[colors.primary, colors.secondaryContainer]} style={styles.flModalIcon}>
+              <MaterialIcons name="person-add-alt-1" size={28} color={colors.onPrimary} />
+            </LinearGradient>
+            <Text style={[styles.modalTitle, { textAlign: "center" }]}>{t("ag.modal.title")}</Text>
+            <Text style={[styles.modalSub, { textAlign: "center" }]}>{t("ag.modal.sub")}</Text>
 
+            {data ? (
+              <View style={styles.flSlots}>
+                <MaterialIcons name="groups" size={16} color={colors.primary} />
+                <Text style={styles.flSlotsText}>
+                  {t("ag.modal.slots", { free: num(Math.max(data.seatsTotal - data.seatsUsed, 0)), total: num(data.seatsTotal) })}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.flLabelRow}>
+              <Text style={styles.flLabel}>{t("ag.modal.numberLabel")}</Text>
+              <Text style={styles.flCount}>{digits.length}/10</Text>
+            </View>
             <View style={[styles.phoneRow, phoneValid && styles.phoneRowValid]}>
               <View style={styles.flagBadge}>
                 <Svg width={18} height={12} viewBox="0 0 450 300">
@@ -770,35 +806,40 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                 maxLength={14}
                 autoFocus
               />
-              {phoneValid && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
+              {phoneValid && <MaterialIcons name="check-circle" size={22} color={colors.primary} />}
             </View>
 
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.modalCancel}
-                onPress={() => {
-                  setAddVisible(false);
-                  setPhoneInput("");
-                }}
-              >
-                <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalConfirm, (!phoneValid || adding) && { opacity: 0.6 }]}
-                disabled={!phoneValid || adding}
-                onPress={handleAttachDriver}
-              >
-                {adding ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.modalConfirmText}>{t("ag.modal.attach")}</Text>
-                )}
-              </Pressable>
+            <View style={styles.flTips}>
+              <View style={styles.flTip}><MaterialIcons name="verified-user" size={15} color={colors.primary} /><Text style={styles.flTipText}>{t("ag.modal.tip1")}</Text></View>
+              <View style={styles.flTip}><MaterialIcons name="notifications-active" size={15} color={colors.primary} /><Text style={styles.flTipText}>{t("ag.modal.tip2")}</Text></View>
             </View>
+
+            <Pressable
+              style={[styles.flPrimary, (!phoneValid || adding) && { opacity: 0.5 }]}
+              disabled={!phoneValid || adding}
+              onPress={handleAttachDriver}
+            >
+              {adding ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <MaterialIcons name="person-add-alt-1" size={18} color="#fff" />
+                  <Text style={styles.modalConfirmText}>{t("ag.modal.attachCta")}</Text>
+                </>
+              )}
+            </Pressable>
+            <Pressable
+              style={styles.flCancel}
+              onPress={() => {
+                setAddVisible(false);
+                setPhoneInput("");
+              }}
+            >
+              <Text style={styles.flCancelText}>{t("common.cancel")}</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
-
       {/* Modale « compte du chauffeur » : recharger ou retirer de l'argent */}
       <Modal visible={!!xferMember} transparent animationType="fade" onRequestClose={() => setXferMember(null)}>
         <View style={styles.modalBackdrop}>
@@ -872,6 +913,36 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
 }
 
 const styles = StyleSheet.create({
+  flSummary: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
+  flTile: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, paddingVertical: spacing.sm + 2, alignItems: "center", borderWidth: 1, borderColor: colors.surfaceContainer },
+  flTileValue: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  flTileLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
+  flCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, gap: spacing.sm + 2, borderWidth: 1, borderColor: colors.surfaceContainer },
+  flTop: { flexDirection: "row", alignItems: "center", gap: spacing.sm + 2 },
+  flAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  flInitial: { ...typography.headlineSm, color: colors.onPrimary, fontWeight: "800" },
+  flDot: { position: "absolute", right: -1, bottom: -1, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: colors.surfaceContainerLowest },
+  flName: { ...typography.bodyLg, color: colors.onSurface, fontWeight: "800" },
+  flPhone: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 1 },
+  flChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  flChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full, backgroundColor: colors.surfaceContainer },
+  flChipBalance: { backgroundColor: colors.primaryFixed },
+  flChipText: { ...typography.labelSm, color: colors.onSurfaceVariant, fontWeight: "700" },
+  flActions: { flexDirection: "row", gap: 8 },
+  flBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 42, borderRadius: radius.full, backgroundColor: colors.primaryFixed, paddingHorizontal: 8 },
+  flBtnText: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
+  flModalIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", alignSelf: "center" },
+  flSlots: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, alignSelf: "center", backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 6 },
+  flSlotsText: { ...typography.labelSm, color: colors.primary, fontWeight: "800" },
+  flLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.xs },
+  flLabel: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
+  flCount: { ...typography.labelSm, color: colors.primary, fontWeight: "800" },
+  flTips: { gap: 6, marginTop: 2 },
+  flTip: { flexDirection: "row", alignItems: "center", gap: 8 },
+  flTipText: { ...typography.bodySm, color: colors.onSurfaceVariant, flex: 1 },
+  flPrimary: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 50, borderRadius: radius.full, backgroundColor: colors.primary, marginTop: spacing.xs },
+  flCancel: { alignItems: "center", justifyContent: "center", height: 40 },
+  flCancelText: { ...typography.labelLg, color: colors.onSurfaceVariant, fontWeight: "700" },
   pfIdentity: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, borderWidth: 1, borderColor: colors.surfaceContainer },
   pfRing: { width: 84, height: 84, borderRadius: 42, alignItems: "center", justifyContent: "center" },
   pfAvatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: colors.surfaceContainerLowest, alignItems: "center", justifyContent: "center", overflow: "hidden" },

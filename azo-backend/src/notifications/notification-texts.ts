@@ -37,10 +37,10 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     de: t("Fahrer gefunden", "Ein Fahrer hat deine Fahrt angenommen und ist unterwegs zu dir."),
   },
   NOTIFICATION_RIDE_OFFERED: {
-    fr: t("Un Zem a accepté ta course", "Touche pour voir son profil — il te reste {s} s."),
-    en: t("A Zem accepted your ride", "Tap to see their profile — you have {s} s left."),
-    es: t("Un Zem aceptó tu viaje", "Toca para ver su perfil — te quedan {s} s."),
-    de: t("Ein Zem hat deine Fahrt angenommen", "Tippe, um sein Profil zu sehen — dir bleiben {s} s."),
+    fr: t("Un Spider a accepté ta course", "Touche pour voir son profil — il te reste {s} s."),
+    en: t("A Spider accepted your ride", "Tap to see their profile — you have {s} s left."),
+    es: t("Un Spider aceptó tu viaje", "Toca para ver su perfil — te quedan {s} s."),
+    de: t("Ein Spider hat deine Fahrt angenommen", "Tippe, um sein Profil zu sehen — dir bleiben {s} s."),
   },
   NOTIFICATION_RIDE_APPROVED: {
     fr: t("Le client t'a choisi", "Rejoins le point de prise en charge."),
@@ -49,16 +49,16 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     de: t("Der Kunde hat dich gewählt", "Fahre zum Abholpunkt."),
   },
   NOTIFICATION_RIDE_DECLINED: {
-    fr: t("Le client a choisi un autre Zem.", "Tu peux accepter une autre demande."),
-    en: t("The customer chose another Zem.", "You can accept another request."),
-    es: t("El cliente eligió a otro Zem.", "Puedes aceptar otra solicitud."),
-    de: t("Der Kunde hat einen anderen Zem gewählt.", "Du kannst eine andere Anfrage annehmen."),
+    fr: t("Le client a choisi un autre Spider.", "Tu peux accepter une autre demande."),
+    en: t("The customer chose another Spider.", "You can accept another request."),
+    es: t("El cliente eligió a otro Spider.", "Puedes aceptar otra solicitud."),
+    de: t("Der Kunde hat einen anderen Spider gewählt.", "Du kannst eine andere Anfrage annehmen."),
   },
   NOTIFICATION_RIDE_WITHDRAWN: {
-    fr: t("Le Zem a retiré sa proposition.", "Nous cherchons un autre Zem."),
-    en: t("The Zem withdrew their offer.", "We are looking for another Zem."),
-    es: t("El Zem retiró su propuesta.", "Buscamos otro Zem."),
-    de: t("Der Zem hat sein Angebot zurückgezogen.", "Wir suchen einen anderen Zem."),
+    fr: t("Le Spider a retiré sa proposition.", "Nous cherchons un autre Spider."),
+    en: t("The Spider withdrew their offer.", "We are looking for another Spider."),
+    es: t("El Spider retiró su propuesta.", "Buscamos otro Spider."),
+    de: t("Der Spider hat sein Angebot zurückgezogen.", "Wir suchen einen anderen Spider."),
   },
   NOTIFICATION_RIDE_OFFER_EXPIRED: {
     fr: t("Le client n'a pas répondu à ta proposition.", "Tu peux accepter une autre demande."),
@@ -73,10 +73,10 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     de: t("Deine geplante Fahrt ist geöffnet", "Wir suchen einen Fahrer für die geplante Zeit."),
   },
   NOTIFICATION_ZEM_ARRIVED: {
-    fr: t("Ton Zem est arrivé", "Ton chauffeur est au point de prise en charge. Donne-lui le code Bouclier affiché dans l'application pour démarrer."),
-    en: t("Your Zem has arrived", "Your driver is at the pick-up point. Give them the Shield code shown in the app to start."),
-    es: t("Tu Zem ha llegado", "Tu conductor está en el punto de recogida. Dale el código Escudo que aparece en la aplicación para empezar."),
-    de: t("Dein Zem ist da", "Dein Fahrer ist am Abholpunkt. Nenne ihm den in der App angezeigten Schild-Code, um zu starten."),
+    fr: t("Ton Spider est arrivé", "Ton chauffeur est au point de prise en charge. Donne-lui le code Bouclier affiché dans l'application pour démarrer."),
+    en: t("Your Spider has arrived", "Your driver is at the pick-up point. Give them the Shield code shown in the app to start."),
+    es: t("Tu Spider ha llegado", "Tu conductor está en el punto de recogida. Dale el código Escudo que aparece en la aplicación para empezar."),
+    de: t("Dein Spider ist da", "Dein Fahrer ist am Abholpunkt. Nenne ihm den in der App angezeigten Schild-Code, um zu starten."),
   },
   NOTIFICATION_DRIVER_ARRIVED: {
     fr: t("Ton chauffeur est arrivé", "Ton chauffeur est au point de prise en charge. Donne-lui le code Bouclier affiché dans l'application pour démarrer."),
@@ -91,10 +91,10 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     de: t("Fahrt gestartet", "Dein Fahrer ist auf dem Weg zum Ziel."),
   },
   NOTIFICATION_RIDE_DROP_CODE: {
-    fr: t("Confirme ton arrivée", "Ton Zem demande le code d'arrivée. Donne-lui le code affiché dans l'application pour confirmer que tu es arrivé."),
-    en: t("Confirm your arrival", "Your Zem asks for the arrival code. Give them the code shown in the app to confirm you have arrived."),
-    es: t("Confirma tu llegada", "Tu Zem pide el código de llegada. Dale el código que aparece en la aplicación para confirmar que has llegado."),
-    de: t("Bestätige deine Ankunft", "Dein Zem fragt nach dem Ankunftscode. Nenne ihm den in der App angezeigten Code, um deine Ankunft zu bestätigen."),
+    fr: t("Confirme ton arrivée", "Ton Spider demande le code d'arrivée. Donne-lui le code affiché dans l'application pour confirmer que tu es arrivé."),
+    en: t("Confirm your arrival", "Your Spider asks for the arrival code. Give them the code shown in the app to confirm you have arrived."),
+    es: t("Confirma tu llegada", "Tu Spider pide el código de llegada. Dale el código que aparece en la aplicación para confirmar que has llegado."),
+    de: t("Bestätige deine Ankunft", "Dein Spider fragt nach dem Ankunftscode. Nenne ihm den in der App angezeigten Code, um deine Ankunft zu bestätigen."),
   },
   NOTIFICATION_RIDE_STOP_REQUEST: {
     fr: t("Demande d'arrêt de course", "L'autre participant demande d'arrêter la course ici."),
@@ -351,7 +351,7 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     de: t("Neuer Kurier wird gesucht", "Der Kurier musste absagen. Deine Lieferung wird den verfügbaren Kurieren erneut angeboten."),
   },
   NOTIFICATION_SETTLEMENT_CONFIRM: {
-    fr: t("Confirme ton arrivée", "Le Zem indique t'avoir déposé. Confirme dans {minutes} minutes ou signale un problème."),
+    fr: t("Confirme ton arrivée", "Le Spider indique t'avoir déposé. Confirme dans {minutes} minutes ou signale un problème."),
     en: t("Confirm your arrival", "The driver says they dropped you off. Confirm within {minutes} minutes or report a problem."),
     es: t("Confirma tu llegada", "El conductor indica que te dejó. Confirma en {minutes} minutos o informa de un problema."),
     de: t("Bestätige deine Ankunft", "Der Fahrer meldet, dich abgesetzt zu haben. Bestätige innerhalb von {minutes} Minuten oder melde ein Problem."),

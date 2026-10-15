@@ -28,7 +28,7 @@ type Props = { onBack: () => void };
 
 export default function WalletScreen({ onBack }: Props) {
   const { t, locale } = useI18n();
-  // Zem, conducteurs et coursiers ne rechargent pas AZƆ̀ Pay : leur solde vient des courses (et de leur agence)
+  // Spider, conducteurs et coursiers ne rechargent pas AZƆ̀ Pay : leur solde vient des courses (et de leur agence)
   const [canRecharge, setCanRecharge] = useState(true);
   useEffect(() => {
     SecureStore.getItemAsync("userRole")

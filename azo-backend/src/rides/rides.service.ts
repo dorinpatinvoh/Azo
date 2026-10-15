@@ -29,7 +29,7 @@ const WITH_CLIENT = {
   client: { select: { fullName: true, phone: true, firstName: true, lastName: true } },
 } as const;
 
-// Le Zem avec son dossier prestataire (pour le profil public)
+// Le Spider avec son dossier prestataire (pour le profil public)
 const WITH_DRIVER_PROFILE = {
   driver: {
     select: {
@@ -471,8 +471,8 @@ export class RidesService {
    *
    * Le radar applique la règle de visibilité de la configuration tarifaire
    * (`pricing.rideVisibleFor`) : par défaut un prestataire ne voit que les demandes du
-   * véhicule EXACT qu'il a déclaré — un Zem à essence ne voit donc pas les demandes de
-   * Zem électrique, et Gazelle ≠ Koala ≠ Léopard. Le mode souple (deux Zem qui
+   * véhicule EXACT qu'il a déclaré — un Spider à essence ne voit donc pas les demandes de
+   * Spider électrique, et Gazelle ≠ Koala ≠ Léopard. Le mode souple (deux Spider qui
    * partagent leurs demandes) s'active dans `tarification.json` (`radar.strictVehicleMatch`).
    *
    * Les coursiers (livraison) ne reçoivent pas les demandes de transport : leur espace
@@ -496,7 +496,7 @@ export class RidesService {
     const rides = await this.prisma.ride.findMany({
       where: {
         status: "PENDING",
-        // Exclure les demandes où ce Zem a déjà été refusé / retiré
+        // Exclure les demandes où ce Spider a déjà été refusé / retiré
         NOT: { declinedDriverIds: { has: driverId } },
         // Une course programmée n'apparaît qu'une fois ouverte aux chauffeurs
         OR: [{ scheduledAt: null }, { scheduledReleasedAt: { not: null } }],
@@ -519,7 +519,7 @@ export class RidesService {
 
     this.sweepScheduledRides();
     const visible = radar.filter((ride) => this.pricing.rideVisibleFor(driverVehicle, ride.vehicleType));
-    // Note moyenne et nombre de courses de chaque client, pour que le Zem décide en connaissance de cause
+    // Note moyenne et nombre de courses de chaque client, pour que le Spider décide en connaissance de cause
     const stats = await clientStatsFor(this.prisma, visible.map((ride) => ride.clientId));
 
     return visible.map((ride) => {
@@ -597,7 +597,7 @@ export class RidesService {
     const settings = this.pricing.rideSettings();
     const requireApproval = settings.requireClientApproval;
 
-    // Vérifier que le Zem n'a pas déjà été exclu de cette demande
+    // Vérifier que le Spider n'a pas déjà été exclu de cette demande
     const rideCheck = await this.prisma.ride.findUnique({
       where: { id: rideId },
       select: { id: true, declinedDriverIds: true, status: true, createdAt: true, scheduledAt: true, scheduledReleasedAt: true },
@@ -624,7 +624,7 @@ export class RidesService {
       const ride = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
       this.gateway.invalidateRideLocationContext(rideId);
       await this.openOffer(rideId, driverId, offerExpiresAt);
-      // Popup du client : événement temps réel + notification poussée. NON bloquant : la réponse au Zem ne
+      // Popup du client : événement temps réel + notification poussée. NON bloquant : la réponse au Spider ne
       // doit jamais attendre la livraison d'une notification (l'API Expo peut mettre 6 s à répondre).
       void this.announceOffer(rideId).catch((e) => this.logger.warn(`announceOffer ${rideId} : ${e?.message ?? e}`));
       this.gateway.emitStatus(rideId, "OFFERED");
@@ -651,7 +651,7 @@ export class RidesService {
     }
   }
 
-  /** Client confirme la proposition du Zem → OFFERED → MATCHED */
+  /** Client confirme la proposition du Spider → OFFERED → MATCHED */
   async approveDriver(rideId: string, clientId: string) {
     await this.expireOfferedIfNeeded(rideId);
     const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
@@ -686,7 +686,7 @@ export class RidesService {
     return this.visibleRideToUser(updated, clientId);
   }
 
-  /** Client refuse la proposition du Zem → OFFERED → PENDING (Zem exclu) */
+  /** Client refuse la proposition du Spider → OFFERED → PENDING (Spider exclu) */
   async declineDriver(rideId: string, clientId: string) {
     const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
     if (!ride) throw new NotFoundException("Course introuvable");
@@ -695,7 +695,7 @@ export class RidesService {
     return this.revertOfferToPending(ride, ride.driverId, "declined");
   }
 
-  /** Zem retire sa proposition → OFFERED → PENDING (Zem exclu) */
+  /** Spider retire sa proposition → OFFERED → PENDING (Spider exclu) */
   async withdrawOffer(rideId: string, driverId: string) {
     const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
     if (!ride) throw new NotFoundException("Course introuvable");
@@ -730,12 +730,12 @@ export class RidesService {
     }
 
     if (driverId && reason === "declined") {
-      await this.notifications.push(driverId, "Le client a choisi un autre Zem.", "Tu peux accepter une autre demande.", "ride",
+      await this.notifications.push(driverId, "Le client a choisi un autre Spider.", "Tu peux accepter une autre demande.", "ride",
         { sendPush: true, data: { event: "ride-declined", rideId: ride.id }, titleKey: "NOTIFICATION_RIDE_DECLINED" }
       ).catch(() => null);
     }
     if (driverId && reason === "withdrawn") {
-      await this.notifications.push(ride.clientId, "Le Zem a retiré sa proposition.", "Nous cherchons un autre Zem.", "ride",
+      await this.notifications.push(ride.clientId, "Le Spider a retiré sa proposition.", "Nous cherchons un autre Spider.", "ride",
         { data: { event: "ride-withdrawn", rideId: ride.id }, titleKey: "NOTIFICATION_RIDE_WITHDRAWN", bodyKey: "NOTIFICATION_RIDE_WITHDRAWN_BODY" }
       ).catch(() => null);
     }
@@ -799,7 +799,7 @@ export class RidesService {
     }
   }
 
-  /** Clôt la proposition ouverte de ce Zem et le prévient en temps réel (la room user: suffit, il n'a pas rejoint la course). */
+  /** Clôt la proposition ouverte de ce Spider et le prévient en temps réel (la room user: suffit, il n'a pas rejoint la course). */
   private async closeOffer(
     rideId: string,
     driverId: string | null,
@@ -818,7 +818,7 @@ export class RidesService {
     else this.gateway.emitOfferEnded(driverId, rideId, status.toLowerCase() as "declined" | "expired" | "withdrawn" | "cancelled");
   }
 
-  /** Vue restreinte pour un Zem détaché de la course : jamais de position, de téléphone ni de nom complet du client. */
+  /** Vue restreinte pour un Spider détaché de la course : jamais de position, de téléphone ni de nom complet du client. */
   private async endedOfferView(rideId: string, userId: string) {
     let last: { status: string; endedAt: Date | null } | null = null;
     try {
@@ -841,7 +841,7 @@ export class RidesService {
     };
   }
 
-  /** Ma proposition en cours : reprise après redémarrage de l'application du Zem. */
+  /** Ma proposition en cours : reprise après redémarrage de l'application du Spider. */
   async currentOffer(driverId: string) {
     const now = new Date();
     const ride = await this.prisma.ride.findFirst({
@@ -889,9 +889,9 @@ export class RidesService {
   }
 
   /**
-   * Contenu de la popup du client : profil public du Zem + délai, avec l'heure du serveur pour que le compte à
+   * Contenu de la popup du client : profil public du Spider + délai, avec l'heure du serveur pour que le compte à
    * rebours ne dépende pas de l'horloge du téléphone. Même contenu pour l'événement `ride:offered` et pour
-   * `GET /rides/offers/pending`. Jamais de téléphone, d'identifiant ni de nom complet du Zem.
+   * `GET /rides/offers/pending`. Jamais de téléphone, d'identifiant ni de nom complet du Spider.
    */
   private async loadOfferPayload(rideId: string) {
     const ride = await this.prisma.ride.findUnique({
@@ -936,7 +936,7 @@ export class RidesService {
     };
   }
 
-  /** Prévient le client qu'un Zem a accepté : événement temps réel + notification poussée dédiée. */
+  /** Prévient le client qu'un Spider a accepté : événement temps réel + notification poussée dédiée. */
   private async announceOffer(rideId: string) {
     const loaded = await this.loadOfferPayload(rideId);
     if (!loaded) return;
@@ -958,7 +958,7 @@ export class RidesService {
     });
   }
 
-  /** Propositions de Zem en attente de la décision du client (rattrapage de la popup). */
+  /** Propositions de Spider en attente de la décision du client (rattrapage de la popup). */
   async pendingOffers(clientId: string) {
     const cutoff = new Date(Date.now() - this.offerGraceMs());
     const rides = await this.prisma.ride.findMany({
@@ -969,7 +969,7 @@ export class RidesService {
     return { offers: loaded.flatMap((entry) => (entry ? [entry.payload] : [])) };
   }
 
-  /** Le client a ouvert la popup : le Zem peut afficher « Le client regarde ton profil ». Idempotent. */
+  /** Le client a ouvert la popup : le Spider peut afficher « Le client regarde ton profil ». Idempotent. */
   async offerSeen(rideId: string, clientId: string) {
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
@@ -998,7 +998,7 @@ export class RidesService {
     if (ride.clientId !== clientId) throw new ForbiddenException();
     const allowedStatuses = ["OFFERED", "MATCHED", "ARRIVED", "IN_PROGRESS", "COMPLETED"];
     if (!allowedStatuses.includes(ride.status) || !ride.driverId) {
-      throw new BadRequestException("Le profil du Zem n'est pas encore disponible");
+      throw new BadRequestException("Le profil du Spider n'est pas encore disponible");
     }
     const driver = await this.prisma.user.findUnique({
       where: { id: ride.driverId },
@@ -1013,7 +1013,7 @@ export class RidesService {
         },
       },
     });
-    if (!driver) throw new NotFoundException("Zem introuvable");
+    if (!driver) throw new NotFoundException("Spider introuvable");
     return this.buildPublicDriverProfile(driver, ride);
   }
 
@@ -1088,7 +1088,7 @@ export class RidesService {
     const arrivedRide = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
     this.gateway.invalidateRideLocationContext(rideId);
     const arrivalTitle = this.pricing.isZem(arrivedRide.vehicleType)
-      ? "Ton Zem est arrivé"
+      ? "Ton Spider est arrivé"
       : "Ton chauffeur est arrivé";
 
     // L'arrivée est déjà enregistrée : une panne de notification (inbox, Expo Push)
@@ -1194,8 +1194,8 @@ export class RidesService {
   // Commission : taux du niveau d'agence si le conducteur est rattaché à une flotte,
   // sinon règles du profil prestataire (config tarifaire).
   /**
-   * Le Zem demande le code d'arrivée : le serveur le génère (une seule fois, la demande est
-   * idempotente) et le client le lit dans son application. Le client le communique au Zem,
+   * Le Spider demande le code d'arrivée : le serveur le génère (une seule fois, la demande est
+   * idempotente) et le client le lit dans son application. Le client le communique au Spider,
    * qui le saisit dans `complete` pour confirmer l'arrivée à destination.
    */
   async requestDropCode(rideId: string, driverId: string) {
@@ -1215,7 +1215,7 @@ export class RidesService {
         .push(
           ride.clientId,
           "Confirme ton arrivée",
-          "Ton Zem demande le code d'arrivée. Donne-lui le code affiché dans l'application pour confirmer que tu es arrivé.",
+          "Ton Spider demande le code d'arrivée. Donne-lui le code affiché dans l'application pour confirmer que tu es arrivé.",
           "ride",
           {
             sendPush: true,
@@ -1318,7 +1318,7 @@ export class RidesService {
     if (!ride.driverId) throw new BadRequestException("Aucun chauffeur n'est assigné à cette course.");
 
     // Arrêt accepté : le paiement n'est PAS encore fait. Un code d'arrivée est généré pour le client ; le client le
-    // communique au Zem, qui le saisit (POST /rides/:id/complete) : c'est cette saisie qui débite le client.
+    // communique au Spider, qui le saisit (POST /rides/:id/complete) : c'est cette saisie qui débite le client.
     if (ride.stopAcceptedAt) {
       return { rideId, stopRequest: this.stopRequestPayload(ride.stopRequestedBy as "CLIENT" | "DRIVER", ride.stopRequestedAt, ride.stopRequestedPrice, ride.stopRequestedDistanceMeters ?? ride.traveledMeters, ride.stopAcceptedAt) };
     }
@@ -1337,7 +1337,7 @@ export class RidesService {
       acceptedAt
     );
     await this.notifications
-      .push(ride.clientId, "Confirme ton arrivée", "Arrêt accepté. Donne à ton Zem le code affiché dans l'application pour confirmer le paiement.", "ride", {
+      .push(ride.clientId, "Confirme ton arrivée", "Arrêt accepté. Donne à ton Spider le code affiché dans l'application pour confirmer le paiement.", "ride", {
         sendPush: true,
         data: { event: "ride-drop-code", rideId },
         titleKey: "NOTIFICATION_RIDE_DROP_CODE",
@@ -1445,7 +1445,7 @@ export class RidesService {
       expiresAt: new Date((acceptedAt ?? at).getTime() + ttl).toISOString(),
       price,
       distanceMeters,
-      // Arrêt accepté : le client lit le code d'arrivée, le Zem le saisit (POST /rides/:id/complete) et le paiement part
+      // Arrêt accepté : le client lit le code d'arrivée, le Spider le saisit (POST /rides/:id/complete) et le paiement part
       ...(acceptedAt ? { accepted: true, codeRequired: true } : {}),
     };
   }
@@ -1476,7 +1476,7 @@ export class RidesService {
     return count > 0;
   }
 
-  /** Fin de course par le Zem : le code d'arrivée donné par le client est obligatoire. */
+  /** Fin de course par le Spider : le code d'arrivée donné par le client est obligatoire. */
   async complete(rideId: string, driverId: string, code?: string) {
     const ride = await this.getOwnedByDriver(rideId, driverId);
     if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course n'est pas en cours");
@@ -1701,7 +1701,7 @@ export class RidesService {
     const isDriver = ride.driverId === userId;
     if (!isClient && !isDriver) throw new ForbiddenException();
 
-    // Le Zem en OFFERED doit utiliser withdraw-offer, pas cancel
+    // Le Spider en OFFERED doit utiliser withdraw-offer, pas cancel
     if (isDriver && ride.status === "OFFERED") {
       return this.withdrawOffer(rideId, userId);
     }
@@ -1824,7 +1824,7 @@ export class RidesService {
     });
     if (!ride) throw new NotFoundException("Course introuvable");
     if (ride.clientId !== userId && ride.driverId !== userId) {
-      // Zem dont la proposition vient de finir : vue restreinte (issue de la proposition) au lieu d'un 403
+      // Spider dont la proposition vient de finir : vue restreinte (issue de la proposition) au lieu d'un 403
       const ended = await this.endedOfferView(id, userId);
       if (ended) return ended;
       throw new ForbiddenException();
@@ -1868,7 +1868,7 @@ export class RidesService {
       });
     }
 
-    // Pour le client en statut OFFERED : ajouter le profil du Zem (B.5)
+    // Pour le client en statut OFFERED : ajouter le profil du Spider (B.5)
     const rideVisible = this.visibleRideToUser(ride, userId) as any;
     if (userId === ride.clientId && ["OFFERED", "MATCHED", "ARRIVED", "IN_PROGRESS", "COMPLETED"].includes(ride.status) && ride.driverId && (ride as any).driver) {
       const d = (ride as any).driver;
@@ -1894,13 +1894,13 @@ export class RidesService {
         }} : {}),
       };
     } else if (userId === ride.driverId && (ride as any).client) {
-      // Pour le Zem : displayName du client (C.2.4)
+      // Pour le Spider : displayName du client (C.2.4)
       const c = (ride as any).client;
       const { displayName, firstName } = buildDisplayName(c);
       rideVisible.client = { ...c, displayName, firstName };
     }
 
-    // Pourboire (3.2) : le montant envoyé est visible du client ET du Zem de la course ;
+    // Pourboire (3.2) : le montant envoyé est visible du client ET du Spider de la course ;
     // la fenêtre restante (`tipUntil`) n'est calculée que pour le client propriétaire.
     const tipInfo = await this.readTipForRide(ride);
     if (tipInfo?.tip) {
@@ -1945,7 +1945,7 @@ export class RidesService {
 
   /**
    * Pourboire attaché à une course (3.2) : `{ amount, at }` si un pourboire a été
-   * envoyé, sinon `null`. Visible du client ET du Zem de la course.
+   * envoyé, sinon `null`. Visible du client ET du Spider de la course.
    */
   private async readTipForRide(ride: { id: string }): Promise<{ tip: { amount: number; at: string } | null }> {
     // Défensif : selon les contextes (tests avec mock partiel), le client Prisma peut ne
@@ -1963,7 +1963,7 @@ export class RidesService {
 
   /**
    * Fin de la fenêtre d'envoi de pourboire (`completedAt + windowHours`), tant que la
-   * course est terminée avec un Zem et qu'aucun pourboire n'a encore été envoyé.
+   * course est terminée avec un Spider et qu'aucun pourboire n'a encore été envoyé.
    * Renvoie `null` si la fenêtre n'est pas (ou plus) ouverte. (3.2)
    */
   private computeTipUntil(ride: {
@@ -1989,7 +1989,7 @@ export class RidesService {
     const type = String(driver.provider.type).toUpperCase();
     if (type === "COURIER") return "COURSIER";
     if (type === "DRIVER") {
-      // Un conducteur de moto-taxi (Zem essence ou électrique) sans agence est un Zem
+      // Un conducteur de moto-taxi (Spider essence ou électrique) sans agence est un Spider
       // indépendant : il paie 15 % de ses revenus du mois, pas de commission par course.
       const isZem = this.pricing.isZem(driver.provider.vehicleType);
       const hasAgency = !!driver.agencyId;
@@ -2090,7 +2090,7 @@ export class RidesService {
 
   /**
    * Chaque code n'est lisible que par le client, à son étape : le code de départ à ARRIVED,
-   * le code d'arrivée (une fois demandé par le Zem) à IN_PROGRESS.
+   * le code d'arrivée (une fois demandé par le Spider) à IN_PROGRESS.
    */
   private visibleRideToUser<
     T extends {
@@ -2127,7 +2127,7 @@ export class RidesService {
       if (ride.status === "ARRIVED") visible = { ...visible, pickupCode: ride.pickupCode };
       if (ride.status === "IN_PROGRESS" && ride.dropCode) visible = { ...visible, dropCode: ride.dropCode };
 
-      // Position du Zem visible dès OFFERED (le client voit "à X km" pendant qu'il décide)
+      // Position du Spider visible dès OFFERED (le client voit "à X km" pendant qu'il décide)
       if (
         ["OFFERED", "MATCHED", "ARRIVED", "IN_PROGRESS"].includes(ride.status) &&
         driverLat !== null && driverLat !== undefined &&
@@ -2144,7 +2144,7 @@ export class RidesService {
         };
       }
     } else if (userId === ride.driverId) {
-      // Position du client visible au Zem uniquement en MATCHED/ARRIVED (C.2.1)
+      // Position du client visible au Spider uniquement en MATCHED/ARRIVED (C.2.1)
       if (
         ["MATCHED", "ARRIVED"].includes(ride.status) &&
         clientLat !== null && clientLat !== undefined &&

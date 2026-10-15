@@ -96,8 +96,8 @@ function makeService(overrides: Record<string, unknown> = {}) {
   return { service, prisma, tx, $transaction, wallet, notifications, gateway, ride };
 }
 
-describe("code d'arrivée (dropCode) demandé par le Zem", () => {
-  it("génère le code, prévient le client et ne le montre pas au Zem", async () => {
+describe("code d'arrivée (dropCode) demandé par le Spider", () => {
+  it("génère le code, prévient le client et ne le montre pas au Spider", async () => {
     const { service, prisma, notifications } = makeService();
     const result: any = await service.requestDropCode("ride-1", driverId);
 
@@ -125,7 +125,7 @@ describe("code d'arrivée (dropCode) demandé par le Zem", () => {
   });
 });
 
-describe("fin de course par le Zem avec le code d'arrivée", () => {
+describe("fin de course par le Spider avec le code d'arrivée", () => {
   it("refuse si le code n'a pas encore été demandé", async () => {
     const { service, $transaction } = makeService();
     await expect(service.complete("ride-1", driverId, "4829")).rejects.toBeInstanceOf(BadRequestException);
@@ -165,7 +165,7 @@ describe("fin de course par le Zem avec le code d'arrivée", () => {
 });
 
 describe("visibilité du code d'arrivée", () => {
-  it("le client le voit pendant IN_PROGRESS, pas le Zem", async () => {
+  it("le client le voit pendant IN_PROGRESS, pas le Spider", async () => {
     const { service } = makeService({ dropCode: "4829" });
     const asClient: any = await service.findOne("ride-1", clientId);
     const asDriver: any = await service.findOne("ride-1", driverId);
@@ -173,7 +173,7 @@ describe("visibilité du code d'arrivée", () => {
     expect(asDriver).not.toHaveProperty("dropCode");
   });
 
-  it("le client ne le voit pas tant que le Zem ne l'a pas demandé", async () => {
+  it("le client ne le voit pas tant que le Spider ne l'a pas demandé", async () => {
     const { service } = makeService();
     const asClient: any = await service.findOne("ride-1", clientId);
     expect(asClient).not.toHaveProperty("dropCode");

@@ -389,7 +389,7 @@ describe("RidesGateway real-time ride events", () => {
         clientLocatedAt: new Date("2026-10-10T12:00:00.000Z"),
       };
 
-      it("returns the Zem's latest point only to the client", async () => {
+      it("returns the Spider's latest point only to the client", async () => {
         const { gateway } = makeGateway(liveRide);
         const socket = makeSocket(clientId, "CLIENT");
 
@@ -404,7 +404,7 @@ describe("RidesGateway real-time ride events", () => {
         expect(socket.join).toHaveBeenCalledWith(`user:${clientId}`);
       });
 
-      it("returns the client's latest point only to the Zem before the trip starts", async () => {
+      it("returns the client's latest point only to the Spider before the trip starts", async () => {
         const { gateway } = makeGateway({ ...liveRide, status: "ARRIVED" });
 
         const result = await gateway.join(makeSocket(driverId), { rideId });
