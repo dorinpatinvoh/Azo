@@ -754,6 +754,8 @@ function AppInner() {
             onOpenDossier={() => goTo("provider-status")}
             onOpenSupport={() => goTo("support")}
             onOpenWallet={() => goTo("wallet")}
+            onOpenInfo={() => goTo("profile-info")}
+            onOpenNotifications={() => goTo("notifications")}
           />
         )}
 

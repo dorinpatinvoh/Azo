@@ -14,20 +14,30 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { FONT } from "../theme/fontNormalize";
-import { Delivery, deliveryApi, errorMessage, walletApi } from "../services/api";
+import { Delivery, deliveryApi, errorMessage, userApi, walletApi, type UserProfile } from "../services/api";
 import { formatBeninPhoneDisplay, maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
 import PillTabBar, { type PillTabItem } from "../components/PillTabBar";
+import Avatar from "../components/Avatar";
+import AvatarSheet from "../components/AvatarSheet";
+import LanguageSheet from "../components/LanguageSheet";
+import { useAvatar } from "../utils/avatar";
+import { languageInfo, useI18n } from "../i18n";
+import { displayName, initials } from "./ProfileScreen";
 
 type Props = {
   onLogout: () => void;
   onOpenDossier?: () => void;
   onOpenSupport?: () => void;
   onOpenWallet?: () => void;
+  /** Informations personnelles : nom, e-mail, contact d'urgence, numéro, photo, langue (écran partagé). */
+  onOpenInfo?: () => void;
+  onOpenNotifications?: () => void;
 };
 
 const POLL_MS = 8000;
@@ -50,16 +60,32 @@ const isToday = (iso: string) => {
   );
 };
 
-// Barre du bas : « AZƆ̀ Pay » ouvre le portefeuille, « Profil » liste dossier, assistance et déconnexion.
-type CourierTab = "home" | "wallet" | "profile";
+// Barre du bas : « AZƆ̀ Pay » ouvre le portefeuille, les autres onglets restent dans cet écran.
+type CourierTab = "home" | "gains" | "history" | "wallet" | "profile";
 const COURIER_TABS: PillTabItem<CourierTab>[] = [
   { id: "home", label: "Missions", icon: "bicycle-outline", iconActive: "bicycle" },
+  { id: "gains", label: "Gains", icon: "stats-chart-outline", iconActive: "stats-chart" },
+  { id: "history", label: "Historique", icon: "receipt-outline", iconActive: "receipt" },
   { id: "wallet", label: "AZƆ̀ Pay", icon: "wallet-outline", iconActive: "wallet" },
   { id: "profile", label: "Profil", icon: "person-outline", iconActive: "person" },
 ];
+const COURIER_TITLES: Record<CourierTab, string> = { home: "Mes missions", gains: "Mes gains", history: "Historique", wallet: "AZƆ̀ Pay", profile: "Mon profil" };
 
-export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet }: Props) {
-  const [tab, setTab] = useState<CourierTab>("home");
+// Garde l'onglet et l'état en ligne quand on ouvre une autre page (portefeuille, informations…)
+const rememberedCourier: { tab: CourierTab; online: boolean } = { tab: "home", online: true };
+export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet, onOpenInfo, onOpenNotifications }: Props) {
+  const { lang } = useI18n();
+  const avatarUri = useAvatar();
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [langOpen, setLangOpen] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  useEffect(() => {
+    userApi.me().then(setUser).catch(() => undefined);
+  }, []);
+  const [tab, setTab] = useState<CourierTab>(rememberedCourier.tab === "wallet" ? "home" : rememberedCourier.tab);
+  useEffect(() => {
+    rememberedCourier.tab = tab;
+  }, [tab]);
   const scrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -72,7 +98,10 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
     });
     return () => sub.remove();
   }, [tab]);
-  const [online, setOnline] = useState(true);
+  const [online, setOnline] = useState(rememberedCourier.online);
+  useEffect(() => {
+    rememberedCourier.online = online;
+  }, [online]);
   const [pending, setPending] = useState<Delivery[]>([]);
   const [history, setHistory] = useState<Delivery[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
@@ -161,7 +190,8 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
       (sum, d) => sum + (d.price - (d.commission ?? Math.round(d.price * 0.15))),
       0
     );
-    return { gainsToday, todayCount: today.length, totalCount: done.length };
+    const gainsTotal = done.reduce((sum, d) => sum + (d.price - (d.commission ?? Math.round(d.price * 0.15))), 0);
+    return { gainsToday, gainsTotal, todayCount: today.length, totalCount: done.length };
   }, [history]);
 
   async function handleAccept(id: string) {
@@ -242,36 +272,46 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
     Alert.alert("Espace Coursier & Livreur", "Que souhaites-tu faire ?", [
       { text: "Annuler", style: "cancel" },
       ...(onOpenDossier ? [{ text: "Mon dossier KYC", onPress: onOpenDossier }] : []),
-      { text: "Se déconnecter", style: "destructive", onPress: onLogout },
+      {
+        text: "Se déconnecter",
+        style: "destructive",
+        onPress: () => {
+          rememberedCourier.tab = "home";
+          rememberedCourier.online = true;
+          onLogout();
+        },
+      },
     ]);
   }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
+      {/* Barre d'application : photo, titre de l'onglet, état en ligne, notifications */}
+      <View style={styles.cbBar}>
+        <Pressable onPress={() => setTab("profile")} accessibilityRole="button" accessibilityLabel="Mon profil">
+          <Avatar uri={avatarUri} initials={initials(user)} size={44} fontSize={16} />
+        </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Coursier & Livreur AZƆ̀</Text>
-          <Text style={styles.headerSub}>
-            {online ? "En ligne · réception des missions" : "Hors ligne · aucune nouvelle mission"}
+          <Text style={styles.cbTitle} numberOfLines={1}>
+            {tab === "home" && user?.firstName ? `Bonjour, ${user.firstName}` : COURIER_TITLES[tab]}
           </Text>
+          <View style={styles.cbStatus}>
+            <View style={[styles.cbDot, { backgroundColor: online ? colors.primary : colors.outline }]} />
+            <Text style={styles.cbStatusText}>{online ? "En ligne · missions actives" : "Hors ligne"}</Text>
+          </View>
         </View>
-        {onOpenDossier ? (
-          <Pressable style={styles.dossierPill} onPress={onOpenDossier}>
-            <MaterialIcons name="verified-user" size={15} color={colors.primary} />
-            <Text style={styles.dossierPillText}>Dossier</Text>
-          </Pressable>
-        ) : null}
         <Switch
           value={online}
           onValueChange={setOnline}
           trackColor={{ false: colors.surfaceContainerHigh, true: colors.primaryFixed }}
           thumbColor={online ? colors.primary : colors.outline}
         />
-        <Pressable style={styles.iconBtn} onPress={confirmExit} accessibilityLabel="Menu ou déconnexion">
-          <MaterialIcons name="logout" size={18} color={colors.onSurface} />
-        </Pressable>
+        {onOpenNotifications ? (
+          <Pressable onPress={onOpenNotifications} style={styles.cbBell} accessibilityRole="button" accessibilityLabel="Notifications">
+            <MaterialIcons name="notifications-none" size={22} color={colors.primary} />
+          </Pressable>
+        ) : null}
       </View>
-
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -286,24 +326,6 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
         >
           {tab === "home" && (
           <>
-          {/* Indicateurs du jour */}
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiCard}>
-              <Text style={styles.kpiLabel}>Gains du jour</Text>
-              <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                {fcfa(stats.gainsToday)}
-              </Text>
-              <Text style={styles.kpiSub}>{stats.todayCount} livrée(s) aujourd'hui</Text>
-            </View>
-            <View style={styles.kpiCard}>
-              <Text style={styles.kpiLabel}>Solde AZƆ̀ Pay</Text>
-              <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                {balance != null ? fcfa(balance) : "—"}
-              </Text>
-              <Text style={styles.kpiSub}>{stats.totalCount} mission(s) au total</Text>
-            </View>
-          </View>
-
           {/* Mission en cours (double OTP) */}
           {activeDelivery ? (
             <View style={styles.activeCard}>
@@ -576,71 +598,155 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
             </View>
           )}
 
-          {/* Historique récent */}
-          {history.filter((d) => d.status === "COMPLETED").length > 0 ? (
-            <>
-              <Text style={[styles.sectionTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>
-                Dernières livraisons effectuées
-              </Text>
-              <View style={{ gap: spacing.xs }}>
-                {history
-                  .filter((d) => d.status === "COMPLETED")
-                  .slice(0, 5)
-                  .map((d) => {
-                    const net = d.price - (d.commission ?? Math.round(d.price * 0.15));
-                    return (
-                      <View key={d.id} style={styles.historyRow}>
-                        <MaterialIcons name="check-circle" size={18} color="#146C2E" />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.historyDest} numberOfLines={1}>
-                            {d.dropAddress}
-                          </Text>
-                          <Text style={styles.historySub} numberOfLines={1}>
-                            Depuis {d.pickupAddress}
-                          </Text>
-                        </View>
-                        <Text style={styles.historyGain}>+{fcfa(net)}</Text>
-                      </View>
-                    );
-                  })}
-              </View>
-            </>
-          ) : null}
           </>
           )}
 
+          {tab === "gains" && (
+          <>
+          {/* Indicateurs du jour */}
+          <View style={styles.kpiRow}>
+            <View style={styles.kpiCard}>
+              <Text style={styles.kpiLabel}>Gains du jour</Text>
+              <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                {fcfa(stats.gainsToday)}
+              </Text>
+              <Text style={styles.kpiSub}>{stats.todayCount} livrée(s) aujourd'hui</Text>
+            </View>
+            <View style={styles.kpiCard}>
+              <Text style={styles.kpiLabel}>Solde AZƆ̀ Pay</Text>
+              <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                {balance != null ? fcfa(balance) : "—"}
+              </Text>
+              <Text style={styles.kpiSub}>{stats.totalCount} mission(s) au total</Text>
+            </View>
+          </View>
+          <View style={styles.cbTiles}>
+            <View style={styles.cbTile}>
+              <MaterialIcons name="local-shipping" size={20} color={colors.primary} />
+              <Text style={styles.cbTileValue}>{stats.todayCount}</Text>
+              <Text style={styles.cbTileLabel}>Livraisons du jour</Text>
+            </View>
+            <View style={styles.cbTile}>
+              <MaterialIcons name="check-circle" size={20} color={colors.primary} />
+              <Text style={styles.cbTileValue}>{stats.totalCount}</Text>
+              <Text style={styles.cbTileLabel}>Livraisons au total</Text>
+            </View>
+            <View style={styles.cbTile}>
+              <MaterialIcons name="payments" size={20} color={colors.primary} />
+              <Text style={styles.cbTileValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{fcfa(stats.gainsTotal)}</Text>
+              <Text style={styles.cbTileLabel}>Gains cumulés</Text>
+            </View>
+          </View>
+          </>
+          )}
+
+          {tab === "history" && (
+          <>
+          <Text style={[styles.sectionTitle, { marginBottom: spacing.sm }]}>Livraisons effectuées</Text>
+          {history.filter((d) => d.status === "COMPLETED").length === 0 ? (
+            <Text style={styles.muted}>Tes livraisons terminées apparaîtront ici.</Text>
+          ) : (
+            <View style={{ gap: spacing.xs }}>
+              {history
+                .filter((d) => d.status === "COMPLETED")
+                .slice(0, 50)
+                .map((d) => {
+                  const net = d.price - (d.commission ?? Math.round(d.price * 0.15));
+                  return (
+                    <View key={d.id} style={styles.historyRow}>
+                      <MaterialIcons name="check-circle" size={18} color="#146C2E" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.historyDest} numberOfLines={1}>{d.dropAddress}</Text>
+                        <Text style={styles.historySub} numberOfLines={1}>Depuis {d.pickupAddress}</Text>
+                        <Text style={styles.historySub}>{new Date(d.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}</Text>
+                      </View>
+                      <Text style={styles.historyGain}>+{fcfa(net)}</Text>
+                    </View>
+                  );
+                })}
+            </View>
+          )}
+          </>
+          )}
           {tab === "profile" && (
-            <View style={{ gap: spacing.sm }}>
-              {onOpenDossier ? (
-                <Pressable style={styles.profileRow} onPress={onOpenDossier} accessibilityRole="button">
-                  <MaterialIcons name="verified-user" size={22} color={colors.primary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.profileRowTitle}>Mon dossier</Text>
-                    <Text style={styles.profileRowSub}>Pièces, statut de validation</Text>
+            <View style={{ gap: spacing.md }}>
+              <View style={styles.pfIdentity}>
+                <Pressable onPress={() => setAvatarOpen(true)} accessibilityRole="button" accessibilityLabel="Changer la photo">
+                  <LinearGradient colors={[colors.primary, colors.secondaryContainer]} style={styles.pfRing}>
+                    <View style={styles.pfAvatar}>
+                      <Avatar uri={avatarUri} initials={initials(user)} size={70} />
+                    </View>
+                  </LinearGradient>
+                  <View style={styles.pfBadge}>
+                    <MaterialIcons name="photo-camera" size={14} color={colors.onPrimary} />
                   </View>
-                  <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
                 </Pressable>
-              ) : null}
-              {onOpenSupport ? (
-                <Pressable style={styles.profileRow} onPress={onOpenSupport} accessibilityRole="button">
-                  <MaterialIcons name="support-agent" size={22} color={colors.primary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.profileRowTitle}>Assistance</Text>
-                    <Text style={styles.profileRowSub}>Écrire à l'équipe AZƆ̀</Text>
-                  </View>
-                  <MaterialIcons name="chevron-right" size={22} color={colors.onSurfaceVariant} />
-                </Pressable>
-              ) : null}
-              <Pressable style={styles.profileRow} onPress={confirmExit} accessibilityRole="button">
-                <MaterialIcons name="logout" size={22} color={colors.error} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.profileRowTitle, { color: colors.error }]}>Se déconnecter</Text>
+                  <Text style={styles.pfName} numberOfLines={2}>{displayName(user) || "Coursier AZƆ̀"}</Text>
+                  <Text style={styles.pfPhone}>{user ? formatBeninPhoneDisplay(user.phone) : ""}</Text>
                 </View>
+              </View>
+              <View style={styles.pfStats}>
+                <View style={styles.pfStat}>
+                  <Text style={styles.pfStatValue}>{stats.totalCount}</Text>
+                  <Text style={styles.pfStatLabel}>Livraisons terminées</Text>
+                </View>
+                <View style={styles.pfStat}>
+                  <Text style={styles.pfStatValue} numberOfLines={1} adjustsFontSizeToFit>{balance !== null ? fcfa(balance) : "—"}</Text>
+                  <Text style={styles.pfStatLabel}>Solde AZƆ̀ Pay</Text>
+                </View>
+              </View>
+              <View style={styles.pfMenu}>
+                {onOpenInfo ? (
+                  <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={onOpenInfo} accessibilityRole="button">
+                    <View style={styles.pfIcon}><MaterialIcons name="badge" size={20} color={colors.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pfLabel}>Modifier mes informations</Text>
+                      <Text style={styles.pfHint}>Nom, e-mail, contact d'urgence, numéro</Text>
+                    </View>
+                    <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                  </Pressable>
+                ) : null}
+                <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={() => setAvatarOpen(true)} accessibilityRole="button">
+                  <View style={styles.pfIcon}><MaterialIcons name="photo-camera" size={20} color={colors.primary} /></View>
+                  <Text style={styles.pfLabel}>Photo de profil</Text>
+                  <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                </Pressable>
+                {onOpenDossier ? (
+                  <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={onOpenDossier} accessibilityRole="button">
+                    <View style={styles.pfIcon}><MaterialIcons name="verified-user" size={20} color={colors.primary} /></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pfLabel}>Mon dossier</Text>
+                      <Text style={styles.pfHint}>Pièces, véhicule, statut de validation</Text>
+                    </View>
+                    <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                  </Pressable>
+                ) : null}
+                <Pressable style={[styles.pfRow, styles.pfDivider]} onPress={() => setLangOpen(true)} accessibilityRole="button">
+                  <View style={styles.pfIcon}><MaterialIcons name="translate" size={20} color={colors.primary} /></View>
+                  <Text style={styles.pfLabel}>Langue</Text>
+                  <Text style={styles.pfMeta} numberOfLines={1}>{languageInfo(lang).flag} {languageInfo(lang).native}</Text>
+                  <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                </Pressable>
+                {onOpenSupport ? (
+                  <Pressable style={styles.pfRow} onPress={onOpenSupport} accessibilityRole="button">
+                    <View style={styles.pfIcon}><MaterialIcons name="support-agent" size={20} color={colors.primary} /></View>
+                    <Text style={styles.pfLabel}>Assistance</Text>
+                    <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
+                  </Pressable>
+                ) : null}
+              </View>
+              <Pressable style={styles.pfLogout} onPress={confirmExit} accessibilityRole="button">
+                <MaterialIcons name="logout" size={20} color={colors.error} />
+                <Text style={styles.pfLogoutText}>Se déconnecter</Text>
               </Pressable>
             </View>
           )}
         </ScrollView>
       )}
+
+      <LanguageSheet visible={langOpen} onClose={() => setLangOpen(false)} />
+      <AvatarSheet visible={avatarOpen} onClose={() => setAvatarOpen(false)} />
 
       <PillTabBar
         items={COURIER_TABS}
@@ -666,6 +772,44 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
 }
 
 const styles = StyleSheet.create({
+  cbBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm + 2,
+    backgroundColor: `${colors.primaryFixed}99`,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+  cbTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  cbStatus: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+  cbDot: { width: 8, height: 8, borderRadius: 4 },
+  cbStatusText: { ...typography.labelSm, color: colors.onSurfaceVariant },
+  cbBell: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceContainerLowest, alignItems: "center", justifyContent: "center" },
+  cbTiles: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  cbTile: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.sm + 2, gap: 4, borderWidth: 1, borderColor: colors.surfaceContainer },
+  cbTileValue: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  cbTileLabel: { ...typography.labelSm, color: colors.onSurfaceVariant },
+  pfIdentity: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, borderWidth: 1, borderColor: colors.surfaceContainer },
+  pfRing: { width: 84, height: 84, borderRadius: 42, alignItems: "center", justifyContent: "center" },
+  pfAvatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: colors.surfaceContainerLowest, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  pfBadge: { position: "absolute", right: -2, bottom: -2, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surfaceContainerLowest },
+  pfName: { ...typography.headlineSm, color: colors.onSurface },
+  pfPhone: { ...typography.bodyMd, color: colors.onSurfaceVariant, marginTop: 2 },
+  pfStats: { flexDirection: "row", gap: spacing.sm },
+  pfStat: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, borderWidth: 1, borderColor: colors.surfaceContainer },
+  pfStatValue: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  pfStatLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
+  pfMenu: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.surfaceContainer, overflow: "hidden" },
+  pfRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm + 2, paddingHorizontal: spacing.md, minHeight: 60 },
+  pfDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceContainer },
+  pfIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
+  pfLabel: { ...typography.bodyLg, color: colors.onSurface, flex: 1 },
+  pfHint: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  pfMeta: { ...typography.labelMd, color: colors.onSurfaceVariant, maxWidth: 130 },
+  pfLogout: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 52, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.error },
+  pfLogoutText: { ...typography.labelLg, color: colors.error, fontWeight: "700" },
   safe: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: spacing.lg },
   header: {
