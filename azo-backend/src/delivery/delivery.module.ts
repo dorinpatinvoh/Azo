@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Query,
   Body,
   Controller,
   ForbiddenException,
@@ -54,6 +55,9 @@ class CourierLocationDto {
 class ConfirmCodeDto {
   @IsString() @MaxLength(8) code: string;
 }
+
+/** Rayon dans lequel un coursier voit les missions autour de lui. */
+const PICKUP_RADIUS_KM = 10;
 
 const code4 = () => Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -150,7 +154,7 @@ export class DeliveryService {
       }
     }
     const created = await this.prisma.delivery.create({
-      data: { ...base, dropAddress, ...(personal ? { payer: "SENDER" as Payer } : {}), ...extra, price, clientId, pickupCode: code4(), deliveryCode: code4() } as Prisma.DeliveryUncheckedCreateInput,
+      data: { ...base, dropAddress, pickupLat, pickupLng, dropLat, dropLng, ...(personal ? { payer: "SENDER" as Payer } : {}), ...extra, price, clientId, pickupCode: code4(), deliveryCode: code4() } as Prisma.DeliveryUncheckedCreateInput,
       include: { client: { select: { fullName: true, phone: true } } },
     });
     const [enriched] = await this.enrich([created]);
@@ -178,7 +182,7 @@ export class DeliveryService {
     return { mode: "EXPRESS" };
   }
 
-  async pending(courierId?: string) {
+  async pending(courierId?: string, near?: { lat: number; lng: number }) {
     const scope = await this.courierScope(courierId);
     const items = await this.prisma.delivery.findMany({
       where: { status: "PENDING", courierId: null, ...scope },
@@ -187,8 +191,18 @@ export class DeliveryService {
       take: 40,
     });
     const enriched = await this.enrich(items);
+    // Rayon de 10 km autour du coursier : les missions dont le départ est connu et plus loin sont masquées
+    const withDistance = enriched
+      .map((d) => ({
+        ...d,
+        pickupDistanceKm:
+          near && d.pickupLat != null && d.pickupLng != null
+            ? Math.round(haversineKm({ latitude: near.lat, longitude: near.lng }, { latitude: d.pickupLat, longitude: d.pickupLng }) * 10) / 10
+            : null,
+      }))
+      .filter((d) => d.pickupDistanceKm === null || d.pickupDistanceKm <= PICKUP_RADIUS_KM);
     // Le coursier ne doit PAS voir les codes OTP : c'est le client/destinataire qui les lui donne.
-    return enriched.map(({ pickupCode: _p, deliveryCode: _d, ...rest }) => ({
+    return withDistance.map(({ pickupCode: _p, deliveryCode: _d, ...rest }) => ({
       ...rest,
       pickupCode: "••••",
       deliveryCode: "••••",
@@ -512,8 +526,10 @@ export class DeliveryController {
   }
 
   @Get("pending")
-  pending(@CurrentUser() u) {
-    return this.svc.pending(u.userId);
+  pending(@CurrentUser() u, @Query("lat") lat?: string, @Query("lng") lng?: string) {
+    const la = lat !== undefined ? Number(lat) : NaN;
+    const ln = lng !== undefined ? Number(lng) : NaN;
+    return this.svc.pending(u.userId, Number.isFinite(la) && Number.isFinite(ln) ? { lat: la, lng: ln } : undefined);
   }
 
   @Get("courier")

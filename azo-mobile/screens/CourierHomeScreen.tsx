@@ -23,6 +23,8 @@ import { Delivery, deliveryApi, errorMessage, userApi, walletApi, type UserProfi
 import { formatBeninPhoneDisplay, maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
 import { useCourierTracking } from "../hooks/useCourierTracking";
+import * as Location from "expo-location";
+import OSMMapView, { type OSMMarker } from "../components/OSMMapView";
 import PillTabBar, { type PillTabItem } from "../components/PillTabBar";
 import Avatar from "../components/Avatar";
 import AvatarSheet from "../components/AvatarSheet";
@@ -104,6 +106,8 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
     rememberedCourier.online = online;
   }, [online]);
   const [pending, setPending] = useState<Delivery[]>([]);
+  // Position du coursier : sert à ne montrer que les missions dans un rayon de 10 km
+  const [myPos, setMyPos] = useState<{ latitude: number; longitude: number } | null>(null);
   const [history, setHistory] = useState<Delivery[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,7 +124,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
   );
 
   // Coursier personnel : le GPS suit la mission pour calculer les kilomètres réellement parcourus
-  useCourierTracking(activeDelivery && activeDelivery.mode === "PERSONAL" && ["MATCHED", "IN_PROGRESS"].includes(activeDelivery.status) ? activeDelivery.id : null);
+  useCourierTracking(activeDelivery && ["MATCHED", "IN_PROGRESS"].includes(activeDelivery.status) ? activeDelivery.id : null);
 
   const currentSimCode = useMemo(() => {
     if (!activeDelivery) return null;
@@ -159,10 +163,21 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
   }, [simBannerCode]);
 
   const loadAccount = useCallback(async () => {
+    let near: { latitude: number; longitude: number } | undefined;
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status === "granted") {
+        const pos = (await Location.getLastKnownPositionAsync({ maxAge: 60000 })) ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+        near = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        setMyPos(near);
+      }
+    } catch {
+      // sans GPS, on liste toutes les missions
+    }
     const [wRes, hRes, pRes] = await Promise.allSettled([
       walletApi.get(),
       deliveryApi.courierHistory(),
-      deliveryApi.pending(),
+      deliveryApi.pending(near),
     ]);
     if (wRes.status === "fulfilled") setBalance(wRes.value.balance);
     if (hRes.status === "fulfilled") setHistory(hRes.value);
@@ -528,11 +543,26 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
 
           {/* Missions disponibles */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Missions disponibles ({pending.length})</Text>
+            <Text style={styles.sectionTitle}>Missions à moins de 10 km ({pending.length})</Text>
             <Pressable onPress={onRefresh}>
               <Text style={styles.refreshLink}>Actualiser</Text>
             </Pressable>
           </View>
+
+          {online && myPos ? (
+            <View style={{ height: 210, borderRadius: radius.lg, overflow: "hidden", marginBottom: spacing.sm }}>
+              <OSMMapView
+                center={myPos}
+                zoom={13}
+                markers={[
+                  { id: "me", coordinate: myPos, title: "Moi", color: "blue" } as OSMMarker,
+                  ...pending
+                    .filter((m) => m.pickupLat != null && m.pickupLng != null)
+                    .map((m): OSMMarker => ({ id: m.id, coordinate: { latitude: m.pickupLat as number, longitude: m.pickupLng as number }, title: "Mission", color: "orange" })),
+                ]}
+              />
+            </View>
+          ) : null}
 
           {!online ? (
             <View style={styles.emptyCard}>
@@ -567,6 +597,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                         <Text style={styles.missionType}>{meta.label}</Text>
                         <Text style={styles.missionPayer}>
                           {item.payer === "SENDER" ? "Payé via AZƆ̀ Pay" : "Réglé à la remise"}
+                          {item.pickupDistanceKm != null ? ` · à ${item.pickupDistanceKm.toLocaleString("fr-FR")} km de toi` : ""}
                         </Text>
                       </View>
                       <View style={{ alignItems: "flex-end" }}>

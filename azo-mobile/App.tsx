@@ -164,6 +164,8 @@ function AppInner() {
   const [rideId, setRideId] = useState<string | undefined>();
   const [rideLabel, setRideLabel] = useState<string | undefined>();
   const [rideVehicle, setRideVehicle] = useState<string>("zem-express");
+  // Speeder choisi directement depuis l'accueil (ex. tricycle) : saute l'étape de choix du véhicule
+  const [rideZem, setRideZem] = useState<"ZEM_TRICYCLE" | null>(null);
   const [isAuthRestoring, setIsAuthRestoring] = useState<boolean>(true);
   const [forceReady, setForceReady] = useState<boolean>(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -440,7 +442,13 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
           setRideVehicle("car-confort");
           goTo("ride-request");
           break;
+        case "tricycle":
+          setRideZem("ZEM_TRICYCLE");
+          setRideVehicle("zem-express");
+          goTo("ride-request");
+          break;
         case "zem":
+          setRideZem(null);
           setRideVehicle("zem-express");
           goTo("ride-request");
           break;
@@ -640,6 +648,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
         {route === "ride-request" && (
           <RideBookingScreen
             service={rideVehicle === "car-confort" ? "transport" : "zem"}
+            initialZemType={rideZem}
             onBack={() => goBack()}
             onRecharge={() => goTo("wallet")}
             onConfirmed={(id, label) => {

@@ -6,6 +6,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
 import SchedulePicker from "../components/SchedulePicker";
+import PlacePickerMap from "../components/PlacePickerMap";
 import { Place, VehicleType, deliveryApi, errorMessage, placesApi, walletApi } from "../services/api";
 import { tarification } from "../services/tarification";
 
@@ -16,19 +17,19 @@ type VehicleOption = { id: VehicleType; label: string; icon: keyof typeof Materi
 // Moto (essence ou électrique) ou voiture (Gazelle, Koala, Léopard)
 const GROUPS: { title: string; options: VehicleOption[] }[] = [
   {
-    title: "Speeder moto",
+    title: "",
     options: [
-      { id: "ZEM_ESSENCE", label: "Moto à essence", icon: "two-wheeler" },
-      { id: "ZEM_ELECTRIC", label: "Moto électrique", icon: "electric-moped" },
-      { id: "ZEM_TRICYCLE", label: "Tricycle", icon: "electric-rickshaw" },
+      { id: "ZEM_ESSENCE", label: "Speeder à essence", icon: "two-wheeler" },
+      { id: "ZEM_ELECTRIC", label: "Speeder électrique", icon: "electric-moped" },
+      { id: "ZEM_TRICYCLE", label: "Speeder tricycle", icon: "electric-rickshaw" },
     ],
   },
   {
-    title: "Speeder voiture",
+    title: "",
     options: [
-      { id: "GAZELLE", label: "Gazelle", icon: "directions-car" },
-      { id: "KOALA", label: "Koala", icon: "directions-car" },
-      { id: "LEOPARD", label: "Léopard", icon: "directions-car" },
+      { id: "GAZELLE", label: "Speeder Gazelle", icon: "directions-car" },
+      { id: "KOALA", label: "Speeder Koala", icon: "directions-car" },
+      { id: "LEOPARD", label: "Speeder Léopard", icon: "directions-car" },
     ],
   },
 ];
@@ -42,72 +43,6 @@ function crowKm(a: Place, b: Place) {
   const dLng = rad(b.longitude - a.longitude);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLng / 2) ** 2;
   return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
-
-function PlaceField({ label, value, onPick }: { label: string; value: Place | null; onPick: (p: Place | null) => void }) {
-  const [text, setText] = useState(value?.title ?? "");
-  const [results, setResults] = useState<Place[]>([]);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    []
-  );
-
-  function onChange(next: string) {
-    setText(next);
-    onPick(null); // l'adresse doit être choisie dans la liste pour avoir des coordonnées
-    if (timer.current) clearTimeout(timer.current);
-    if (next.trim().length < 3) {
-      setResults([]);
-      return;
-    }
-    timer.current = setTimeout(async () => {
-      try {
-        setResults((await placesApi.search(next.trim())).slice(0, 5));
-      } catch {
-        setResults([]);
-      }
-    }, 350);
-  }
-
-  return (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        style={styles.fieldInput}
-        value={text}
-        onChangeText={onChange}
-        placeholder="Rechercher une adresse"
-        placeholderTextColor={colors.outline}
-      />
-      {value ? (
-        <View style={styles.pickedRow}>
-          <MaterialIcons name="check-circle" size={16} color={colors.primary} />
-          <Text style={styles.pickedText}>Adresse confirmée</Text>
-        </View>
-      ) : null}
-      {results.map((p, i) => (
-        <Pressable
-          key={`${p.title}-${i}`}
-          style={styles.result}
-          onPress={() => {
-            setText(p.title);
-            setResults([]);
-            onPick(p);
-          }}
-        >
-          <MaterialIcons name="place" size={18} color={colors.primary} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.resultTitle} numberOfLines={1}>{p.title}</Text>
-            {p.subtitle ? <Text style={styles.resultSub} numberOfLines={1}>{p.subtitle}</Text> : null}
-          </View>
-        </Pressable>
-      ))}
-    </View>
-  );
 }
 
 export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: Props) {
@@ -192,7 +127,7 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
 
         {GROUPS.map((g) => (
           <View key={g.title} style={{ gap: spacing.sm }}>
-            <Text style={styles.sectionTitle}>{g.title}</Text>
+            {g.title ? <Text style={styles.sectionTitle}>{g.title}</Text> : null}
             {g.options.map((o) => {
               const r = cfg?.vehicles?.[o.id];
               const active = vehicle === o.id;
@@ -247,8 +182,7 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
         <SchedulePicker value={scheduledAt} onChange={setScheduledAt} onModeChange={setScheduleMode} />
 
         <Text style={styles.sectionTitle}>Lieux</Text>
-        <PlaceField label="Point de départ" value={pickup} onPick={setPickup} />
-        <PlaceField label="Destination (facultatif)" value={drop} onPick={setDrop} />
+        <PlacePickerMap pickup={pickup} drop={drop} onPickup={setPickup} onDrop={setDrop} dropLabel="Destination (facultatif)" />
 
         <View style={styles.priceCard}>
           <Text style={styles.priceLabel}>Prix estimé</Text>

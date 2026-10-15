@@ -31,7 +31,7 @@ const MAIN_SERVICES: {
   labelKey: MessageKey;
   subKey: MessageKey;
   badgeKey: MessageKey;
-  icon: "two-wheeler" | "directions-car";
+  icon: "two-wheeler" | "directions-car" | "electric-rickshaw";
   bg: string;
   fg: string;
 }[] = [
@@ -43,6 +43,15 @@ const MAIN_SERVICES: {
     icon: "two-wheeler",
     bg: colors.secondaryFixed,
     fg: colors.secondary,
+  },
+  {
+    id: "tricycle",
+    labelKey: "home.service.tricycle",
+    subKey: "home.service.tricycle.sub",
+    badgeKey: "home.badge.popular",
+    icon: "electric-rickshaw",
+    bg: colors.tertiaryFixed,
+    fg: colors.tertiary,
   },
   {
     id: "transport",
@@ -220,15 +229,9 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
               style={[styles.mainServiceCard, { backgroundColor: s.bg }]}
               onPress={() => onSelectService(s.id)}
             >
-              <View style={styles.mainServiceTop}>
-                <View style={styles.mainServiceBadge}>
-                  <Text style={[styles.mainServiceBadgeText, { color: s.fg }]}>{t(s.badgeKey)}</Text>
-                </View>
-                <MaterialIcons name="arrow-outward" size={18} color={s.fg} />
-              </View>
-              <MaterialIcons name={s.icon} size={40} color={s.fg} style={{ marginVertical: 6 }} />
-              <Text style={styles.mainServiceText}>{t(s.labelKey)}</Text>
-              <Text style={styles.mainServiceSub}>{t(s.subKey)}</Text>
+              <MaterialIcons name={s.icon} size={34} color={s.fg} style={{ marginVertical: 6 }} />
+              <Text style={styles.mainServiceText} numberOfLines={2}>{t(s.labelKey)}</Text>
+              <Text style={styles.mainServiceSub} numberOfLines={2}>{t(s.subKey)}</Text>
             </Pressable>
           ))}
         </View>
@@ -482,13 +485,14 @@ const styles = StyleSheet.create({
   },
 
   // Main Services (2 hero cards)
-  mainServicesRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.lg },
+  mainServicesRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.lg },
   mainServiceCard: {
     flex: 1,
     borderRadius: radius.xl,
-    padding: spacing.md,
-    justifyContent: "space-between",
-    minHeight: 138,
+    padding: spacing.sm + 2,
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+    minHeight: 130,
   },
   mainServiceTop: {
     flexDirection: "row",
@@ -506,7 +510,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 10,
   },
-  mainServiceText: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  mainServiceText: { ...typography.labelLg, color: colors.onSurface, fontWeight: "800" },
   mainServiceSub: { ...typography.bodySm, color: colors.onSurfaceVariant, fontWeight: "600", marginTop: 2 },
 
   // Symmetrical 3x2 Grid for Other Services

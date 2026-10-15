@@ -17,10 +17,11 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { FONT } from "../theme/fontNormalize";
 import PrimaryButton from "../components/PrimaryButton";
-import { Delivery, deliveryApi, errorMessage } from "../services/api";
+import { Delivery, Place, deliveryApi, errorMessage } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
 import CourierTrackMap from "../components/CourierTrackMap";
+import PlacePickerMap from "../components/PlacePickerMap";
 import { tarification } from "../services/tarification";
 
 const PACKAGE_TYPES = [
@@ -43,8 +44,8 @@ type Props = { onBack: () => void; onConfirm: () => void };
 
 export default function DeliveryScreen({ onBack }: Props) {
   const [selectedType, setSelectedType] = useState("small");
-  const [pickupAddress, setPickupAddress] = useState("Haie Vive, Pharmacie Cotonou");
-  const [dropAddress, setDropAddress] = useState("Akpakpa, Dodomè, Rue des Pavés");
+  const [pickup, setPickup] = useState<Place | null>(null);
+  const [drop, setDrop] = useState<Place | null>(null);
   const [payer, setPayer] = useState<"me" | "recipient">("me");
   const [loading, setLoading] = useState(false);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -75,7 +76,7 @@ export default function DeliveryScreen({ onBack }: Props) {
   }
 
   async function handleConfirm() {
-    if (pickupAddress.trim().length < 3 || dropAddress.trim().length < 3) {
+    if (!pickup || !drop) {
       Alert.alert("Adresses requises", "Indique l'adresse de ramassage et l'adresse de livraison.");
       return;
     }
@@ -83,8 +84,12 @@ export default function DeliveryScreen({ onBack }: Props) {
     try {
       const d = await deliveryApi.create({
         packageType: selectedType,
-        pickupAddress: pickupAddress.trim(),
-        dropAddress: dropAddress.trim(),
+        pickupAddress: pickup.title,
+        dropAddress: drop.title,
+        pickupLat: pickup.latitude,
+        pickupLng: pickup.longitude,
+        dropLat: drop.latitude,
+        dropLng: drop.longitude,
         payer: payer === "me" ? "SENDER" : "RECIPIENT",
         price: selectedPackage.price,
       });
@@ -176,8 +181,8 @@ export default function DeliveryScreen({ onBack }: Props) {
                     {d.dropAddress}
                   </Text>
 
-                  {d.mode === "PERSONAL" && ["MATCHED", "IN_PROGRESS"].includes(d.status) ? (
-                    <CourierTrackMap deliveryId={d.id} perKm={d.vehicleType ? tarification().personalCourier?.vehicles?.[d.vehicleType]?.perKm : undefined} />
+                  {["MATCHED", "IN_PROGRESS"].includes(d.status) ? (
+                    <CourierTrackMap deliveryId={d.id} perKm={d.mode === "PERSONAL" && d.vehicleType ? tarification().personalCourier?.vehicles?.[d.vehicleType]?.perKm : undefined} />
                   ) : null}
 
                   <View style={styles.codesRow}>
@@ -253,25 +258,7 @@ export default function DeliveryScreen({ onBack }: Props) {
         </View>
 
         <Text style={styles.sectionTitle}>Adresses de la mission</Text>
-        <View style={styles.addressCard}>
-          <Text style={styles.addressLabel}>Point de ramassage / Départ</Text>
-          <TextInput
-            style={styles.addressInput}
-            value={pickupAddress}
-            onChangeText={setPickupAddress}
-            placeholder="Ex. Haie Vive, Pharmacie Cotonou"
-            placeholderTextColor={colors.outline}
-          />
-          <View style={styles.divider} />
-          <Text style={styles.addressLabel}>Point de livraison / Destination</Text>
-          <TextInput
-            style={styles.addressInput}
-            value={dropAddress}
-            onChangeText={setDropAddress}
-            placeholder="Ex. Akpakpa, Dodomè, Rue des Pavés"
-            placeholderTextColor={colors.outline}
-          />
-        </View>
+        <PlacePickerMap pickup={pickup} drop={drop} onPickup={setPickup} onDrop={setDrop} pickupLabel="Point de ramassage / Départ" dropLabel="Point de livraison / Destination" />
 
         <View style={styles.otpBanner}>
           <MaterialIcons name="verified-user" size={20} color={colors.primary} />

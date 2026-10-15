@@ -28,6 +28,8 @@ type Props = {
   service: "transport" | "zem";
   onBack: () => void;
   onRecharge: () => void;
+  /** Speeder déjà choisi depuis l'accueil (ex. tricycle). */
+  initialZemType?: VehicleType | null;
   onConfirmed: (rideId: string, destinationLabel: string) => void;
 };
 type Target = "origin" | "destination";
@@ -220,14 +222,14 @@ const fmtKm = (n: number) => `${n.toLocaleString(numLocale(), { maximumFractionD
 const fmtDuration = (min: number) =>
   min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}`;
 
-export default function RideBookingScreen({ service, onBack, onRecharge, onConfirmed }: Props) {
+export default function RideBookingScreen({ service, onBack, onRecharge, onConfirmed, initialZemType }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const gps = useCurrentLocation();
   const originTouched = useRef(false);
   // Étape 1 du parcours Speeder : le client choisit d'abord son type de Speeder
   // (électrique ou essence), puis renseigne sa destination.
-  const [zemType, setZemType] = useState<VehicleType | null>(null);
+  const [zemType, setZemType] = useState<VehicleType | null>(initialZemType ?? null);
   // Étape 1 du parcours voiture : le client choisit sa gamme, découvre ce à quoi il a
   // droit (étape 1 bis), l'accepte, puis renseigne sa destination.
   const [carDetail, setCarDetail] = useState<VehicleType | null>(null);

@@ -367,6 +367,10 @@ model Delivery {
   odoLat        Float?
   odoLng        Float?
   odoAt         DateTime?
+  pickupLat     Float? // coordonnées du départ / de la destination (rayon de 10 km des coursiers)
+  pickupLng     Float?
+  dropLat       Float?
+  dropLng       Float?
   courierLat    Float? // dernière position du coursier (suivi par le client)
   courierLng    Float?
   courierLocatedAt DateTime?

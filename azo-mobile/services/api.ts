@@ -693,6 +693,9 @@ export type Delivery = {
   scheduledAt?: string | null;
   distanceKm?: number | null;
   traveledMeters?: number;
+  pickupLat?: number | null;
+  pickupLng?: number | null;
+  pickupDistanceKm?: number | null;
   client?: RidePerson | null;
   courier?: RidePerson | null;
 };
@@ -735,7 +738,9 @@ export const deliveryApi = {
   cancel: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/cancel`),
 
   /* --- Coursier / Livreur --- */
-  pending: () => api.get<Delivery[]>(`${P}/deliveries/pending`),
+  /** Missions dans un rayon de 10 km autour de la position donnée. */
+  pending: (near?: { latitude: number; longitude: number }) =>
+    api.get<Delivery[]>(`${P}/deliveries/pending${near ? `?lat=${near.latitude}&lng=${near.longitude}` : ""}`),
   courierHistory: () => api.get<Delivery[]>(`${P}/deliveries/courier`),
   accept: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/accept`),
   confirmPickup: (id: string, code: string) =>
