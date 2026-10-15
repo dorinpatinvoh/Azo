@@ -1009,7 +1009,12 @@ export class ProvidersService {
       dto.decision === "VALID"
         ? `${DOCUMENT_LABELS[document.kind]} a été validée.`
         : `${DOCUMENT_LABELS[document.kind]} a été refusée${dto.note ? ` : ${dto.note}` : ""}.`,
-      "PROVIDER_DOCUMENT"
+      "PROVIDER_DOCUMENT",
+      {
+        titleKey: dto.decision === "VALID" ? "NOTIFICATION_PROVIDER_DOC_VALID" : "NOTIFICATION_PROVIDER_DOC_REFUSED",
+        params: { document: DOCUMENT_LABELS[document.kind], note: dto.note ?? "" },
+        data: { event: "provider-document" },
+      }
     );
     return updated;
   }
@@ -1055,7 +1060,12 @@ export class ProvidersService {
       isReject
         ? `Ton dossier ${TYPE_LABELS[provider.type]} a été refusé. Motif : ${reason}`
         : `Ton dossier ${TYPE_LABELS[provider.type]} est en attente : ${reason}`,
-      "PROVIDER_REVIEW"
+      "PROVIDER_REVIEW",
+      {
+        titleKey: isReject ? "NOTIFICATION_PROVIDER_REJECTED" : "NOTIFICATION_PROVIDER_NEED_INFO",
+        params: { type: TYPE_LABELS[provider.type], reason },
+        data: { event: "provider-status" },
+      }
     );
     return this.serialize(updated);
   }
@@ -1171,7 +1181,8 @@ export class ProvidersService {
       provider.userId,
       "Ton compte prestataire est actif 🎉",
       `AZƆ̀ a validé ton dossier ${TYPE_LABELS[provider.type]}. Ton espace métier est ouvert.`,
-      "PROVIDER_APPROVED"
+      "PROVIDER_APPROVED",
+      { titleKey: "NOTIFICATION_PROVIDER_APPROVED", params: { type: TYPE_LABELS[provider.type] }, data: { event: "provider-status" } }
     );
     return this.serialize(result);
   }
@@ -1202,7 +1213,8 @@ export class ProvidersService {
       provider.userId,
       "Compte prestataire suspendu",
       `Ton accès métier est suspendu. Motif : ${motive}`,
-      "PROVIDER_SUSPENDED"
+      "PROVIDER_SUSPENDED",
+      { titleKey: "NOTIFICATION_PROVIDER_SUSPENDED", params: { reason: motive }, data: { event: "provider-status" } }
     );
     return this.serialize(updated);
   }
@@ -1230,7 +1242,8 @@ export class ProvidersService {
       provider.userId,
       "Compte prestataire réactivé",
       "Ta suspension est levée : ton espace métier est de nouveau accessible.",
-      "PROVIDER_REINSTATED"
+      "PROVIDER_REINSTATED",
+      { titleKey: "NOTIFICATION_PROVIDER_REINSTATED", data: { event: "provider-status" } }
     );
     return this.serialize(updated);
   }

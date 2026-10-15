@@ -18,7 +18,11 @@ import { getLanguage, languageInfo, tr, useI18n } from "../i18n";
  * affichée : si le serveur ne répond pas, l'écran le dit clairement.
  */
 
-type Props = { onBack: () => void };
+type Props = {
+  onBack: () => void;
+  /** Toucher une ligne : ouvre l'écran du sujet (course, portefeuille, assistance, dossier…). */
+  onOpen?: (notification: AppNotification) => void;
+};
 
 type IconName = keyof typeof MaterialIcons.glyphMap;
 
@@ -52,7 +56,7 @@ function dayLabel(iso: string): string {
 const heure = (iso: string) =>
   new Date(iso).toLocaleTimeString(languageInfo(getLanguage()).locale, { hour: "2-digit", minute: "2-digit" });
 
-export default function NotificationsScreen({ onBack }: Props) {
+export default function NotificationsScreen({ onBack, onOpen }: Props) {
   const { t, lang } = useI18n();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,7 +155,7 @@ export default function NotificationsScreen({ onBack }: Props) {
                 <Text style={styles.dayLabel}>{g.day}</Text>
                 <View style={{ gap: spacing.sm }}>
                   {g.items.map((n) => (
-                    <View key={n.id} style={styles.notifRow}>
+                    <Pressable key={n.id} style={styles.notifRow} onPress={() => onOpen?.(n)} accessibilityRole="button">
                       <View style={[styles.notifIcon, !n.read && { backgroundColor: colors.primaryFixed }]}>
                         <MaterialIcons
                           name={iconFor(n.type)}
@@ -167,7 +171,7 @@ export default function NotificationsScreen({ onBack }: Props) {
                         <Text style={styles.notifTime}>{heure(n.createdAt)}</Text>
                         {!n.read && <View style={styles.unreadDot} />}
                       </View>
-                    </View>
+                    </Pressable>
                   ))}
                 </View>
               </View>

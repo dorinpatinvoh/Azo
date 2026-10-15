@@ -7,6 +7,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
+import BackButton from "../components/BackButton";
 import { useI18n } from "../i18n";
 
 type Props = {
@@ -14,6 +15,8 @@ type Props = {
   onYes: () => void;
   /** Il n'en veut pas : on va directement à la connexion, en français */
   onNo: () => void;
+  /** Retour à l'écran d'accueil de l'onboarding. */
+  onBack?: () => void;
 };
 
 /**
@@ -21,7 +24,7 @@ type Props = {
  * La question est écrite dans la langue par défaut (français), puisque l'utilisateur n'a encore
  * rien choisi.
  */
-export default function AssistOfferScreen({ onYes, onNo }: Props) {
+export default function AssistOfferScreen({ onYes, onNo, onBack }: Props) {
   const { t } = useI18n();
   return (
     <LinearGradient
@@ -31,6 +34,11 @@ export default function AssistOfferScreen({ onYes, onNo }: Props) {
     >
       <StatusBar style="light" />
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+        {onBack ? (
+          <View style={{ position: "absolute", left: spacing.md, top: spacing.md, zIndex: 2 }}>
+            <BackButton onPress={onBack} />
+          </View>
+        ) : null}
         <View style={styles.center}>
           {/* Icône dans des cercles concentriques : évoque l'onde sonore */}
           <View style={styles.ringOuter}>

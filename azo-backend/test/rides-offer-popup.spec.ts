@@ -340,7 +340,17 @@ describe("NotificationsService : canal, durée de vie et push silencieux", () =>
     await service.push("u1", "Titre", "Corps", "ride", { sendPush: true, channelId: "ride-offers", ttlSeconds: 45, data: { event: "ride-offered" } });
     const [message] = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(message).toMatchObject({ title: "Titre", body: "Corps", channelId: "ride-offers", ttl: 45, priority: "high", sound: "default" });
-    expect(message.data).toEqual({ event: "ride-offered" });
+    expect(message.data).toEqual({ type: "ride", event: "ride-offered" });
+  });
+
+  it("pousse par défaut (sendPush absent) avec le type de notification, et reste en boîte de réception seule avec sendPush: false", async () => {
+    const { service, fetchMock } = makeNotifications();
+    await service.push("u1", "Titre", "Corps", "payment");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [message] = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(message.data).toEqual({ type: "payment" });
+    await service.push("u1", "Titre", "Corps", "payment", { sendPush: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("garde le canal par défaut sans ttl quand rien n'est précisé", async () => {

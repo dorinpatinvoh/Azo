@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -68,6 +69,22 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
   const [step, setStep] = useState<Step>(resumeRegistration ? "register" : "phone");
   // Type de compte choisi à l'inscription : « Agence » ouvre ensuite le dossier d'agence (seul endroit où l'on peut en créer une)
   const [accountKind, setAccountKind] = useState<AccountKind>("CLIENT");
+  // Bouton retour du téléphone : code → numéro, numéro → écran précédent de l'entrée ; pendant l'inscription (étape obligatoire) il quitte l'application
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (step === "code") {
+        setStep("phone");
+        return true;
+      }
+      if (step === "phone") {
+        onBack();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [step, onBack]);
+
   // « Créer un compte » depuis l'écran du numéro : le profil est choisi avant le numéro et le code, puis le parcours dédié suit
   const [signupMode, setSignupMode] = useState(false);
   const [phone, setPhone] = useState("");
@@ -369,7 +386,7 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
           <View style={styles.headerBlock}>
             <Text style={styles.brand}>AZƆ̀</Text>
             <Text style={styles.headline}>
-              {step === "phone" ? t("auth.phone.title") : step === "code" ? t("auth.code.title") : t("auth.register.title")}
+              {step === "phone" ? (signupMode ? t("auth.signup.title") : t("auth.phone.title")) : step === "code" ? t("auth.code.title") : t("auth.register.title")}
             </Text>
             {step === "code" ? (
               <Text style={styles.subtitle}>
@@ -379,30 +396,43 @@ export default function OtpLoginScreen({ onVerified, onBack, resumeRegistration 
               <Text style={styles.subtitle}>
                 {t("auth.register.subtitle")}
               </Text>
+            ) : step === "phone" && signupMode ? (
+              <Text style={styles.subtitle}>{t("auth.signup.subtitle")}</Text>
             ) : null}
           </View>
 
           {step === "phone" ? (
             <View style={styles.card}>
               {signupMode ? (
-                <View style={{ marginBottom: spacing.md }}>
-                  <Text style={styles.label}>{t("auth.kind.title")}</Text>
+                <View style={{ marginBottom: spacing.md, gap: spacing.sm }}>
+                  <View style={styles.kindLabelRow}>
+                    <MaterialIcons name="how-to-reg" size={16} color={colors.primary} />
+                    <Text style={styles.kindLabel}>{t("auth.kind.title")}</Text>
+                  </View>
                   <AccountKindPicker value={accountKind} onChange={setAccountKind} />
-                  {accountKind !== "CLIENT" ? <Text style={styles.nameHint}>{t("auth.kind.hint")}</Text> : null}
+                  {accountKind !== "CLIENT" ? (
+                    <View style={styles.kindHint}>
+                      <MaterialIcons name="info-outline" size={16} color={colors.primary} />
+                      <Text style={styles.kindHintText}>{t("auth.kind.hint")}</Text>
+                    </View>
+                  ) : null}
                   <Pressable
                     onPress={() => {
                       setSignupMode(false);
                       setAccountKind("CLIENT");
                     }}
                     accessibilityRole="button"
-                    style={{ paddingVertical: spacing.sm }}
+                    style={styles.signupSwitch}
                   >
-                    <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 14 }}>{t("auth.signup.have")}</Text>
+                    <MaterialIcons name="login" size={18} color={colors.primary} />
+                    <Text style={styles.signupSwitchText}>{t("auth.signup.have")}</Text>
                   </Pressable>
+                  <View style={styles.kindDivider} />
                 </View>
               ) : (
-                <Pressable onPress={() => setSignupMode(true)} accessibilityRole="button" style={{ paddingBottom: spacing.sm }}>
-                  <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 14 }}>{t("auth.signup.create")}</Text>
+                <Pressable onPress={() => setSignupMode(true)} accessibilityRole="button" style={[styles.signupSwitch, { marginBottom: spacing.md }]}>
+                  <MaterialIcons name="person-add-alt-1" size={18} color={colors.primary} />
+                  <Text style={styles.signupSwitchText}>{t("auth.signup.create")}</Text>
                 </Pressable>
               )}
               <View style={styles.labelRow}>
@@ -747,6 +777,13 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: colors.surfaceContainerLowest,
   },
+  kindLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  kindLabel: { ...typography.labelMd, color: colors.primary, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase" },
+  kindHint: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: colors.primaryFixed + "66", borderRadius: radius.md, padding: spacing.sm },
+  kindHintText: { ...typography.bodySm, color: colors.onSurface, flex: 1 },
+  signupSwitch: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 44, borderRadius: radius.full, backgroundColor: colors.primaryFixed + "55", paddingHorizontal: spacing.md },
+  signupSwitchText: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
+  kindDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.outlineVariant, marginTop: spacing.xs },
   resend: { alignSelf: "center", marginTop: spacing.md },
   resendText: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
 

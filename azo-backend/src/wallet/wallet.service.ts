@@ -1,3 +1,4 @@
+import { NotificationsService } from "../notifications/notifications.module";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PricingService } from "../pricing/pricing.service";
@@ -15,6 +16,7 @@ export class WalletService {
     private prisma: PrismaService,
     private pricing: PricingService,
     private fedaPay: FedaPayService,
+    private notifications?: NotificationsService,
   ) {}
 
   async getWallet(userId: string) {
@@ -79,7 +81,7 @@ export class WalletService {
    * automatique (reconcilePendingRecharges) peuvent donc arriver en même temps sans jamais créditer deux fois.
    */
   private async confirmPendingRecharge(pending: { id: string; walletId: string; amount: number }): Promise<boolean> {
-    return this.prisma.$transaction(async (tx) => {
+    const credited = await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.transaction.updateMany({
         where: { id: pending.id, status: TransactionStatus.PENDING },
         data: { status: TransactionStatus.CONFIRMED },
@@ -88,6 +90,32 @@ export class WalletService {
       await tx.wallet.update({ where: { id: pending.walletId }, data: { balance: { increment: pending.amount } } });
       return true;
     });
+    if (credited) void this.notifyRecharge(pending.walletId, pending.amount, true);
+    return credited;
+  }
+
+  /** Prévient l'utilisateur (notification poussée) que sa recharge est créditée ou a échoué. Au mieux : ne bloque jamais le crédit. */
+  private async notifyRecharge(walletId: string, amount: number, ok: boolean): Promise<void> {
+    if (!this.notifications) return;
+    try {
+      const wallet = await this.prisma.wallet.findUnique({ where: { id: walletId }, select: { userId: true } });
+      if (!wallet) return;
+      await this.notifications.push(
+        wallet.userId,
+        ok ? "Compte rechargé" : "Recharge non aboutie",
+        ok
+          ? `+${amount} FCFA ajoutés à ton portefeuille AZƆ̀ Pay.`
+          : "Ton paiement n'a pas abouti : aucun montant n'a été ajouté. Tu peux réessayer.",
+        "payment",
+        {
+          titleKey: ok ? "NOTIFICATION_WALLET_RECHARGED" : "NOTIFICATION_WALLET_RECHARGE_FAILED",
+          params: { amount },
+          data: { event: ok ? "wallet-recharged" : "wallet-recharge-failed", amount },
+        }
+      );
+    } catch {
+      // la notification est facultative
+    }
   }
 
   /**
@@ -151,10 +179,11 @@ export class WalletService {
           if (status === "approved") {
             if (await this.confirmPendingRecharge(tx)) credited += 1;
           } else if (["declined", "canceled", "cancelled", "expired"].includes(status)) {
-            await this.prisma.transaction.updateMany({
+            const failed = await this.prisma.transaction.updateMany({
               where: { id: tx.id, status: TransactionStatus.PENDING },
               data: { status: TransactionStatus.FAILED },
             });
+            if (failed.count === 1) void this.notifyRecharge(tx.walletId, tx.amount, false);
           }
         } catch {
           // FedaPay injoignable pour cette transaction : on réessaiera au prochain contrôle

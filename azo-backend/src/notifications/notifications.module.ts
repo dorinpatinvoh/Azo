@@ -16,7 +16,7 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { translateNotification } from "./notification-texts";
 
 type PushOptions = {
-  /** Send an OS-level notification through Expo Push Service as well as saving it in-app. */
+  /** Notification poussée sur le téléphone en plus de la boîte de réception (par défaut : oui ; `false` pour l'inbox seule). */
   sendPush?: boolean;
   data?: Record<string, string | number | boolean | null>;
   /** Clé i18n stable pour le titre (ex. "NOTIFICATION_RIDE_MATCHED") — traduite par le mobile. */
@@ -31,6 +31,9 @@ type PushOptions = {
   ttlSeconds?: number;
 };
 
+// Canal Android par type de notification (créés par l'application) : messages, paiements et alertes de sécurité ont chacun leur son et leur importance.
+const CHANNEL_BY_TYPE: Record<string, string> = { chat: "messages", payment: "payments", security: "alerts" };
+
 type ExpoPushExtras = { channelId?: string; ttlSeconds?: number; silent?: boolean };
 
 @Injectable()
@@ -39,7 +42,8 @@ export class NotificationsService {
 
   constructor(private prisma: PrismaService) {}
 
-  // Save every notification in the inbox. Callers opt in to an OS push when it is urgent.
+  // Enregistre chaque notification dans la boîte de réception ET la pousse sur le téléphone (Expo Push), sauf `sendPush: false`.
+  // Les données envoyées portent toujours `type` (ride, payment, support, DELIVERY, PROVIDER_*, AGENCY, security, chat…) : l'application s'en sert pour ouvrir le bon écran au toucher.
   async push(userId: string, title: string, body: string, type: string, options: PushOptions = {}) {
     // Titre et corps dans la langue de l'utilisateur (notification poussée ET boîte de réception) quand le message a des clés
     // traduites ; le français, ou un message sans traduction, garde le texte de l'appelant.
@@ -64,9 +68,9 @@ export class NotificationsService {
       },
     });
 
-    if (options.sendPush) {
-      await this.sendExpoPush(userId, title, body, options.data, {
-        channelId: options.channelId,
+    if (options.sendPush !== false) {
+      await this.sendExpoPush(userId, title, body, { type, ...(options.data ?? {}) }, {
+        channelId: options.channelId ?? CHANNEL_BY_TYPE[type],
         ttlSeconds: options.ttlSeconds,
       });
     }

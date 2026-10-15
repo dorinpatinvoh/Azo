@@ -155,8 +155,9 @@ export class DeliveryService {
     await this.notifications.push(
       fresh.clientId,
       "Coursier en route 📦",
-      `Un coursier AZƆ̀ a accepté ta livraison vers ${fresh.dropAddress}. Prépare le code de ramassage (${fresh.pickupCode}).`,
-      "DELIVERY"
+      `Un coursier AZƆ̀ a accepté ta livraison vers ${fresh.dropAddress}. Ouvre l'application pour voir le code de ramassage.`,
+      "DELIVERY",
+      { titleKey: "NOTIFICATION_DELIVERY_ASSIGNED", params: { address: fresh.dropAddress }, data: { event: "delivery", deliveryId: fresh.id } }
     );
 
     const [enriched] = await this.enrich([fresh]);
@@ -201,8 +202,9 @@ export class DeliveryService {
     await this.notifications.push(
       d.clientId,
       "Colis pris en charge ✅",
-      `Le coursier a validé le code de ramassage et se dirige vers ${d.dropAddress}. Code de remise destinataire : ${d.deliveryCode}.`,
-      "DELIVERY"
+      `Le coursier a validé le code de ramassage et se dirige vers ${d.dropAddress}. Ouvre l'application pour voir le code de remise.`,
+      "DELIVERY",
+      { titleKey: "NOTIFICATION_DELIVERY_PICKED_UP", params: { address: d.dropAddress }, data: { event: "delivery", deliveryId: d.id } }
     );
 
     const [enriched] = await this.enrich([updated]);
@@ -266,7 +268,8 @@ export class DeliveryService {
       d.clientId,
       "Livraison terminée 🎉",
       `Ton colis à destination de ${d.dropAddress} a bien été remis avec le code OTP.`,
-      "DELIVERY"
+      "DELIVERY",
+      { titleKey: "NOTIFICATION_DELIVERY_DONE", params: { address: d.dropAddress }, data: { event: "delivery", deliveryId: d.id } }
     );
 
     const [enriched] = await this.enrich([updated]);
@@ -294,7 +297,8 @@ export class DeliveryService {
           d.courierId,
           "Livraison annulée",
           `Le client a annulé la livraison vers ${d.dropAddress}.`,
-          "DELIVERY"
+          "DELIVERY",
+          { titleKey: "NOTIFICATION_DELIVERY_CANCELLED", params: { address: d.dropAddress }, data: { event: "delivery", deliveryId: d.id } }
         );
       }
       const [enriched] = await this.enrich([updated]);
@@ -314,7 +318,8 @@ export class DeliveryService {
         d.clientId,
         "Recherche d'un nouveau coursier",
         "Le coursier a dû se désister. Ta livraison est reproposée aux coursiers disponibles.",
-        "DELIVERY"
+        "DELIVERY",
+        { titleKey: "NOTIFICATION_DELIVERY_REASSIGN", data: { event: "delivery", deliveryId: d.id } }
       );
       const [enriched] = await this.enrich([updated]);
       return { ...enriched, pickupCode: "••••", deliveryCode: "••••" };

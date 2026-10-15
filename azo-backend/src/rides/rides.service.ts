@@ -412,6 +412,7 @@ export class RidesService {
           `${this.pricing.vehicleLabel(vehicleType)} · ${price} FCFA — ouvre ton radar pour la prendre.`,
           "ride",
           {
+            data: { event: "ride-new" },
             titleKey: "NOTIFICATION_RIDE_NEW_REQUEST",
             bodyKey: "NOTIFICATION_RIDE_NEW_REQUEST_BODY",
             params: { vehicleLabel: this.pricing.vehicleLabel(vehicleType), price },
@@ -454,6 +455,7 @@ export class RidesService {
       `Ta demande est restée ${minutes} min sans chauffeur disponible : elle a été annulée. Aucun montant n'a été débité — relance une recherche.`,
       "ride",
       {
+        data: { event: "ride-no-driver", rideId: ride.id },
         titleKey: "NOTIFICATION_RIDE_NO_DRIVER",
         bodyKey: "NOTIFICATION_RIDE_NO_DRIVER_BODY",
         params: { minutes },
@@ -639,6 +641,7 @@ export class RidesService {
       const ride = await this.prisma.ride.findUniqueOrThrow({ where: { id: rideId }, include: WITH_CLIENT });
       this.gateway.invalidateRideLocationContext(rideId);
       await this.notifications.push(ride.clientId, "Chauffeur trouvé", "Un chauffeur a accepté ta course et arrive vers toi.", "ride", {
+        data: { event: "ride-matched", rideId },
         titleKey: "NOTIFICATION_RIDE_MATCHED",
         bodyKey: "NOTIFICATION_RIDE_MATCHED_BODY",
       });
@@ -733,7 +736,7 @@ export class RidesService {
     }
     if (driverId && reason === "withdrawn") {
       await this.notifications.push(ride.clientId, "Le Zem a retiré sa proposition.", "Nous cherchons un autre Zem.", "ride",
-        { titleKey: "NOTIFICATION_RIDE_WITHDRAWN", bodyKey: "NOTIFICATION_RIDE_WITHDRAWN_BODY" }
+        { data: { event: "ride-withdrawn", rideId: ride.id }, titleKey: "NOTIFICATION_RIDE_WITHDRAWN", bodyKey: "NOTIFICATION_RIDE_WITHDRAWN_BODY" }
       ).catch(() => null);
     }
     if (driverId && reason === "expired") {
@@ -1163,6 +1166,7 @@ export class RidesService {
     this.gateway.clearClientLocationState(rideId);
     this.gateway.invalidateRideLocationContext(rideId);
     await this.notifications.push(ride.clientId, "Course démarrée", "Ton chauffeur est en route vers la destination.", "ride", {
+      data: { event: "ride-started", rideId },
       titleKey: "NOTIFICATION_RIDE_STARTED",
       bodyKey: "NOTIFICATION_RIDE_STARTED_BODY",
     });
@@ -1285,6 +1289,7 @@ export class RidesService {
     if (otherId) {
       await this.notifications
         .push(otherId, "Demande d'arrêt de course", "L'autre participant demande d'arrêter la course ici.", "ride", {
+          data: { event: "ride-stop-request", rideId },
           titleKey: "NOTIFICATION_RIDE_STOP_REQUEST",
           bodyKey: "NOTIFICATION_RIDE_STOP_REQUEST_BODY",
         })
@@ -1412,6 +1417,7 @@ export class RidesService {
           ? "L'autre participant a refusé l'arrêt. La course continue."
           : "La demande d'arrêt a été annulée.";
       await this.notifications.push(notifyId, "Demande d'arrêt mise à jour", message, "ride", {
+        data: { event: "ride-stop-updated", rideId },
         titleKey: "NOTIFICATION_RIDE_STOP_UPDATED",
         bodyKey: action === "declined" ? "NOTIFICATION_RIDE_STOP_DECLINED_BODY" : "NOTIFICATION_RIDE_STOP_CANCELLED_BODY",
       }).catch(() => null);
@@ -1663,6 +1669,7 @@ export class RidesService {
     this.gateway.clearRideLocations(rideId);
     await this.notifications
       .push(ride.clientId, "Course terminée", `${amount} FCFA débités de ton portefeuille.`, "payment", {
+        data: { event: "ride-completed", rideId },
         titleKey: "NOTIFICATION_RIDE_COMPLETED_CLIENT",
         bodyKey: "NOTIFICATION_RIDE_COMPLETED_CLIENT_BODY",
         params: { amount },
@@ -1670,6 +1677,7 @@ export class RidesService {
       .catch(() => null);
     await this.notifications
       .push(driverId, "Paiement reçu", `+${driverGain} FCFA (commission AZƆ̀ : ${commission} F).`, "payment", {
+        data: { event: "ride-completed", rideId },
         titleKey: "NOTIFICATION_RIDE_COMPLETED_DRIVER",
         bodyKey: "NOTIFICATION_RIDE_COMPLETED_DRIVER_BODY",
         params: { driverGain, commission },
@@ -1746,12 +1754,14 @@ export class RidesService {
       if (ride.driverId) {
         this.gateway.emitRideCancelled(ride.driverId, rideId);
         await this.notifications.push(ride.driverId, "Course annulée", "Le client a annulé la course.", "ride", {
+          data: { event: "ride-cancelled", rideId },
           titleKey: "NOTIFICATION_RIDE_CANCELLED",
           bodyKey: "NOTIFICATION_RIDE_CANCELLED_BY_CLIENT_BODY",
         });
       }
     } else {
       await this.notifications.push(ride.clientId, "Course annulée", "Ton chauffeur a annulé. Recherche d'un nouveau chauffeur…", "ride", {
+        data: { event: "ride-cancelled", rideId },
         titleKey: "NOTIFICATION_RIDE_CANCELLED",
         bodyKey: "NOTIFICATION_RIDE_CANCELLED_BY_DRIVER_BODY",
       });

@@ -266,6 +266,102 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     es: t("Agencia activada ✅", "{agency} está activa ({plan} · {accounts} cuentas · comisión {commission} %)."),
     de: t("Agentur aktiviert ✅", "{agency} ist aktiv ({plan} · {accounts} Konten · Provision {commission} %)."),
   },
+  NOTIFICATION_WALLET_RECHARGED: {
+    fr: t("Compte rechargé", "+{amount} FCFA ajoutés à ton portefeuille AZƆ̀ Pay."),
+    en: t("Account topped up", "+{amount} FCFA added to your AZƆ̀ Pay wallet."),
+    es: t("Cuenta recargada", "+{amount} FCFA añadidos a tu monedero AZƆ̀ Pay."),
+    de: t("Konto aufgeladen", "+{amount} FCFA wurden deinem AZƆ̀-Pay-Guthaben gutgeschrieben."),
+  },
+  NOTIFICATION_WALLET_RECHARGE_FAILED: {
+    fr: t("Recharge non aboutie", "Ton paiement n'a pas abouti : aucun montant n'a été ajouté. Tu peux réessayer."),
+    en: t("Top-up failed", "Your payment did not go through: nothing was added. You can try again."),
+    es: t("Recarga no completada", "Tu pago no se completó: no se añadió nada. Puedes intentarlo de nuevo."),
+    de: t("Aufladung fehlgeschlagen", "Deine Zahlung ist nicht durchgegangen: Es wurde nichts gutgeschrieben. Du kannst es erneut versuchen."),
+  },
+  NOTIFICATION_PROVIDER_DOC_VALID: {
+    fr: t("Pièce validée", "{document} a été validée."),
+    en: t("Document approved", "{document} has been approved."),
+    es: t("Documento validado", "{document} ha sido validado."),
+    de: t("Dokument bestätigt", "{document} wurde bestätigt."),
+  },
+  NOTIFICATION_PROVIDER_DOC_REFUSED: {
+    fr: t("Pièce refusée", "{document} a été refusée[[ : {note}]]."),
+    en: t("Document rejected", "{document} was rejected[[: {note}]]."),
+    es: t("Documento rechazado", "{document} fue rechazado[[: {note}]]."),
+    de: t("Dokument abgelehnt", "{document} wurde abgelehnt[[: {note}]]."),
+  },
+  NOTIFICATION_PROVIDER_REJECTED: {
+    fr: t("Dossier refusé", "Ton dossier {type} a été refusé. Motif : {reason}"),
+    en: t("Application rejected", "Your {type} application was rejected. Reason: {reason}"),
+    es: t("Expediente rechazado", "Tu expediente {type} fue rechazado. Motivo: {reason}"),
+    de: t("Antrag abgelehnt", "Dein Antrag {type} wurde abgelehnt. Grund: {reason}"),
+  },
+  NOTIFICATION_PROVIDER_NEED_INFO: {
+    fr: t("Information manquante", "Ton dossier {type} est en attente : {reason}"),
+    en: t("Information missing", "Your {type} application is on hold: {reason}"),
+    es: t("Información faltante", "Tu expediente {type} está en espera: {reason}"),
+    de: t("Angabe fehlt", "Dein Antrag {type} ist in Wartestellung: {reason}"),
+  },
+  NOTIFICATION_PROVIDER_APPROVED: {
+    fr: t("Ton compte prestataire est actif 🎉", "AZƆ̀ a validé ton dossier {type}. Ton espace métier est ouvert."),
+    en: t("Your provider account is active 🎉", "AZƆ̀ approved your {type} application. Your business space is open."),
+    es: t("Tu cuenta de prestador está activa 🎉", "AZƆ̀ validó tu expediente {type}. Tu espacio profesional está abierto."),
+    de: t("Dein Anbieterkonto ist aktiv 🎉", "AZƆ̀ hat deinen Antrag {type} bestätigt. Dein Geschäftsbereich ist geöffnet."),
+  },
+  NOTIFICATION_PROVIDER_SUSPENDED: {
+    fr: t("Compte prestataire suspendu", "Ton accès métier est suspendu. Motif : {reason}"),
+    en: t("Provider account suspended", "Your business access is suspended. Reason: {reason}"),
+    es: t("Cuenta de prestador suspendida", "Tu acceso profesional está suspendido. Motivo: {reason}"),
+    de: t("Anbieterkonto gesperrt", "Dein Geschäftszugang ist gesperrt. Grund: {reason}"),
+  },
+  NOTIFICATION_PROVIDER_REINSTATED: {
+    fr: t("Compte prestataire réactivé", "Ta suspension est levée : ton espace métier est de nouveau accessible."),
+    en: t("Provider account reinstated", "Your suspension is lifted: your business space is accessible again."),
+    es: t("Cuenta de prestador reactivada", "Se levantó tu suspensión: tu espacio profesional vuelve a estar accesible."),
+    de: t("Anbieterkonto reaktiviert", "Deine Sperre ist aufgehoben: Dein Geschäftsbereich ist wieder zugänglich."),
+  },
+  NOTIFICATION_DELIVERY_ASSIGNED: {
+    fr: t("Coursier en route 📦", "Un coursier AZƆ̀ a accepté ta livraison vers {address}. Ouvre l'application pour voir le code de ramassage."),
+    en: t("Courier on the way 📦", "An AZƆ̀ courier accepted your delivery to {address}. Open the app to see the pickup code."),
+    es: t("Mensajero en camino 📦", "Un mensajero AZƆ̀ aceptó tu entrega a {address}. Abre la aplicación para ver el código de recogida."),
+    de: t("Kurier unterwegs 📦", "Ein AZƆ̀-Kurier hat deine Lieferung nach {address} angenommen. Öffne die App, um den Abholcode zu sehen."),
+  },
+  NOTIFICATION_DELIVERY_PICKED_UP: {
+    fr: t("Colis pris en charge ✅", "Le coursier a validé le code de ramassage et se dirige vers {address}. Ouvre l'application pour voir le code de remise."),
+    en: t("Parcel picked up ✅", "The courier confirmed the pickup code and is heading to {address}. Open the app to see the handover code."),
+    es: t("Paquete recogido ✅", "El mensajero validó el código de recogida y se dirige a {address}. Abre la aplicación para ver el código de entrega."),
+    de: t("Paket abgeholt ✅", "Der Kurier hat den Abholcode bestätigt und fährt nach {address}. Öffne die App, um den Übergabecode zu sehen."),
+  },
+  NOTIFICATION_DELIVERY_DONE: {
+    fr: t("Livraison terminée 🎉", "Ton colis à destination de {address} a bien été remis avec le code OTP."),
+    en: t("Delivery completed 🎉", "Your parcel to {address} was handed over with the OTP code."),
+    es: t("Entrega completada 🎉", "Tu paquete a {address} fue entregado con el código OTP."),
+    de: t("Lieferung abgeschlossen 🎉", "Dein Paket nach {address} wurde mit dem OTP-Code übergeben."),
+  },
+  NOTIFICATION_DELIVERY_CANCELLED: {
+    fr: t("Livraison annulée", "Le client a annulé la livraison vers {address}."),
+    en: t("Delivery cancelled", "The customer cancelled the delivery to {address}."),
+    es: t("Entrega cancelada", "El cliente canceló la entrega a {address}."),
+    de: t("Lieferung storniert", "Der Kunde hat die Lieferung nach {address} storniert."),
+  },
+  NOTIFICATION_DELIVERY_REASSIGN: {
+    fr: t("Recherche d'un nouveau coursier", "Le coursier a dû se désister. Ta livraison est reproposée aux coursiers disponibles."),
+    en: t("Looking for a new courier", "The courier had to withdraw. Your delivery is offered again to available couriers."),
+    es: t("Buscando un nuevo mensajero", "El mensajero tuvo que retirarse. Tu entrega se ofrece de nuevo a los mensajeros disponibles."),
+    de: t("Neuer Kurier wird gesucht", "Der Kurier musste absagen. Deine Lieferung wird den verfügbaren Kurieren erneut angeboten."),
+  },
+  NOTIFICATION_SETTLEMENT_CONFIRM: {
+    fr: t("Confirme ton arrivée", "Le Zem indique t'avoir déposé. Confirme dans {minutes} minutes ou signale un problème."),
+    en: t("Confirm your arrival", "The driver says they dropped you off. Confirm within {minutes} minutes or report a problem."),
+    es: t("Confirma tu llegada", "El conductor indica que te dejó. Confirma en {minutes} minutos o informa de un problema."),
+    de: t("Bestätige deine Ankunft", "Der Fahrer meldet, dich abgesetzt zu haben. Bestätige innerhalb von {minutes} Minuten oder melde ein Problem."),
+  },
+  NOTIFICATION_SETTLEMENT_DISPUTE: {
+    fr: t("Course en litige", "Le client a signalé un problème. Le paiement est suspendu."),
+    en: t("Ride in dispute", "The customer reported a problem. Payment is on hold."),
+    es: t("Carrera en disputa", "El cliente informó de un problema. El pago está suspendido."),
+    de: t("Fahrt im Streitfall", "Der Kunde hat ein Problem gemeldet. Die Zahlung ist ausgesetzt."),
+  },
 };
 
 export type NotificationParams = Record<string, string | number | boolean | null | undefined>;

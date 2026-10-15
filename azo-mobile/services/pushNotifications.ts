@@ -56,6 +56,25 @@ export async function registerForPushNotifications(): Promise<string | null> {
         lightColor: "#7100AF",
         lockscreenVisibility: Notifications.AndroidNotificationVisibility?.PUBLIC,
       });
+      await Notifications.setNotificationChannelAsync("messages", {
+        name: "Messages",
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 200, 150, 200],
+        lightColor: "#7100AF",
+      });
+      await Notifications.setNotificationChannelAsync("payments", {
+        name: "Paiements et portefeuille",
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 150, 250],
+        lightColor: "#0B7A53",
+      });
+      await Notifications.setNotificationChannelAsync("alerts", {
+        name: "Alertes de sécurité",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 500, 250, 500, 250, 500],
+        lightColor: "#B3261E",
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility?.PUBLIC,
+      });
       await Notifications.setNotificationChannelAsync("default", {
         name: "Notifications AZƆ̀",
         importance: Notifications.AndroidImportance.MAX,
@@ -99,6 +118,25 @@ export function subscribeNotificationReceived(onNotification: (notification: any
   } catch (error) {
     console.warn("Impossible d'attacher le listener de réception :", error);
     return () => {};
+  }
+}
+
+/**
+ * Retire de la barre du téléphone les alertes d'une course devenue périmée (proposition retirée, expirée, course annulée…).
+ * Appelé à la réception de la notification silencieuse `ride-offer-ended`.
+ */
+export async function dismissRideNotifications(rideId: string): Promise<void> {
+  if (!isPushNotificationSupported()) return;
+  try {
+    const Notifications = require("expo-notifications");
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(
+      presented
+        .filter((n: any) => n?.request?.content?.data?.rideId === rideId)
+        .map((n: any) => Notifications.dismissNotificationAsync(n.request.identifier))
+    );
+  } catch {
+    // facultatif : l'alerte restera simplement affichée
   }
 }
 

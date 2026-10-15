@@ -42,7 +42,11 @@ export class RideSettlementService {
     if (ride.status !== "IN_PROGRESS") throw new BadRequestException("La course doit être en cours");
     const deadline = new Date(Date.now() + CONFIRMATION_MINUTES * 60_000);
     const row = await this.prisma.$queryRawUnsafe<SettlementRow[]>(`INSERT INTO "RideSettlement" ("id","rideId","dropoffAt","confirmationDeadline") VALUES (md5(random()::text || clock_timestamp()::text),$1,NOW(),$2) ON CONFLICT ("rideId") DO UPDATE SET "dropoffAt"=NOW(),"confirmationDeadline"=$2,"problemReportedAt"=NULL,"problemReason"=NULL,"clientConfirmedAt"=NULL RETURNING "rideId","dropoffAt","confirmationDeadline","clientConfirmedAt","problemReportedAt","problemReason"`, rideId, deadline);
-    await this.notifications.push(ride.clientId, "Confirme ton arrivée", `Le Zem indique t'avoir déposé. Confirme dans ${CONFIRMATION_MINUTES} minutes ou signale un problème.`, "payment");
+    await this.notifications.push(ride.clientId, "Confirme ton arrivée", `Le Zem indique t'avoir déposé. Confirme dans ${CONFIRMATION_MINUTES} minutes ou signale un problème.`, "payment", {
+      titleKey: "NOTIFICATION_SETTLEMENT_CONFIRM",
+      params: { minutes: CONFIRMATION_MINUTES },
+      data: { event: "ride-settlement", rideId },
+    });
     this.gateway.emitStatus(rideId, "DROPPED_OFF_PENDING");
     return { rideId, status: "DROPPED_OFF_PENDING", confirmationDeadline: row[0]?.confirmationDeadline };
   }
@@ -72,7 +76,10 @@ export class RideSettlementService {
     const clean = (reason || "Problème signalé par le client").trim().slice(0, 500);
     const result = await this.prisma.$executeRawUnsafe(`UPDATE "RideSettlement" SET "problemReportedAt"=NOW(),"problemReason"=$2 WHERE "rideId"=$1 AND "clientConfirmedAt" IS NULL AND "problemReportedAt" IS NULL`, rideId, clean);
     if (result !== 1) throw new BadRequestException("Aucune confirmation en attente");
-    await this.notifications.push(ride.driverId!, "Course en litige", "Le client a signalé un problème. Le paiement est suspendu.", "payment");
+    await this.notifications.push(ride.driverId!, "Course en litige", "Le client a signalé un problème. Le paiement est suspendu.", "payment", {
+      titleKey: "NOTIFICATION_SETTLEMENT_DISPUTE",
+      data: { event: "ride-settlement", rideId },
+    });
     this.gateway.emitStatus(rideId, "DISPUTED");
     return { status: "DISPUTED", message: "Paiement suspendu, vérification AZƆ̀ requise" };
   }

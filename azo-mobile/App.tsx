@@ -54,6 +54,7 @@ import {
   userApi,
 } from "./services/api";
 import {
+  dismissRideNotifications,
   registerForPushNotifications,
   setupNotificationHandler,
   subscribeNotificationReceived,
@@ -294,6 +295,15 @@ function AppInner() {
         goTo("home");
         return true;
       }
+      // Parcours d'entrée : on revient d'un écran à l'autre (la connexion gère elle-même ses étapes)
+      if (current === "assist-offer") {
+        goTo("splash");
+        return true;
+      }
+      if (current === "language") {
+        goTo("assist-offer");
+        return true;
+      }
       if (BACK_ROUTES.has(current)) {
         goBack();
         return true;
@@ -312,26 +322,63 @@ function AppInner() {
     goTo(isVoiceOfferAnswered() ? "otp" : "assist-offer");
   }, [goTo]);
 
+  const openNotificationTarget = useCallback(
+    async (data: Record<string, unknown>) => {
+      const notifiedRideId = typeof data.rideId === "string" ? data.rideId : null;
+      const role = ((await SecureStore.getItemAsync("userRole")) ?? "").toUpperCase().trim();
+      const providerStatus = await SecureStore.getItemAsync("providerStatus");
+      const providerType = await SecureStore.getItemAsync("providerType");
+      const workspace = routeFor(role, providerStatus, providerType);
+      const isProfessional = role === "DRIVER" || role === "AGENCY" || role === "ADMIN" || role === "COURIER";
+      const type = typeof data.type === "string" ? data.type : "";
+      const event = typeof data.event === "string" ? data.event : "";
+
+      // Événement de course : le client suit sa course, les professionnels retrouvent leur espace (radar, course en cours)
+      if (notifiedRideId && !isProfessional) {
+        setRideId(notifiedRideId);
+        setRideLabel(undefined);
+        offerWatcher.watch(notifiedRideId);
+        goTo("ride-tracking");
+        return;
+      }
+      if (isProfessional && (notifiedRideId || event === "ride-new" || type === "ride" || type === "chat" || type === "DELIVERY")) {
+        goTo(workspace);
+        return;
+      }
+
+      // Sans course : l'écran du sujet
+      if (type === "payment" || event.startsWith("wallet-") || event.startsWith("agency-fund") || event.startsWith("agency-withdraw")) goTo("wallet");
+      else if (type === "support") goTo(role === "ADMIN" ? "admin-support" : "support");
+      else if (type.startsWith("PROVIDER_") || event.startsWith("provider-")) goTo(role === "ADMIN" ? "admin-providers" : "provider-status");
+      else if (type === "AGENCY") goTo(role === "AGENCY" ? "agency-dashboard" : workspace);
+      else if (type === "security") goTo("profile-info");
+      else if (type === "ride" || type === "chat" || type === "DELIVERY") goTo("courses");
+      else goTo("notifications");
+    },
+    [goTo, offerWatcher.watch]
+  );
+
+  /**
+   * Toucher une notification poussée ouvre l'écran qui correspond : la course pour un client, l'espace métier pour un Zem, un coursier
+   * ou une agence, le portefeuille, l'assistance, le dossier prestataire… Le serveur envoie `type` et, selon l'événement, `rideId`.
+   */
   const handleRideNotification = useCallback(
-    (notification: any) => {
+    async (notification: any) => {
       const notificationId = notification?.request?.identifier;
       if (handledNotificationRef.current === notificationId) return;
       handledNotificationRef.current = notificationId;
 
-      const notifiedRideId = notification?.request?.content?.data?.rideId;
-      if (typeof notifiedRideId !== "string") return;
+      const data = notification?.request?.content?.data ?? {};
       if (!sessionToken) {
-        pendingRideNotificationRef.current = notifiedRideId;
+        if (typeof data.rideId === "string") pendingRideNotificationRef.current = data.rideId;
         return;
       }
-      setRideId(notifiedRideId);
-      setRideLabel(undefined);
-      offerWatcher.watch(notifiedRideId);
-      goTo("ride-tracking");
+      await openNotificationTarget(data);
     },
-    [goTo, sessionToken, offerWatcher.watch]
+    [sessionToken, openNotificationTarget]
   );
 
+  // Jeton de notification : enregistré auprès du serveur à chaque ouverture de session
   useEffect(() => {
     if (!sessionToken) return;
     let active = true;
@@ -347,18 +394,24 @@ function AppInner() {
     return () => { active = false; };
   }, [sessionToken]);
 
+  // Notification reçue application ouverte : la proposition d'un Zem ouvre sa fenêtre tout de suite ; la notification silencieuse
+  // `ride-offer-ended` ferme la fenêtre et retire l'alerte périmée de la barre du téléphone
   useEffect(() => {
     return subscribeNotificationReceived((notification: any) => {
       const data = notification?.request?.content?.data;
       if (data?.event === "ride-offered" && typeof data.rideId === "string") offerWatcher.watch(data.rideId);
+      if (data?.event === "ride-offer-ended" && typeof data.rideId === "string") {
+        offerWatcher.dismiss();
+        void dismissRideNotifications(data.rideId);
+      }
     });
-  }, [offerWatcher.watch]);
+  }, [offerWatcher.watch, offerWatcher.dismiss]);
 
+  // Toucher une notification (application ouverte, en arrière-plan ou fermée)
   useEffect(() => {
     const unsubscribe = subscribeNotificationResponse(handleRideNotification);
     return () => unsubscribe();
   }, [handleRideNotification]);
-
   useEffect(() => {
     const pendingRideId = pendingRideNotificationRef.current;
     if (!sessionToken || !pendingRideId) return;
@@ -523,6 +576,7 @@ function AppInner() {
 
         {route === "assist-offer" && (
           <AssistOfferScreen
+            onBack={() => goTo("splash")}
             onYes={() => {
               setVoiceAssist(true);
               goTo("language");
@@ -730,7 +784,7 @@ function AppInner() {
           <MarketplaceEscrowScreen onBack={() => goBack()} onConfirm={() => goTo("home")} />
         )}
 
-        {route === "notifications" && <NotificationsScreen onBack={() => goBack()} />}
+        {route === "notifications" && <NotificationsScreen onBack={() => goBack()} onOpen={(n) => void openNotificationTarget({ type: n.type })} />}
 
         {route === "menu" && <DevMenuScreen onSelect={(id) => goTo(id)} />}
 
