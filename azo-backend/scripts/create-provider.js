@@ -11,7 +11,7 @@
  *   spider-electrique   Spider (Zem) électrique
  *   voiture             Conducteur de voiture ; --vehicle GAZELLE (défaut), KOALA ou LEOPARD
  *   coursier-personnel  Coursier personnel (réservé pour une durée) ; --vehicle ZEM_ESSENCE (défaut), ZEM_ELECTRIC, GAZELLE, KOALA ou LEOPARD
- *   livreur-express     Livreur express (plis, documents, colis ; double code OTP)
+ *   livreur-express     Livreur express (plis, documents, colis ; double code OTP) ; --vehicle ZEM_ESSENCE (défaut), ZEM_ELECTRIC ou ZEM_TRICYCLE
  *
  * Options : --name "<nom>" · --balance <F> (solde AZƆ̀ Pay, défaut 5 000) · --allow-remote (base non locale, ex. Render)
  * Le dossier est créé déjà APPROUVÉ : le compte entre directement dans son espace professionnel (connexion : numéro + code OTP).
@@ -33,7 +33,7 @@ const PROFILES = {
   "spider-electrique": { label: "Spider électrique", type: "DRIVER", vehicleType: "ZEM_ELECTRIC", model: "Moto électrique" },
   voiture: { label: "Conducteur de voiture", type: "DRIVER", vehicleType: "GAZELLE", model: "Toyota Corolla" },
   "coursier-personnel": { label: "Coursier personnel", type: "COURIER", vehicleType: "ZEM_ESSENCE", model: "Moto", categoryId: "COURSIER_PERSONNEL" },
-  "livreur-express": { label: "Livreur express", type: "COURIER", vehicleType: "GAZELLE", model: "Moto", categoryId: "COURSIER_EXPRESS" },
+  "livreur-express": { label: "Livreur express", type: "COURIER", vehicleType: "ZEM_ESSENCE", model: "Moto", categoryId: "COURSIER_EXPRESS" },
 };
 
 const profileKey = option("profile");
@@ -44,9 +44,9 @@ if (!raw || !profile) {
   );
   process.exit(1);
 }
-if ((profileKey === "voiture" || profileKey === "coursier-personnel") && option("vehicle")) {
+if ((profileKey === "voiture" || profileKey === "coursier-personnel" || profileKey === "livreur-express") && option("vehicle")) {
   const v = option("vehicle").toUpperCase();
-  const allowed = profileKey === "voiture" ? ["GAZELLE", "KOALA", "LEOPARD"] : ["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"];
+  const allowed = profileKey === "voiture" ? ["GAZELLE", "KOALA", "LEOPARD"] : ["ZEM_ESSENCE", "ZEM_ELECTRIC", "ZEM_TRICYCLE", "GAZELLE", "KOALA", "LEOPARD"];
   if (!allowed.includes(v)) {
     console.error("--vehicle doit valoir " + allowed.join(", ") + ".");
     process.exit(1);

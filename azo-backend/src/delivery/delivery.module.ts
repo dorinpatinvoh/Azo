@@ -142,10 +142,19 @@ export class DeliveryService {
       if (!dropAddress) dropAddress = "Destination à préciser avec le coursier";
       extra = { mode: "PERSONAL", vehicleType, bookingHours, distanceKm: km, ...(scheduledAt ? { scheduledAt } : {}) };
     } else {
-      if (!askedPrice) throw new BadRequestException("Le prix de la livraison est obligatoire.");
       if (!dropAddress) throw new BadRequestException("L'adresse de livraison est obligatoire.");
-      // Speeder demandé pour le colis (facultatif) : seuls les livreurs de ce véhicule voient la mission
-      if (vehicleType) extra = { vehicleType };
+      // Speeder demandé pour le colis : seuls les livreurs de ce véhicule voient la mission. Moto ou tricycle uniquement.
+      const express = vehicleType ?? "ZEM_ESSENCE";
+      if (!this.pricing.deliveryRule(express)) {
+        throw new BadRequestException("Choisis un Speeder moto (essence ou électrique) ou un tricycle pour ton colis.");
+      }
+      if (pickupLat === undefined || pickupLng === undefined || dropLat === undefined || dropLng === undefined) {
+        throw new BadRequestException("Choisis le ramassage et la livraison dans la liste de suggestions (ou sur la carte) pour calculer le prix.");
+      }
+      // Prix calculé par le serveur sur la distance de l'itinéraire : le prix envoyé par le client est ignoré
+      const km = Math.round((await this.routeKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng })) * 10) / 10;
+      price = this.pricing.deliveryPrice(express, km);
+      extra = { vehicleType: express, distanceKm: km };
     }
     if (dto.payer === "SENDER" || personal) {
       const w = await this.wallet.getWallet(clientId);

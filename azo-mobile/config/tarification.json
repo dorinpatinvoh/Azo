@@ -265,6 +265,21 @@
   },
   "delivery": {
     "commissionPct": 15,
+    "_notes": "Colis (livreur express) : prix = base + kilomètres de l'itinéraire × tarif au km, selon le Speeder. Speeder moto (essence et électrique) 200 F + 80 F/km ; tricycle 225 F + 80 F/km. Les voitures ne livrent pas de colis.",
+    "vehicles": {
+      "ZEM_ESSENCE": {
+        "base": 200,
+        "perKm": 80
+      },
+      "ZEM_ELECTRIC": {
+        "base": 200,
+        "perKm": 80
+      },
+      "ZEM_TRICYCLE": {
+        "base": 225,
+        "perKm": 80
+      }
+    },
     "_aDefinir": [
       "commissionPct — règle à définir : aucun tarif de livraison n'est validé pour le moment. Cette valeur est provisoire (reprise de l'existant) et ne doit pas être présentée comme une règle métier."
     ]

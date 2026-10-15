@@ -59,6 +59,8 @@ export type TarificationConfig = {
   profiles: Record<string, { category?: string; monthlyRevenueSharePct?: number; withdrawalFeePct?: number }>;
   legacyVehicleMapping: Record<string, VehicleKey>;
   agencyActivation: { requiredForOperations: boolean };
+  /** Livraison de colis : tarif (base + km) par Speeder. */
+  delivery?: { vehicles?: Partial<Record<VehicleKey, { base: number; perKm: number }>> };
   /** Coursier personnel : durées de réservation et tarif (base + km) par véhicule. */
   personalCourier?: {
     durations: { hours: number; label: string }[];

@@ -171,4 +171,21 @@ describe("Réservation d'un coursier personnel", () => {
     prisma.delivery.findUnique.mockResolvedValue({ id: "d1", clientId: "c1", mode: "EXPRESS", vehicleType: "GAZELLE" });
     await expect(service.accept("k1", "d1")).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it("colis : prix serveur = base + km × tarif du Speeder (moto 200 + 80/km, tricycle 225 + 80/km)", async () => {
+    const { service, prisma } = make();
+    jest.spyOn(service as any, "routeKm").mockResolvedValue(10);
+    const dto = { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER", price: 200, pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
+    await service.create("c1", { ...dto, vehicleType: "ZEM_ESSENCE" });
+    expect(prisma.delivery.create.mock.calls[0][0].data.price).toBe(1000);
+    await service.create("c1", { ...dto, vehicleType: "ZEM_TRICYCLE" });
+    expect(prisma.delivery.create.mock.calls[1][0].data.price).toBe(1025);
+  });
+
+  it("colis : une voiture ne livre pas, et les coordonnées sont obligatoires", async () => {
+    const { service } = make();
+    const dto = { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
+    await expect(service.create("c1", { ...dto, vehicleType: "GAZELLE" })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create("c1", { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER" } as any)).rejects.toBeInstanceOf(BadRequestException);
+  });
 });

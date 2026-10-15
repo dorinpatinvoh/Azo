@@ -25,9 +25,9 @@ import PlacePickerMap from "../components/PlacePickerMap";
 import { tarification } from "../services/tarification";
 
 const PACKAGE_TYPES = [
-  { id: "doc", label: "Document / Pli", note: "Pli urgent < 1 kg", price: 1000, icon: "drafts" as const },
-  { id: "small", label: "Petit Colis", note: "Sac / Repas < 5 kg", price: 1500, icon: "shopping-bag" as const },
-  { id: "medium", label: "Colis Moyen", note: "Carton < 15 kg", price: 2500, icon: "inventory-2" as const },
+  { id: "doc", label: "Document / Pli", note: "Pli urgent < 1 kg", icon: "drafts" as const },
+  { id: "small", label: "Petit Colis", note: "Sac / Repas < 5 kg", icon: "shopping-bag" as const },
+  { id: "medium", label: "Colis Moyen", note: "Carton < 15 kg", icon: "inventory-2" as const },
 ];
 
 // Le Speeder dont le client a besoin pour son colis (seuls les livreurs de ce véhicule voient la mission)
@@ -35,9 +35,6 @@ const SPEEDERS: { id: VehicleType; label: string; icon: keyof typeof MaterialIco
   { id: "ZEM_ESSENCE", label: "Speeder à essence", icon: "two-wheeler" },
   { id: "ZEM_ELECTRIC", label: "Speeder électrique", icon: "electric-moped" },
   { id: "ZEM_TRICYCLE", label: "Speeder tricycle", icon: "electric-rickshaw" },
-  { id: "GAZELLE", label: "Speeder Gazelle", icon: "directions-car" },
-  { id: "KOALA", label: "Speeder Koala", icon: "directions-car" },
-  { id: "LEOPARD", label: "Speeder Léopard", icon: "local-taxi" },
 ];
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -55,6 +52,7 @@ type Props = { onBack: () => void; onConfirm: () => void };
 export default function DeliveryScreen({ onBack }: Props) {
   const [selectedType, setSelectedType] = useState("small");
   const [speeder, setSpeeder] = useState<VehicleType>("ZEM_ESSENCE");
+  const [routeKm, setRouteKm] = useState<number | null>(null);
   const [pickup, setPickup] = useState<Place | null>(null);
   const [drop, setDrop] = useState<Place | null>(null);
   const [payer, setPayer] = useState<"me" | "recipient">("me");
@@ -62,6 +60,10 @@ export default function DeliveryScreen({ onBack }: Props) {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [chatDelivery, setChatDelivery] = useState<Delivery | null>(null);
+
+  // Prix estimé (le serveur recalcule sur l'itinéraire) : base + km × tarif ; la base n'est jamais affichée
+  const rule = tarification().delivery?.vehicles?.[speeder];
+  const estimate = rule && routeKm !== null ? Math.round(rule.base + routeKm * rule.perKm) : null;
 
   const selectedPackage = PACKAGE_TYPES.find((p) => p.id === selectedType) ?? PACKAGE_TYPES[1];
 
@@ -103,7 +105,6 @@ export default function DeliveryScreen({ onBack }: Props) {
         dropLat: drop.latitude,
         dropLng: drop.longitude,
         payer: payer === "me" ? "SENDER" : "RECIPIENT",
-        price: selectedPackage.price,
       });
       await loadMine();
       Alert.alert(
@@ -262,7 +263,6 @@ export default function DeliveryScreen({ onBack }: Props) {
                   <Text style={styles.typeLabel}>{p.label}</Text>
                   <Text style={styles.typeNote}>{p.note}</Text>
                 </View>
-                <Text style={styles.typePrice}>{fcfa(p.price)}</Text>
                 {active && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
               </Pressable>
             );
@@ -274,13 +274,13 @@ export default function DeliveryScreen({ onBack }: Props) {
           {SPEEDERS.map((v) => (
             <Pressable key={v.id} style={[styles.payerChip, { flexGrow: 1, flexBasis: "45%" }, speeder === v.id && styles.payerChipActive]} onPress={() => setSpeeder(v.id)}>
               <MaterialIcons name={v.icon} size={18} color={speeder === v.id ? colors.onPrimary : colors.onSurfaceVariant} />
-              <Text style={[styles.payerText, speeder === v.id && { color: colors.onPrimary }]}>{v.label}</Text>
+              <Text style={[styles.payerText, speeder === v.id && { color: colors.onPrimary }]}>{v.label}{tarification().delivery?.vehicles?.[v.id] ? ` · ${fcfa(tarification().delivery!.vehicles![v.id]!.perKm)}/km` : ""}</Text>
             </Pressable>
           ))}
         </View>
 
         <Text style={styles.sectionTitle}>Adresses de la mission</Text>
-        <PlacePickerMap pickup={pickup} drop={drop} onPickup={setPickup} onDrop={setDrop} pickupLabel="Point de ramassage / Départ" dropLabel="Point de livraison / Destination" />
+        <PlacePickerMap pickup={pickup} drop={drop} onPickup={setPickup} onDrop={setDrop} onRouteKm={setRouteKm} pickupLabel="Point de ramassage / Départ" dropLabel="Point de livraison / Destination" />
 
         <View style={styles.otpBanner}>
           <MaterialIcons name="verified-user" size={20} color={colors.primary} />
@@ -289,7 +289,7 @@ export default function DeliveryScreen({ onBack }: Props) {
           </Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Règlement de la course ({fcfa(selectedPackage.price)})</Text>
+        <Text style={styles.sectionTitle}>Règlement de la course{estimate !== null ? ` (${fcfa(estimate)})` : ""}</Text>
         <View style={styles.payerRow}>
           <Pressable
             style={[styles.payerChip, payer === "me" && styles.payerChipActive]}
@@ -321,7 +321,7 @@ export default function DeliveryScreen({ onBack }: Props) {
 
         <View style={{ marginTop: spacing.lg }}>
           <PrimaryButton
-            label={`Commander un livreur · ${fcfa(selectedPackage.price)}`}
+            label={estimate !== null ? `Commander un livreur · ${fcfa(estimate)}` : "Commander un livreur"}
             icon="local-shipping"
             onPress={handleConfirm}
             loading={loading}

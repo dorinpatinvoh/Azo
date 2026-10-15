@@ -403,6 +403,20 @@ export class PricingService {
     return this.percentOf(amount, this.platformCommissionPct());
   }
 
+  /* ------------------------------------------------------------ Livraison de colis */
+
+  /** Tarif (base + km) d'un Speeder pour livrer un colis, ou `null` s'il ne livre pas. */
+  deliveryRule(vehicle: string): { base: number; perKm: number } | null {
+    return this.config.delivery?.vehicles?.[vehicle] ?? null;
+  }
+
+  /** Prix d'une livraison de colis : base + kilomètres × tarif au km. */
+  deliveryPrice(vehicle: string, km: number): number {
+    const rule = this.deliveryRule(vehicle);
+    if (!rule) throw new Error(`Véhicule de livraison inconnu : ${vehicle}`);
+    return Math.round(rule.base + Math.max(km, 0) * rule.perKm);
+  }
+
   /* ------------------------------------------------------------ Coursier personnel */
 
   /** Durées de réservation proposées (heures). */
