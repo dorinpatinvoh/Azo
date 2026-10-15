@@ -5,6 +5,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
+import SchedulePicker from "../components/SchedulePicker";
 import { Place, VehicleType, deliveryApi, errorMessage, placesApi, walletApi } from "../services/api";
 import { tarification } from "../services/tarification";
 
@@ -15,14 +16,15 @@ type VehicleOption = { id: VehicleType; label: string; icon: keyof typeof Materi
 // Moto (essence ou électrique) ou voiture (Gazelle, Koala, Léopard)
 const GROUPS: { title: string; options: VehicleOption[] }[] = [
   {
-    title: "Moto",
+    title: "Speeder moto",
     options: [
-      { id: "ZEM_ESSENCE", label: "Spider essence", icon: "two-wheeler" },
-      { id: "ZEM_ELECTRIC", label: "Spider électrique", icon: "electric-moped" },
+      { id: "ZEM_ESSENCE", label: "Moto à essence", icon: "two-wheeler" },
+      { id: "ZEM_ELECTRIC", label: "Moto électrique", icon: "electric-moped" },
+      { id: "ZEM_TRICYCLE", label: "Tricycle", icon: "electric-rickshaw" },
     ],
   },
   {
-    title: "Voiture",
+    title: "Speeder voiture",
     options: [
       { id: "GAZELLE", label: "Gazelle", icon: "directions-car" },
       { id: "KOALA", label: "Koala", icon: "directions-car" },
@@ -113,6 +115,11 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
   const durations = cfg?.durations ?? [];
   const [vehicle, setVehicle] = useState<VehicleType>("ZEM_ESSENCE");
   const [hours, setHours] = useState<number>(durations[0]?.hours ?? 5);
+  // « Plus de 3 jours » : nombre de jours entiers (4 à 14), la course est alors forcément programmée
+  const [longBooking, setLongBooking] = useState(false);
+  const [days, setDays] = useState(4);
+  const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
+  const [scheduleMode, setScheduleMode] = useState(false);
   const [pickup, setPickup] = useState<Place | null>(null);
   const [drop, setDrop] = useState<Place | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -125,13 +132,18 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
   const rule = cfg?.vehicles?.[vehicle];
   // Estimation (le serveur recalcule avec la distance de route) : route ≈ 1,3 × vol d'oiseau
   const estimate = useMemo(() => {
+    // Sans destination, la distance n'est pas connue : pas d'estimation chiffrée
     if (!rule || !pickup || !drop) return null;
     return Math.round(rule.base + crowKm(pickup, drop) * 1.3 * rule.perKm);
   }, [rule, pickup, drop]);
 
   async function confirm() {
-    if (!pickup || !drop) {
-      Alert.alert("Adresses requises", "Choisis le départ et la destination dans la liste de suggestions.");
+    if (!pickup) {
+      Alert.alert("Départ requis", "Choisis ton point de départ dans la liste de suggestions.");
+      return;
+    }
+    if ((scheduleMode || longBooking) && !scheduledAt) {
+      Alert.alert("Heure de départ requise", longBooking ? "Au-delà de 3 jours, programme le début de ta réservation." : "Choisis le jour et l'heure de ton départ.");
       return;
     }
     setLoading(true);
@@ -139,19 +151,19 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
       const d = await deliveryApi.create({
         packageType: "personal",
         pickupAddress: pickup.title,
-        dropAddress: drop.title,
+        ...(drop ? { dropAddress: drop.title } : {}),
         payer: "SENDER",
         mode: "PERSONAL",
         vehicleType: vehicle,
-        bookingHours: hours,
+        bookingHours: longBooking ? days * 24 : hours,
+        ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
         pickupLat: pickup.latitude,
         pickupLng: pickup.longitude,
-        dropLat: drop.latitude,
-        dropLng: drop.longitude,
+        ...(drop ? { dropLat: drop.latitude, dropLng: drop.longitude } : {}),
       });
       Alert.alert(
         "Coursier personnel demandé ✅",
-        `Prix : ${fcfa(d.price)}.\nCode de départ : ${d.pickupCode}\nCode de fin : ${d.deliveryCode}\n\nConserve ces codes : ton coursier te les demandera. Il reste réservé pour toi pendant toute la durée choisie.`,
+        `Montant réservé : ${fcfa(d.price)}. Le total final sera calculé à la fin, selon les kilomètres parcourus.\nCode de départ : ${d.pickupCode}\nCode de fin : ${d.deliveryCode}\n\nConserve ces codes : ton coursier te les demandera. Il reste réservé pour toi pendant toute la durée choisie.`,
         [{ text: "Suivre ma demande", onPress: onBooked }]
       );
     } catch (e) {
@@ -191,7 +203,7 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.vehicleLabel}>{o.label}</Text>
-                    {r ? <Text style={styles.vehicleNote}>{fcfa(r.base)} de base + {fcfa(r.perKm)} / km</Text> : null}
+                    {r ? <Text style={styles.vehicleNote}>{fcfa(r.perKm)} / km</Text> : null}
                   </View>
                   {active ? <MaterialIcons name="check-circle" size={22} color={colors.primary} /> : null}
                 </Pressable>
@@ -203,20 +215,49 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
         <Text style={styles.sectionTitle}>Durée de la réservation</Text>
         <View style={styles.chips}>
           {durations.map((d) => (
-            <Pressable key={d.hours} style={[styles.chip, hours === d.hours && styles.chipActive]} onPress={() => setHours(d.hours)}>
-              <Text style={[styles.chipText, hours === d.hours && styles.chipTextActive]}>{d.label}</Text>
+            <Pressable
+              key={d.hours}
+              style={[styles.chip, !longBooking && hours === d.hours && styles.chipActive]}
+              onPress={() => {
+                setLongBooking(false);
+                setHours(d.hours);
+              }}
+            >
+              <Text style={[styles.chipText, !longBooking && hours === d.hours && styles.chipTextActive]}>{d.label}</Text>
             </Pressable>
           ))}
+          <Pressable style={[styles.chip, longBooking && styles.chipActive]} onPress={() => setLongBooking(true)}>
+            <Text style={[styles.chipText, longBooking && styles.chipTextActive]}>Plus de 3 jours</Text>
+          </Pressable>
         </View>
+        {longBooking ? (
+          <View style={styles.daysRow}>
+            <Pressable style={styles.stepBtn} onPress={() => setDays((n) => Math.max(4, n - 1))}>
+              <MaterialIcons name="remove" size={20} color={colors.primary} />
+            </Pressable>
+            <Text style={styles.daysText}>{days} jours</Text>
+            <Pressable style={styles.stepBtn} onPress={() => setDays((n) => Math.min(14, n + 1))}>
+              <MaterialIcons name="add" size={20} color={colors.primary} />
+            </Pressable>
+          </View>
+        ) : null}
+        {longBooking ? <Text style={styles.priceNote}>Pour plus de 3 jours, programme le début de ta réservation ci-dessous.</Text> : null}
 
-        <Text style={styles.sectionTitle}>Trajet</Text>
-        <PlaceField label="Départ" value={pickup} onPick={setPickup} />
-        <PlaceField label="Destination" value={drop} onPick={setDrop} />
+        <Text style={styles.sectionTitle}>Départ</Text>
+        <SchedulePicker value={scheduledAt} onChange={setScheduledAt} onModeChange={setScheduleMode} />
+
+        <Text style={styles.sectionTitle}>Lieux</Text>
+        <PlaceField label="Point de départ" value={pickup} onPick={setPickup} />
+        <PlaceField label="Destination (facultatif)" value={drop} onPick={setDrop} />
 
         <View style={styles.priceCard}>
           <Text style={styles.priceLabel}>Prix estimé</Text>
-          <Text style={styles.priceValue}>{estimate !== null ? fcfa(estimate) : "—"}</Text>
-          <Text style={styles.priceNote}>Calculé avec la distance de route par AZƆ̀ au moment de la commande. Payé avec AZƆ̀ Pay.</Text>
+          <Text style={styles.priceValue}>{estimate !== null ? fcfa(estimate) : rule ? `${fcfa(rule.perKm)} / km` : "—"}</Text>
+          <Text style={styles.priceNote}>
+            {estimate !== null
+              ? "Estimation : le total final dépend des kilomètres réellement parcourus (suivi GPS). Payé avec AZƆ̀ Pay."
+              : "Le total est calculé à la fin de la course selon les kilomètres réellement parcourus. Payé avec AZƆ̀ Pay."}
+          </Text>
           {notEnough ? (
             <Pressable onPress={onRecharge}>
               <Text style={styles.warn}>Solde insuffisant ({fcfa(balance ?? 0)}). Recharger mon portefeuille</Text>
@@ -260,5 +301,8 @@ const styles = StyleSheet.create({
   priceLabel: { ...typography.labelSm, color: colors.onPrimaryFixed },
   priceValue: { ...typography.headlineMd, color: colors.primary, fontWeight: "800" },
   priceNote: { ...typography.bodySm, color: colors.onPrimaryFixed },
+  daysRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  stepBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryFixed },
+  daysText: { ...typography.labelLg, color: colors.onSurface, fontWeight: "800" },
   warn: { ...typography.labelMd, color: colors.error, fontWeight: "700", marginTop: 6 },
 });

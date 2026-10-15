@@ -31,7 +31,7 @@ const SOURCE_ICONS: Record<string, keyof typeof MaterialIcons.glyphMap> = {
   DELIVERY_COMMISSIONS: "local-shipping",
   AGENCY_ACTIVATIONS: "apartment",
   WITHDRAWAL_FEES: "price-change",
-  SPIDER_MONTHLY_SHARE: "event-repeat",
+  SPEEDER_MONTHLY_SHARE: "event-repeat",
 };
 
 const OPERATORS = ["MTN", "MOOV", "CELTIIS"] as const;

@@ -173,7 +173,7 @@ function AppInner() {
     userApi.setLanguage(lang).catch(() => undefined);
   }, [lang, sessionToken]);
 
-  // Popup « un Spider a accepté ta course » : par-dessus n'importe quel écran du client
+  // Popup « un Speeder a accepté ta course » : par-dessus n'importe quel écran du client
   const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "personal-courier", "rental"];
   const offerWatcher = useOfferWatcher(!!sessionToken && clientRoutes.includes(route), route === "ride-tracking");
   // Session ouverte mais inscription (nom, prénom, sexe, NPI) pas terminée : on rouvre le formulaire.
@@ -188,7 +188,7 @@ function AppInner() {
       .then((me) => {
         const draft = me.provider;
         if (!draft || draft.status !== "DRAFT") return;
-        const label = draft.type === "AGENCY" ? "Agence de flotte" : draft.type === "COURIER" ? (draft.activity?.categoryId === "COURSIER_PERSONNEL" ? "Coursier personnel" : "Livreur express") : "Spider (Zem)";
+        const label = draft.type === "AGENCY" ? "Agence de flotte" : draft.type === "COURIER" ? (draft.activity?.categoryId === "COURSIER_PERSONNEL" ? "Coursier personnel" : "Livreur express") : "Speeder (Zem)";
         Alert.alert(
           "Inscription en cours",
           `Tu as commencé une inscription « ${label} » sans la terminer. Que veux-tu faire ?`,
@@ -237,7 +237,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
     return () => sub.remove();
   }, []);
 
-  // Activité choisie à l'inscription (Spider, coursier, agence) : le parcours dédié reste imposé jusqu'au dépôt du dossier
+  // Activité choisie à l'inscription (Speeder, coursier, agence) : le parcours dédié reste imposé jusqu'au dépôt du dossier
   const [signupType, setSignupType] = useState<ProviderType | null>(null);
   // Spécialité du coursier choisie à l'inscription (Coursier personnel ou Livreur express)
   const [signupCategory, setSignupCategory] = useState<string | null>(null);
@@ -371,7 +371,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
   );
 
   /**
-   * Toucher une notification poussée ouvre l'écran qui correspond : la course pour un client, l'espace métier pour un Spider, un coursier
+   * Toucher une notification poussée ouvre l'écran qui correspond : la course pour un client, l'espace métier pour un Speeder, un coursier
    * ou une agence, le portefeuille, l'assistance, le dossier prestataire… Le serveur envoie `type` et, selon l'événement, `rideId`.
    */
   const handleRideNotification = useCallback(
@@ -406,7 +406,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
     return () => { active = false; };
   }, [sessionToken]);
 
-  // Notification reçue application ouverte : la proposition d'un Spider ouvre sa fenêtre tout de suite ; la notification silencieuse
+  // Notification reçue application ouverte : la proposition d'un Speeder ouvre sa fenêtre tout de suite ; la notification silencieuse
   // `ride-offer-ended` ferme la fenêtre et retire l'alerte périmée de la barre du téléphone
   useEffect(() => {
     return subscribeNotificationReceived((notification: any) => {
@@ -616,7 +616,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
             onVerified={(role?: string | null, provider?: ProviderRef | null, startType?: ProviderType | null, startCategory?: string | null) => {
               setResumeRegistration(false);
               setSessionToken(getToken());
-              // Inscription avec une activité (Spider, coursier, agence) : on enchaîne sur le dossier dédié (mémorisé jusqu'au dépôt)
+              // Inscription avec une activité (Speeder, coursier, agence) : on enchaîne sur le dossier dédié (mémorisé jusqu'au dépôt)
               if (startType) {
                 setSignupType(startType);
                 SecureStore.setItemAsync(SIGNUP_TYPE_KEY, startType).catch(() => undefined);
@@ -822,7 +822,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
             onClose={offerWatcher.dismiss}
             onChanged={(next) => {
               offerWatcher.dismiss();
-              // Spider choisi : on suit la course ; refusé : la recherche continue, on reste où on est
+              // Speeder choisi : on suit la course ; refusé : la recherche continue, on reste où on est
               if (next.status !== "PENDING" && next.status !== "OFFERED" && next.status !== "CANCELLED") {
                 setRideId(next.id);
                 setRideLabel(undefined);

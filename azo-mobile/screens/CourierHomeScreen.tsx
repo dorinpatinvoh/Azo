@@ -22,6 +22,7 @@ import { FONT } from "../theme/fontNormalize";
 import { Delivery, deliveryApi, errorMessage, userApi, walletApi, type UserProfile } from "../services/api";
 import { formatBeninPhoneDisplay, maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
+import { useCourierTracking } from "../hooks/useCourierTracking";
 import PillTabBar, { type PillTabItem } from "../components/PillTabBar";
 import Avatar from "../components/Avatar";
 import AvatarSheet from "../components/AvatarSheet";
@@ -117,6 +118,9 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
     () => history.find((d) => d.status === "MATCHED" || d.status === "IN_PROGRESS") ?? null,
     [history]
   );
+
+  // Coursier personnel : le GPS suit la mission pour calculer les kilomètres réellement parcourus
+  useCourierTracking(activeDelivery && activeDelivery.mode === "PERSONAL" && ["MATCHED", "IN_PROGRESS"].includes(activeDelivery.status) ? activeDelivery.id : null);
 
   const currentSimCode = useMemo(() => {
     if (!activeDelivery) return null;

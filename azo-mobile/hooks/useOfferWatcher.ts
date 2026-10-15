@@ -5,7 +5,7 @@ import { API_URL, Ride, getToken, ridesApi } from "../services/api";
 
 /**
  * Surveille la demande en cours du client pour lui montrer, PAR-DESSUS n'importe quel écran, la proposition
- * d'un Spider (statut OFFERED) : il n'a que quelques secondes pour regarder son profil et décider.
+ * d'un Speeder (statut OFFERED) : il n'a que quelques secondes pour regarder son profil et décider.
  *
  * Trois chemins qui se complètent (voir PROJECT_SUMMARY/DEMANDE_BACKEND_POPUP_PROPOSITION_ZEM.md) :
  *   1. événement temps réel `ride:offered` sur un socket maintenu tant que le client est connecté ;

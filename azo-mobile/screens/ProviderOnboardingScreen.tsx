@@ -132,11 +132,12 @@ const DEFAULT_COURIER_SPECIALTIES = [
 type VehicleChoice = { value: VehicleType; label: string; hint: string; family?: "ZEM" | "CAR" };
 
 // Repli hors ligne : mêmes choix que ceux servis par le backend (/providers/requirements).
-// Filière Spider (motos-taxis) puis filière Voiture — le radar ne présente ensuite au
+// Filière Speeder (motos-taxis) puis filière Voiture — le radar ne présente ensuite au
 // chauffeur que les demandes correspondant exactement au véhicule déclaré ici.
 const DEFAULT_DRIVER_VEHICLES: VehicleChoice[] = [
-  { value: "ZEM_ESSENCE", label: "Spider à essence", hint: "Moto-taxi thermique — courses rapides et économiques", family: "ZEM" },
+  { value: "ZEM_ESSENCE", label: "Speeder à essence", hint: "Moto-taxi thermique — courses rapides et économiques", family: "ZEM" },
   { value: "ZEM_ELECTRIC", label: "Spider électrique", hint: "Moto-taxi électrique — même tarif, zéro émission", family: "ZEM" },
+  { value: "ZEM_TRICYCLE", label: "Speeder tricycle", hint: "Tricycle — courses simples et charges légères", family: "ZEM" },
   { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme, trajets en ville", family: "CAR" },
   { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire, confort avec climatisation", family: "CAR" },
   { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée, trajets VIP", family: "CAR" },
@@ -145,6 +146,7 @@ const DEFAULT_DRIVER_VEHICLES: VehicleChoice[] = [
 /** Icône MaterialIcons d'un véhicule (moto essence / moto électrique / voiture). */
 function vehicleIcon(value: VehicleType): keyof typeof MaterialIcons.glyphMap {
   if (value === "ZEM_ELECTRIC") return "electric-moped";
+  if (value === "ZEM_TRICYCLE") return "electric-rickshaw";
   if (value === "ZEM_ESSENCE") return "two-wheeler";
   if (value === "LEOPARD") return "local-taxi";
   return "directions-car";
@@ -154,6 +156,7 @@ function vehicleIcon(value: VehicleType): keyof typeof MaterialIcons.glyphMap {
 const DEFAULT_COURIER_VEHICLES: VehicleChoice[] = [
   { value: "ZEM_ESSENCE", label: "Moto à essence", hint: "Moto thermique — plis, courses et colis en ville", family: "ZEM" },
   { value: "ZEM_ELECTRIC", label: "Moto électrique", hint: "Moto électrique — mêmes missions, zéro émission", family: "ZEM" },
+  { value: "ZEM_TRICYCLE", label: "Tricycle", hint: "Tricycle — charges plus volumineuses", family: "ZEM" },
   { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme", family: "CAR" },
   { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire climatisée", family: "CAR" },
   { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée", family: "CAR" },
@@ -225,9 +228,9 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         return {
           ...t,
           enabled: true,
-          label: "Spider (Zem)",
+          label: "Speeder (Zem)",
           description:
-            "Spider (moto-taxi à essence ou électrique) ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
+            "Speeder (moto-taxi à essence ou électrique) ou voiture indépendante : transporte des clients et encaisse sur AZƆ̀ Pay.",
           vehicleChoices: t.vehicleChoices?.length ? t.vehicleChoices : DEFAULT_DRIVER_VEHICLES,
         };
       }
@@ -245,7 +248,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       return {
         ...t,
         enabled: true,
-        label: "Agence de flotte (Spider, voitures & livreurs)",
+        label: "Agence de flotte (Speeder, voitures & livreurs)",
       };
     });
   }, [req]);
@@ -661,10 +664,10 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             <Text style={styles.title}>Que veux-tu faire sur AZƆ̀ ?</Text>
             <Text style={styles.muted}>
               {lockedType === "AGENCY"
-                ? "Inscription de ton agence de flotte (Spider, voitures ou livreurs)."
+                ? "Inscription de ton agence de flotte (Speeder, voitures ou livreurs)."
                 : lockedType
                   ? "Voici le parcours d'inscription dédié à ton activité."
-                  : "Choisis ton profil professionnel : Spider (Zem), Coursier personnel ou Livreur express."}
+                  : "Choisis ton profil professionnel : Speeder (Zem), Coursier personnel ou Livreur express."}
             </Text>
 
             {typeCards.map((t) => {
@@ -734,7 +737,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             )}
 
 
-            {/* Spider / Spider indépendant / Moto / Voiture */}
+            {/* Speeder / Speeder indépendant / Moto / Voiture */}
             {!isAgency && currentType && (
               <View style={styles.subSection}>
                 <Text style={styles.sectionTitle}>Avec quel véhicule vas-tu travailler ?</Text>
@@ -743,18 +746,18 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                     typeConfig?.vehicleChoices && typeConfig.vehicleChoices.length > 0
                       ? typeConfig.vehicleChoices
                       : DEFAULT_DRIVER_VEHICLES;
-                  // Deux familles affichées séparément : motos-taxis (Spider) puis voitures.
+                  // Deux familles affichées séparément : motos-taxis (Speeder) puis voitures.
                   const groups: { key: "ZEM" | "CAR"; title: string; items: VehicleChoice[] }[] = [
                     {
                       key: "ZEM",
-                      title: isCourier ? "Moto" : "Moto-taxi (Spider)",
+                      title: isCourier ? "Moto" : "Speeder moto",
                       items: choices.filter((v) =>
-                        v.family ? v.family === "ZEM" : v.value === "ZEM_ESSENCE" || v.value === "ZEM_ELECTRIC"
+                        v.family ? v.family === "ZEM" : v.value === "ZEM_ESSENCE" || v.value === "ZEM_ELECTRIC" || v.value === "ZEM_TRICYCLE"
                       ),
                     },
                     {
                       key: "CAR",
-                      title: "Voiture",
+                      title: isCourier ? "Voiture" : "Speeder voiture",
                       items: choices.filter((v) =>
                         v.family ? v.family === "CAR" : v.value === "GAZELLE" || v.value === "KOALA" || v.value === "LEOPARD"
                       ),

@@ -23,7 +23,7 @@ type Props = {
 export const clientLabel = (ride: Ride) => ride.client?.displayName || maskPersonName(ride.client?.fullName, "Client AZƆ̀");
 
 /**
- * Carte du Spider « en ligne » : sa position et un point par client qui attend un Spider autour de lui,
+ * Carte du Speeder « en ligne » : sa position et un point par client qui attend un Speeder autour de lui,
  * avec le prénom du client. Le point d'un client est son point de départ demandé (sa position
  * GPS en direct reste privée tant qu'il ne t'a pas choisi).
  */
@@ -39,7 +39,7 @@ export default function NearbyClientsMap({ position, heading, requests, count, r
     return list;
   }, [requests, position, heading, accuracy]);
 
-  // Le Spider reste centré sur sa carte ; avec un client proche (3 km max) la vue garde les deux visibles.
+  // Le Speeder reste centré sur sa carte ; avec un client proche (3 km max) la vue garde les deux visibles.
   const nearest = useMemo(() => requests.filter((r) => r.km != null && r.km <= 3).sort((a, b) => (a.km ?? 0) - (b.km ?? 0))[0], [requests]);
 
   return (

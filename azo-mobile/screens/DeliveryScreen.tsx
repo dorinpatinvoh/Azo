@@ -20,6 +20,8 @@ import PrimaryButton from "../components/PrimaryButton";
 import { Delivery, deliveryApi, errorMessage } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
+import CourierTrackMap from "../components/CourierTrackMap";
+import { tarification } from "../services/tarification";
 
 const PACKAGE_TYPES = [
   { id: "doc", label: "Document / Pli", note: "Pli urgent < 1 kg", price: 1000, icon: "drafts" as const },
@@ -173,6 +175,10 @@ export default function DeliveryScreen({ onBack }: Props) {
                     <Text style={{ fontFamily: FONT.bold }}>Vers : </Text>
                     {d.dropAddress}
                   </Text>
+
+                  {d.mode === "PERSONAL" && ["MATCHED", "IN_PROGRESS"].includes(d.status) ? (
+                    <CourierTrackMap deliveryId={d.id} perKm={d.vehicleType ? tarification().personalCourier?.vehicles?.[d.vehicleType]?.perKm : undefined} />
+                  ) : null}
 
                   <View style={styles.codesRow}>
                     <View style={styles.codePill}>

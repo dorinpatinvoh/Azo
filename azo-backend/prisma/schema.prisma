@@ -113,6 +113,7 @@ enum RideStatus {
 enum VehicleType {
   ZEM_ESSENCE
   ZEM_ELECTRIC
+  ZEM_TRICYCLE
   GAZELLE
   KOALA
   LEOPARD
@@ -358,8 +359,17 @@ model Delivery {
   mode          String     @default("EXPRESS")
   vehicleType   VehicleType? // coursier personnel : véhicule demandé
   bookingHours  Int? // coursier personnel : durée de réservation (heures)
+  bookedFrom    DateTime? // coursier personnel : début de la réservation (heure programmée, sinon l'acceptation)
   bookedUntil   DateTime? // coursier personnel : fin de la réservation (fixée à l'acceptation)
-  distanceKm    Float? // coursier personnel : distance estimée par le serveur
+  scheduledAt   DateTime? // coursier personnel : départ programmé par le client (null = tout de suite)
+  distanceKm    Float? // coursier personnel : distance estimée par le serveur (puis distance réellement parcourue)
+  traveledMeters Float @default(0) // coursier personnel : distance GPS parcourue depuis le ramassage
+  odoLat        Float?
+  odoLng        Float?
+  odoAt         DateTime?
+  courierLat    Float? // dernière position du coursier (suivi par le client)
+  courierLng    Float?
+  courierLocatedAt DateTime?
 }
 
 model RentalBooking {

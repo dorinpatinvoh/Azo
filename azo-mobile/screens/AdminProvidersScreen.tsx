@@ -55,7 +55,7 @@ type TypeFilterId = ProviderType | "ALL" | "COURIER_PERSONAL" | "COURIER_EXPRESS
 
 const TYPE_FILTERS: { id: TypeFilterId; label: string }[] = [
   { id: "ALL", label: "Toutes activités" },
-  { id: "DRIVER", label: "Spider (Zem)" },
+  { id: "DRIVER", label: "Speeder (Zem)" },
   { id: "COURIER_PERSONAL", label: "Coursier personnel" },
   { id: "COURIER_EXPRESS", label: "Livreur express" },
   { id: "AGENCY", label: "Agence" },
@@ -105,10 +105,10 @@ const TYPE_ICON: Record<string, keyof typeof MaterialIcons.glyphMap> = {
 };
 
 const AGENCY_TYPE_LABELS: Record<string, string> = {
-  FLOTTE_ZEM: "Agence de Flotte Spider & Moto-Taxi",
+  FLOTTE_ZEM: "Agence de Flotte Speeder & Moto-Taxi",
   FLOTTE_VOITURE: "Agence VTC & Transport Voiture",
   FLOTTE_LIVRAISON: "Agence de Coursiers & Logistique",
-  FLOTTE_MIXTE: "Agence Multi-Flotte (Spider + Voitures + Livreurs)",
+  FLOTTE_MIXTE: "Agence Multi-Flotte (Speeder + Voitures + Livreurs)",
   // Anciens dossiers ci-dessus ; les nouveaux portent directement le niveau choisi
   PRO: "Pro",
   SILVER: "Silver",
@@ -379,7 +379,7 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
           </ScrollView>
         </View>
 
-        {/* Filtre secondaire par activité (Spider, Coursier, Agence) */}
+        {/* Filtre secondaire par activité (Speeder, Coursier, Agence) */}
         <View style={styles.subFilterWrapper}>
           <ScrollView
             horizontal

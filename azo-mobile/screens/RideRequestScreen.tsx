@@ -44,7 +44,7 @@ const VEHICLES: Vehicle[] = [
   },
   {
     id: "zem-elec",
-    name: "Spider Électrique",
+    name: "Speeder Électrique",
     badge: "Éco",
     eta: "4 min",
     note: "Silencieux",
@@ -330,7 +330,7 @@ export default function RideRequestScreen({ onBack, onConfirm }: Props) {
               <MaterialIcons name="bolt" size={20} color={colors.onPrimary} />
               <Text style={styles.ctaText}>
                 {loading
-                  ? "Recherche d'un chauffeur..."
+                  ? "Recherche d'un Speeder..."
                   : `Confirmer ${selected.name} (${selected.price} FCFA)`}
               </Text>
             </LinearGradient>

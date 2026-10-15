@@ -693,7 +693,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                 <View style={styles.pfStats}>
                   <View style={styles.pfStat}>
                     <Text style={styles.pfStatValue}>{data.roster.length}</Text>
-                    <Text style={styles.pfStatLabel}>Chauffeurs</Text>
+                    <Text style={styles.pfStatLabel}>Speeders</Text>
                   </View>
                   <View style={styles.pfStat}>
                     <Text style={styles.pfStatValue} numberOfLines={1} adjustsFontSizeToFit>{typeof data.walletBalance === "number" ? fcfa(data.walletBalance) : "—"}</Text>

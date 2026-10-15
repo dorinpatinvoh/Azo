@@ -32,7 +32,7 @@ export default function RideRatingScreen({ onDone, rideId }: Props) {
   const [stars, setStars] = useState(4);
   const [selectedCompliments, setSelectedCompliments] = useState<string[]>(["clean", "smooth"]);
 
-  // Pourboire : 100 % reversé au Spider, débité du portefeuille AZƆ̀ Pay (POST /rides/:id/tip)
+  // Pourboire : 100 % reversé au Speeder, débité du portefeuille AZƆ̀ Pay (POST /rides/:id/tip)
   const tips = tipSettings();
   const [tipPreset, setTipPreset] = useState<number | null>(null);
   const [tipCustom, setTipCustom] = useState("");

@@ -21,13 +21,13 @@ import embeddedConfig from "./tarification.json";
  */
 export type VehicleFamily = "ZEM" | "CAR";
 
-export type VehicleKey = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "GAZELLE" | "KOALA" | "LEOPARD";
+export type VehicleKey = "ZEM_ESSENCE" | "ZEM_ELECTRIC" | "ZEM_TRICYCLE" | "GAZELLE" | "KOALA" | "LEOPARD";
 
 /** Clés de la filière Spider (moto-taxi) : mêmes règles de profil, même radar. */
-export const ZEM_VEHICLE_KEYS: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC"];
+export const ZEM_VEHICLE_KEYS: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC", "ZEM_TRICYCLE"];
 
 /** Tous les véhicules facturables, dans l'ordre d'affichage (Spider puis voitures). */
-export const VEHICLE_KEYS: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"];
+export const VEHICLE_KEYS: VehicleKey[] = ["ZEM_ESSENCE", "ZEM_ELECTRIC", "ZEM_TRICYCLE", "GAZELLE", "KOALA", "LEOPARD"];
 
 /** Types de véhicules historiques encore présents en base (courses/dossiers passés). */
 export type LegacyVehicleType = "ZEM" | "CAR";

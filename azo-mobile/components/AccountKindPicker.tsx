@@ -7,7 +7,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { useI18n, type MessageKey } from "../i18n";
 
-/** Profil choisi à l'inscription : Client, Spider (Zem), Coursier personnel, Livreur express ou Agence de flotte. */
+/** Profil choisi à l'inscription : Client, Speeder (Zem), Coursier personnel, Livreur express ou Agence de flotte. */
 export type AccountKind = "CLIENT" | "DRIVER" | "COURIER_PERSONAL" | "COURIER_EXPRESS" | "AGENCY";
 
 const OPTIONS: { value: AccountKind; labelKey: MessageKey; descKey: MessageKey; icon: keyof typeof MaterialIcons.glyphMap }[] = [
@@ -21,7 +21,7 @@ const OPTIONS: { value: AccountKind; labelKey: MessageKey; descKey: MessageKey; 
 type Props = { value: AccountKind; onChange: (kind: AccountKind) => void };
 
 /**
- * Liste déroulante (combobox) du type de compte : Client, Spider (Zem), Coursier personnel, Livreur express ou Agence de flotte.
+ * Liste déroulante (combobox) du type de compte : Client, Speeder (Zem), Coursier personnel, Livreur express ou Agence de flotte.
  * Chaque profil a son icône et une phrase d'explication. Le choix détermine le parcours d'inscription proposé ensuite.
  */
 export default function AccountKindPicker({ value, onChange }: Props) {

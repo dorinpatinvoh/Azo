@@ -54,6 +54,24 @@
         }
       ]
     },
+    "ZEM_TRICYCLE": {
+      "family": "ZEM",
+      "base": 300,
+      "brackets": [
+        {
+          "upToKm": 15,
+          "perKm": 100
+        },
+        {
+          "upToKm": 25,
+          "perKm": 80
+        },
+        {
+          "upToKm": null,
+          "perKm": 75
+        }
+      ]
+    },
     "GAZELLE": {
       "family": "CAR",
       "base": 800,
@@ -226,6 +244,10 @@
       "ZEM_ELECTRIC": {
         "base": 500,
         "perKm": 100
+      },
+      "ZEM_TRICYCLE": {
+        "base": 600,
+        "perKm": 150
       },
       "GAZELLE": {
         "base": 1000,

@@ -130,7 +130,7 @@ export default function ProviderStatusScreen({ onEdit, onEnterWorkspace, onBack 
           <MaterialIcons name="badge" size={44} color={colors.primary} />
           <Text style={styles.title}>Deviens prestataire AZƆ̀</Text>
           <Text style={[styles.muted, { textAlign: "center" }]}>
-            Spider, conducteur indépendant ou agence de flotte : dépose un dossier,
+            Speeder indépendant ou agence de flotte : dépose un dossier,
             il est vérifié par un administrateur avant l'ouverture de ton espace métier.
           </Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}

@@ -190,6 +190,7 @@ const DRIVER_VEHICLE_CHOICES: {
 }[] = [
   { value: "ZEM_ESSENCE", label: "Spider à essence", hint: "Moto-taxi thermique — courses rapides et économiques", family: "ZEM" },
   { value: "ZEM_ELECTRIC", label: "Spider électrique", hint: "Moto-taxi électrique — même tarif, zéro émission", family: "ZEM" },
+  { value: "ZEM_TRICYCLE", label: "Speeder tricycle", hint: "Tricycle — courses simples et charges légères", family: "ZEM" },
   { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme, trajets en ville", family: "CAR" },
   { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire, confort avec climatisation", family: "CAR" },
   { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée, trajets VIP", family: "CAR" },
@@ -201,6 +202,7 @@ const DRIVER_VEHICLE_CHOICES: {
 const COURIER_VEHICLE_CHOICES: { value: VehicleType; label: string; hint: string; family: "ZEM" | "CAR" }[] = [
   { value: "ZEM_ESSENCE", label: "Moto à essence", hint: "Moto thermique — plis, courses et colis en ville", family: "ZEM" },
   { value: "ZEM_ELECTRIC", label: "Moto électrique", hint: "Moto électrique — mêmes missions, zéro émission", family: "ZEM" },
+  { value: "ZEM_TRICYCLE", label: "Tricycle", hint: "Tricycle — charges plus volumineuses", family: "ZEM" },
   { value: "GAZELLE", label: "Gazelle — Voiture", hint: "Voiture d'entrée de gamme", family: "CAR" },
   { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire climatisée", family: "CAR" },
   { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée", family: "CAR" },
@@ -303,7 +305,7 @@ class SaveApplicationDto {
   @IsOptional() @IsString() @MaxLength(4000) bio?: string;
   @IsOptional() @IsInt() @Min(0) @Max(60) experienceYears?: number;
   @IsOptional()
-  @IsIn(["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"])
+  @IsIn(["ZEM_ESSENCE", "ZEM_ELECTRIC", "ZEM_TRICYCLE", "GAZELLE", "KOALA", "LEOPARD"])
   vehicleType?: VehicleType;
   @IsOptional() @IsString() @MaxLength(60) vehicleModel?: string;
   @IsOptional() @IsString() @MaxLength(30) plateNumber?: string;

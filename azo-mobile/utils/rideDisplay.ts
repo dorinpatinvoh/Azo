@@ -8,10 +8,10 @@ const numLocale = () => languageInfo(getLanguage()).locale;
 
 export const fcfa = (n: number) => `${n.toLocaleString(numLocale())} F`;
 
-// Libellés courts d'un véhicule : les deux Spider (motos-taxis) puis les trois voitures.
+// Libellés courts d'un véhicule : les deux Speeder (motos-taxis) puis les trois voitures.
 // Lus à chaque accès (accesseurs) : ils suivent la langue choisie sans changer les appels existants.
 export const VEHICLE_LABEL = {} as Record<VehicleType, string>;
-(["ZEM_ESSENCE", "ZEM_ELECTRIC", "GAZELLE", "KOALA", "LEOPARD"] as VehicleType[]).forEach((v) => {
+(["ZEM_ESSENCE", "ZEM_ELECTRIC", "ZEM_TRICYCLE", "GAZELLE", "KOALA", "LEOPARD"] as VehicleType[]).forEach((v) => {
   const key = (v.startsWith("ZEM_") ? `veh.${v}.label` : `live.vehicle.${v}`) as MessageKey;
   Object.defineProperty(VEHICLE_LABEL, v, { enumerable: true, get: () => tr(key) });
 });
@@ -19,6 +19,7 @@ export const VEHICLE_LABEL = {} as Record<VehicleType, string>;
 export const VEHICLE_ICON: Record<VehicleType, keyof typeof MaterialIcons.glyphMap> = {
   ZEM_ESSENCE: "two-wheeler",
   ZEM_ELECTRIC: "electric-moped",
+  ZEM_TRICYCLE: "electric-rickshaw",
   GAZELLE: "directions-car",
   KOALA: "directions-car",
   LEOPARD: "local-taxi",

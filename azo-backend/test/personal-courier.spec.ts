@@ -44,14 +44,14 @@ describe("Réservation d'un coursier personnel", () => {
       user: { findMany: jest.fn().mockResolvedValue([]) },
       ...over,
     };
-    const wallet = { getWallet: jest.fn().mockResolvedValue({ balance: 50000 }) };
+    const wallet: any = { getWallet: jest.fn().mockResolvedValue({ balance: 50000 }) };
     const notifications = { push: jest.fn().mockResolvedValue(undefined) };
     return { prisma, wallet, service: new DeliveryService(prisma, wallet as any, notifications as any, pricing) };
   };
 
   it("refuse un autre client tant que la réservation n'est pas terminée", async () => {
     const { service, prisma } = make();
-    prisma.delivery.findFirst.mockResolvedValueOnce({ id: "d0", bookedUntil: new Date(Date.now() + 3600_000) });
+    prisma.delivery.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "d0", bookedUntil: new Date(Date.now() + 3600_000) });
     await expect(service.accept("k1", "d1")).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.delivery.updateMany).not.toHaveBeenCalled();
   });
@@ -99,5 +99,60 @@ describe("Réservation d'un coursier personnel", () => {
     await expect(
       service.create("c1", { packageType: "personal", pickupAddress: "A", dropAddress: "B", payer: "SENDER", mode: "PERSONAL", vehicleType: "KOALA", bookingHours: 7 } as any)
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("accepte une destination absente : seule la base est facturée", async () => {
+    const { service, prisma } = make();
+    await service.create("c1", { packageType: "personal", pickupAddress: "A", payer: "SENDER", mode: "PERSONAL", vehicleType: "GAZELLE", bookingHours: 5, pickupLat: 6.37, pickupLng: 2.39 } as any);
+    const data = prisma.delivery.create.mock.calls[0][0].data;
+    expect(data.price).toBe(1000);
+    expect(data.dropAddress).toContain("préciser");
+  });
+
+  it("exige une date de départ au-delà de 3 jours, et la garde en base", async () => {
+    const { service, prisma } = make();
+    const dto = { packageType: "personal", pickupAddress: "A", payer: "SENDER", mode: "PERSONAL", vehicleType: "KOALA", bookingHours: 120, pickupLat: 6.37, pickupLng: 2.39 } as any;
+    await expect(service.create("c1", dto)).rejects.toBeInstanceOf(BadRequestException);
+    const when = new Date(Date.now() + 2 * 24 * 3600_000).toISOString();
+    await service.create("c1", { ...dto, scheduledAt: when });
+    expect(prisma.delivery.create.mock.calls[0][0].data.scheduledAt).toEqual(new Date(when));
+  });
+
+  it("démarre la réservation à l'heure programmée", async () => {
+    const { service, prisma } = make();
+    const start = new Date(Date.now() + 2 * 24 * 3600_000);
+    prisma.delivery.findUnique.mockResolvedValue({ id: "d1", clientId: "c1", mode: "PERSONAL", vehicleType: "ZEM_ESSENCE", bookingHours: 24, scheduledAt: start });
+    await service.accept("k1", "d1");
+    const data = prisma.delivery.updateMany.mock.calls[0][0].data;
+    expect(data.bookedFrom).toEqual(start);
+    expect(data.bookedUntil.getTime()).toBe(start.getTime() + 24 * 3600_000);
+  });
+
+  it("fait le point à la fin : base + kilomètres réellement parcourus, 15 % pour l'entreprise", async () => {
+    const { service, prisma, wallet } = make();
+    (wallet as any).settleDelivery = jest.fn().mockResolvedValue(undefined);
+    prisma.delivery.findUnique.mockResolvedValue({ id: "d1", clientId: "c1", courierId: "k1", status: "IN_PROGRESS", mode: "PERSONAL", vehicleType: "KOALA", payer: "SENDER", price: 1000, traveledMeters: 12_000, distanceKm: 3, deliveryCode: "1234", dropAddress: "X" });
+    prisma.delivery.update = jest.fn().mockResolvedValue({ id: "d1", clientId: "c1", price: 6400 });
+    prisma.providerProfile.updateMany = jest.fn().mockResolvedValue({});
+    await service.confirmDelivery("k1", "d1", "1234");
+    // 1000 + 12 km × 450 = 6400 ; commission 15 % = 960 ; net 5440
+    expect((wallet as any).settleDelivery).toHaveBeenCalledWith(expect.objectContaining({ price: 6400, commission: 960, net: 5440 }));
+    expect(prisma.delivery.update.mock.calls[0][0].data).toEqual(expect.objectContaining({ price: 6400, distanceKm: 12 }));
+  });
+
+  it("ne débite pas au-delà du solde du client", async () => {
+    const { service, prisma, wallet } = make();
+    (wallet as any).settleDelivery = jest.fn().mockResolvedValue(undefined);
+    wallet.getWallet.mockResolvedValue({ balance: 2000 });
+    prisma.delivery.findUnique.mockResolvedValue({ id: "d1", clientId: "c1", courierId: "k1", status: "IN_PROGRESS", mode: "PERSONAL", vehicleType: "KOALA", payer: "SENDER", price: 1000, traveledMeters: 12_000, deliveryCode: "1234", dropAddress: "X" });
+    prisma.delivery.update = jest.fn().mockResolvedValue({ id: "d1", clientId: "c1", price: 2000 });
+    prisma.providerProfile.updateMany = jest.fn().mockResolvedValue({});
+    await service.confirmDelivery("k1", "d1", "1234");
+    expect((wallet as any).settleDelivery).toHaveBeenCalledWith(expect.objectContaining({ price: 2000 }));
+  });
+
+  it("tarifie le Speeder tricycle : 300 F de base, 100/80/75 F par palier", () => {
+    expect(pricing.ridePrice(10, "ZEM_TRICYCLE")).toBe(1300);
+    expect(pricing.personalCourierPrice("ZEM_TRICYCLE", 10)).toBe(2100);
   });
 });

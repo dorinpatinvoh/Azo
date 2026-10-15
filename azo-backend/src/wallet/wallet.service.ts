@@ -327,7 +327,7 @@ export class WalletService {
             agencyId: null,
             type: "DRIVER",
             status: "APPROVED",
-            vehicleType: { in: ["ZEM_ESSENCE", "ZEM_ELECTRIC"] },
+            vehicleType: { in: ["ZEM_ESSENCE", "ZEM_ELECTRIC", "ZEM_TRICYCLE"] },
           },
         },
       },

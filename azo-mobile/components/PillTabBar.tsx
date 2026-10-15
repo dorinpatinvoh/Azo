@@ -11,7 +11,7 @@ export type PillTabItem<T extends string> = { id: T; label: string; icon: IconNa
 type Props<T extends string> = { items: PillTabItem<T>[]; active: T; onNavigate: (id: T) => void };
 
 /**
- * Barre de navigation du bas des espaces professionnels (Spider, coursier…) : même pilule sombre que celle du client,
+ * Barre de navigation du bas des espaces professionnels (Speeder, coursier…) : même pilule sombre que celle du client,
  * avec des onglets au choix. Placée dans le flux de l'écran, au-dessus de la barre système (zone sûre gérée par l'écran).
  */
 export default function PillTabBar<T extends string>({ items, active, onNavigate }: Props<T>) {

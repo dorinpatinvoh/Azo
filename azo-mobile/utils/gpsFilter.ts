@@ -17,7 +17,7 @@ export type FilterState = {
 };
 
 const M = 1000;
-// Au-delà, le point vient d'un relais téléphonique / Wi-Fi : trop vague pour un Spider sur la route.
+// Au-delà, le point vient d'un relais téléphonique / Wi-Fi : trop vague pour un Speeder sur la route.
 const MAX_ACCURACY_M = 60;
 // Un deux-roues ne fait pas plus de 40 m/s (144 km/h) : au-delà, c'est un saut GPS.
 const MAX_SPEED_MS = 40;

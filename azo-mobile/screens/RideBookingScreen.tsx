@@ -34,12 +34,13 @@ type Target = "origin" | "destination";
 
 /**
  * Deux filières bien séparées :
- *   * ZEM_ESSENCE / ZEM_ELECTRIC → les motos-taxis (Spider), choisis à l'étape 1 ;
+ *   * ZEM_ESSENCE / ZEM_ELECTRIC → les motos-taxis (Speeder), choisis à l'étape 1 ;
  *   * GAZELLE / KOALA / LEOPARD  → les voitures proposées pour une course.
  */
 const VEHICLES: Record<VehicleType, { icon: keyof typeof MaterialIcons.glyphMap }> = {
   ZEM_ESSENCE: { icon: "two-wheeler" },
   ZEM_ELECTRIC: { icon: "electric-moped" },
+  ZEM_TRICYCLE: { icon: "electric-rickshaw" },
   GAZELLE: { icon: "directions-car" },
   KOALA: { icon: "directions-car" },
   LEOPARD: { icon: "local-taxi" },
@@ -65,7 +66,7 @@ const numLocale = () => languageInfo(getLanguage()).locale;
 const fcfa = (n: number) => `${n.toLocaleString(numLocale())} FCFA`;
 
 /**
- * Note commune aux deux Spider, construite depuis la configuration partagée (jamais en dur) :
+ * Note commune aux deux Speeder, construite depuis la configuration partagée (jamais en dur) :
  * si les paliers kilométriques sont identiques, seule la base les sépare.
  */
 function zemCommonNote(): string {
@@ -129,10 +130,6 @@ function PriceBreakdown({ vehicle }: { vehicle: VehicleType }) {
   const cells = tariffCells(vehicle);
   return (
     <>
-      <View style={styles.zemBaseRow}>
-        <Text style={styles.zemBaseLabel}>{tr("ride.base")}</Text>
-        <Text style={styles.zemBaseValue}>{fcfa(tarification().vehicles[vehicle].base)}</Text>
-      </View>
       <View style={styles.zemTiers}>
         {cells.map((cell, i) => (
           <View key={cell.label} style={[styles.zemTier, i < cells.length - 1 && styles.zemTierDivider]}>
@@ -148,7 +145,7 @@ function PriceBreakdown({ vehicle }: { vehicle: VehicleType }) {
   );
 }
 
-/** Carte de choix d'un véhicule (Spider ou voiture) : même présentation pour les deux filières. */
+/** Carte de choix d'un véhicule (Speeder ou voiture) : même présentation pour les deux filières. */
 function VehicleOfferCard({
   vehicle,
   badges,
@@ -167,8 +164,8 @@ function VehicleOfferCard({
       accessibilityRole="button"
       accessibilityLabel={
         hint
-          ? tr("ride.a11y.offerHint", { vehicle: vLabel(vehicle), base: fcfa(tarification().vehicles[vehicle].base), hint })
-          : tr("ride.a11y.offer", { vehicle: vLabel(vehicle), base: fcfa(tarification().vehicles[vehicle].base) })
+          ? tr("ride.a11y.offerHint", { vehicle: vLabel(vehicle), hint })
+          : tr("ride.a11y.offer", { vehicle: vLabel(vehicle) })
       }
     >
       <View style={styles.zemCardTop}>
@@ -228,7 +225,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
   const { t } = useI18n();
   const gps = useCurrentLocation();
   const originTouched = useRef(false);
-  // Étape 1 du parcours Spider : le client choisit d'abord son type de Spider
+  // Étape 1 du parcours Speeder : le client choisit d'abord son type de Speeder
   // (électrique ou essence), puis renseigne sa destination.
   const [zemType, setZemType] = useState<VehicleType | null>(null);
   // Étape 1 du parcours voiture : le client choisit sa gamme, découvre ce à quoi il a
@@ -329,7 +326,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
   // Solde insuffisant : reconnu au code d'erreur du serveur (la phrase change avec la langue)
   const [submitNeedsRecharge, setSubmitNeedsRecharge] = useState(false);
 
-  /* Le véhicule sélectionné suit la filière (Spider choisi, ou voiture par défaut) */
+  /* Le véhicule sélectionné suit la filière (Speeder choisi, ou voiture par défaut) */
   useEffect(() => {
     if (options.length > 0 && !options.includes(selected)) setSelected(options[0]);
   }, [options, selected]);
@@ -503,7 +500,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
     }
   };
 
-  /* Véhicule retenu à l'étape 1 : un type de Spider, ou une gamme de voiture */
+  /* Véhicule retenu à l'étape 1 : un type de Speeder, ou une gamme de voiture */
   const chosenVehicle = service === "zem" ? zemType : carType;
   const est = estimates[selected];
   const walletInsufficient = balance !== null && !!est && balance < est.price;
@@ -521,7 +518,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
         originLat: origin.latitude, originLng: origin.longitude,
         destLat: destination.latitude, destLng: destination.longitude,
         vehicleType: selected,
-        // Adresses lisibles : le serveur les renvoie au Spider (champs ignorés tant qu'il ne les connaît pas)
+        // Adresses lisibles : le serveur les renvoie au Speeder (champs ignorés tant qu'il ne les connaît pas)
         originLabel: origin.title,
         destLabel: destination.title,
         ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
@@ -694,7 +691,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
   }
 
   /*
-   * Étape 1 du parcours Spider : une interface dédiée demande d'abord le type de Spider
+   * Étape 1 du parcours Speeder : une interface dédiée demande d'abord le type de Speeder
    * (électrique ou essence). La destination, l'estimation et la confirmation viennent
    * ensuite, dans l'écran de réservation habituel.
    */
@@ -769,7 +766,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.sheetTitle}>{t("ride.sheet.title")}</Text>
 
-          {/* Rappel de l'étape 1 (Spider ou voiture), modifiable en un clic */}
+          {/* Rappel de l'étape 1 (Speeder ou voiture), modifiable en un clic */}
           {chosenVehicle && (
             <Pressable
               style={styles.zemChip}
@@ -950,9 +947,6 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
                   {/* Détail du barème officiel : base (remise éventuelle) + une ligne par palier */}
                   <Text style={styles.summaryDetail}>
                     {[
-                      est.breakdown.baseDiscountApplied
-                        ? t("ride.baseDiscount", { full: fcfa(est.breakdown.baseFull), pct: est.breakdown.baseDiscountPct, base: fcfa(est.breakdown.base) })
-                        : t("ride.baseSimple", { amount: fcfa(est.breakdown.base) }),
                       ...(est.breakdown.brackets ?? [])
                         .filter((b) => b.km > 0)
                         .map((b) => `${fmtKm(b.km)} × ${fcfa(b.perKm)}/km`),
@@ -1041,7 +1035,7 @@ const styles = StyleSheet.create({
   zemSubtitle: { ...typography.bodyMd, color: colors.onSurfaceVariant },
   zemList: { paddingHorizontal: spacing.md, gap: spacing.md },
   zemStep: { ...typography.labelSm, color: colors.primary, letterSpacing: 1 },
-  // Carte de choix du Spider : en-tête (icône, titre, chevron), puis le détail du prix en dessous
+  // Carte de choix du Speeder : en-tête (icône, titre, chevron), puis le détail du prix en dessous
   zemCard: { gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
   zemCardPressed: { borderColor: colors.primary, backgroundColor: colors.primaryFixed },
   zemCardTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },

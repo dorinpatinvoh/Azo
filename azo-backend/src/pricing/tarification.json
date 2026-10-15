@@ -38,6 +38,15 @@
         { "upToKm": null, "perKm": 45 }
       ]
     },
+    "ZEM_TRICYCLE": {
+      "family": "ZEM",
+      "base": 300,
+      "brackets": [
+        { "upToKm": 15, "perKm": 100 },
+        { "upToKm": 25, "perKm": 80 },
+        { "upToKm": null, "perKm": 75 }
+      ]
+    },
     "GAZELLE": {
       "family": "CAR",
       "base": 800,
@@ -157,6 +166,7 @@
     "vehicles": {
       "ZEM_ESSENCE": { "base": 500, "perKm": 100 },
       "ZEM_ELECTRIC": { "base": 500, "perKm": 100 },
+      "ZEM_TRICYCLE": { "base": 600, "perKm": 150 },
       "GAZELLE": { "base": 1000, "perKm": 300 },
       "KOALA": { "base": 1000, "perKm": 450 },
       "LEOPARD": { "base": 1000, "perKm": 1300 }
