@@ -119,7 +119,7 @@ export type TarificationConfig = {
     _aDefinir?: string[];
   };
   agencyActivation: { requiredForOperations: boolean };
-  delivery: { commissionPct: number; vehicles?: Record<string, { base: number; perKm: number }>; _aDefinir?: string[] };
+  delivery: { commissionPct: number; vehicles?: Record<string, { base?: number; perKm: number; baseByPackage?: Record<string, number> }>; _aDefinir?: string[] };
   /** Commission de l'entreprise sur chaque course / livraison terminée (versée au portefeuille administrateur). */
   platformCommission?: { pct: number };
   /** Coursier personnel : durées de réservation et tarif par véhicule (base + km). */

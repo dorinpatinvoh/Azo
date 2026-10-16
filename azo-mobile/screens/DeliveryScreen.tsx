@@ -28,8 +28,8 @@ const PACKAGE_TYPES = [
   { id: "doc", label: "Document / Pli", note: "Pli urgent < 1 kg", icon: "drafts" as const },
   { id: "small", label: "Petit Colis", note: "Sac / Repas < 5 kg", icon: "shopping-bag" as const },
   { id: "medium", label: "Colis Moyen", note: "Carton < 15 kg", icon: "inventory-2" as const },
-  // Réapparaît seulement quand le Speeder tricycle est choisi
-  { id: "large", label: "Gros Colis", note: "Volumineux, livré en tricycle", icon: "local-shipping" as const, tricycleOnly: true },
+  // Gros colis : seul le Speeder tricycle le livre
+  { id: "large", label: "Gros Colis", note: "Volumineux — Speeder tricycle uniquement", icon: "local-shipping" as const },
 ];
 
 // Le Speeder dont le client a besoin pour son colis (seuls les livreurs de ce véhicule voient la mission)
@@ -67,11 +67,12 @@ export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: 
 
   // Prix estimé (le serveur recalcule sur l'itinéraire) : base + km × tarif ; la base n'est jamais affichée
   const rule = tarification().delivery?.vehicles?.[speeder];
-  const estimate = quote ? quote.price : rule && routeKm !== null ? Math.round(rule.base + routeKm * rule.perKm) : null;
+  const ruleBase = rule ? (rule.baseByPackage ? rule.baseByPackage[selectedType] : rule.base) : undefined;
+  const estimate = quote ? quote.price : rule && ruleBase !== undefined && routeKm !== null ? Math.round(ruleBase + routeKm * rule.perKm) : null;
 
   useEffect(() => {
-    // le gros colis ne se livre qu'en tricycle
-    if (speeder !== "ZEM_TRICYCLE" && selectedType === "large") setSelectedType("small");
+    // le gros colis ne se livre qu'en tricycle : les autres Speeders se cachent
+    if (selectedType === "large" && speeder !== "ZEM_TRICYCLE") setSpeeder("ZEM_TRICYCLE");
   }, [speeder, selectedType]);
 
   useEffect(() => {
@@ -81,13 +82,13 @@ export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: 
     }
     let alive = true;
     deliveryApi
-      .quote({ vehicleType: speeder, pickupLat: pickup.latitude, pickupLng: pickup.longitude, dropLat: drop.latitude, dropLng: drop.longitude })
+      .quote({ vehicleType: speeder, packageType: selectedType, pickupLat: pickup.latitude, pickupLng: pickup.longitude, dropLat: drop.latitude, dropLng: drop.longitude })
       .then((q) => alive && setQuote(q))
       .catch(() => alive && setQuote(null));
     return () => {
       alive = false;
     };
-  }, [speeder, pickup?.latitude, pickup?.longitude, drop?.latitude, drop?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [speeder, selectedType, pickup?.latitude, pickup?.longitude, drop?.latitude, drop?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedPackage = PACKAGE_TYPES.find((p) => p.id === selectedType) ?? PACKAGE_TYPES[1];
 
@@ -261,19 +262,9 @@ export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: 
           </View>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Quel Speeder pour ton colis ?</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {SPEEDERS.map((v) => (
-            <Pressable key={v.id} style={[styles.payerChip, { flexGrow: 1, flexBasis: "45%" }, speeder === v.id && styles.payerChipActive]} onPress={() => setSpeeder(v.id)}>
-              <MaterialIcons name={v.icon} size={18} color={speeder === v.id ? colors.onPrimary : colors.onSurfaceVariant} />
-              <Text style={[styles.payerText, speeder === v.id && { color: colors.onPrimary }]}>{v.label}{tarification().delivery?.vehicles?.[v.id] ? ` · ${fcfa(tarification().delivery!.vehicles![v.id]!.perKm)}/km` : ""}</Text>
-            </Pressable>
-          ))}
-        </View>
-
         <Text style={styles.sectionTitle}>Que souhaites-tu confier au livreur ?</Text>
         <View style={{ gap: spacing.sm }}>
-          {PACKAGE_TYPES.filter((p) => !("tricycleOnly" in p && p.tricycleOnly) || speeder === "ZEM_TRICYCLE").map((p) => {
+          {PACKAGE_TYPES.map((p) => {
             const active = p.id === selectedType;
             return (
               <Pressable
@@ -298,6 +289,26 @@ export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: 
                   <Text style={styles.typeNote}>{p.note}</Text>
                 </View>
                 {active && <MaterialIcons name="check-circle" size={20} color={colors.primary} />}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.sectionTitle}>Quel Speeder pour ton colis ?</Text>
+        <View style={{ gap: spacing.sm }}>
+          {SPEEDERS.filter((v) => selectedType !== "large" || v.id === "ZEM_TRICYCLE").map((v) => {
+            const active = speeder === v.id;
+            const perKm = tarification().delivery?.vehicles?.[v.id]?.perKm;
+            return (
+              <Pressable key={v.id} style={[styles.speederCard, active && styles.speederCardActive]} onPress={() => setSpeeder(v.id)}>
+                <View style={[styles.speederIcon, { backgroundColor: active ? colors.primary : colors.surfaceContainer }]}>
+                  <MaterialIcons name={v.icon} size={22} color={active ? colors.onPrimary : colors.onSurfaceVariant} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.typeLabel}>{v.label}</Text>
+                  {perKm !== undefined ? <Text style={styles.typeNote}>{fcfa(perKm)} / km</Text> : null}
+                </View>
+                {active ? <MaterialIcons name="check-circle" size={20} color={colors.primary} /> : null}
               </Pressable>
             );
           })}
@@ -480,6 +491,9 @@ const styles = StyleSheet.create({
   typeIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
   typeLabel: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
   typeNote: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  speederCard: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.surfaceContainer },
+  speederCardActive: { borderWidth: 1.5, borderColor: colors.primary, backgroundColor: `${colors.primaryFixed}40` },
+  speederIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
   typePrice: { ...typography.labelLg, color: colors.primary, fontWeight: "800" },
 
   addressCard: { backgroundColor: colors.surfaceContainerLow, borderRadius: radius.lg, padding: spacing.md },

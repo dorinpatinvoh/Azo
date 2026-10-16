@@ -106,10 +106,12 @@ export class DeliveryService {
   }
 
   /** Devis d'un colis : le prix affiché au client est exactement celui que le serveur facturera (distance de l'itinéraire). */
-  async quote(vehicleType: string, pickup: { lat: number; lng: number }, drop: { lat: number; lng: number }) {
-    if (!this.pricing.deliveryRule(vehicleType)) throw new BadRequestException("Choisis un Speeder moto (essence ou électrique) ou un tricycle pour ton colis.");
+  async quote(vehicleType: string, packageType: string, pickup: { lat: number; lng: number }, drop: { lat: number; lng: number }) {
+    if (!this.pricing.deliveryRule(vehicleType, packageType)) {
+      throw new BadRequestException(packageType === "large" ? "Un gros colis se livre en Speeder tricycle." : "Ce Speeder ne livre pas ce type de colis.");
+    }
     const km = Math.round((await this.routeKm(pickup, drop)) * 10) / 10;
-    return { km, price: this.pricing.deliveryPrice(vehicleType, km) };
+    return { km, price: this.pricing.deliveryPrice(vehicleType, km, packageType) };
   }
 
   async create(clientId: string, dto: CreateDeliveryDto) {
@@ -152,8 +154,8 @@ export class DeliveryService {
       if (!dropAddress) throw new BadRequestException("L'adresse de livraison est obligatoire.");
       // Speeder demandé pour le colis : seuls les livreurs de ce véhicule voient la mission. Moto ou tricycle uniquement.
       const express = vehicleType ?? "ZEM_ESSENCE";
-      if (!this.pricing.deliveryRule(express)) {
-        throw new BadRequestException("Choisis un Speeder moto (essence ou électrique) ou un tricycle pour ton colis.");
+      if (!this.pricing.deliveryRule(express, base.packageType)) {
+        throw new BadRequestException(base.packageType === "large" ? "Un gros colis se livre en Speeder tricycle." : "Choisis un Speeder moto (essence ou électrique) ou un tricycle, et un type de colis proposé.");
       }
       if (base.packageType === "large" && express !== "ZEM_TRICYCLE") {
         throw new BadRequestException("Un gros colis se livre en Speeder tricycle.");
@@ -163,7 +165,7 @@ export class DeliveryService {
       }
       // Prix calculé par le serveur sur la distance de l'itinéraire : le prix envoyé par le client est ignoré
       const km = Math.round((await this.routeKm({ lat: pickupLat, lng: pickupLng }, { lat: dropLat, lng: dropLng })) * 10) / 10;
-      price = this.pricing.deliveryPrice(express, km);
+      price = this.pricing.deliveryPrice(express, km, base.packageType);
       extra = { vehicleType: express, distanceKm: km };
     }
     if (dto.payer === "SENDER" || personal) {
@@ -555,10 +557,10 @@ export class DeliveryController {
   }
 
   @Get("quote")
-  quote(@Query("vehicleType") vehicleType: string, @Query("pickupLat") pLat: string, @Query("pickupLng") pLng: string, @Query("dropLat") dLat: string, @Query("dropLng") dLng: string) {
+  quote(@Query("vehicleType") vehicleType: string, @Query("packageType") packageType: string, @Query("pickupLat") pLat: string, @Query("pickupLng") pLng: string, @Query("dropLat") dLat: string, @Query("dropLng") dLng: string) {
     const [a, b, c, d] = [pLat, pLng, dLat, dLng].map(Number);
     if (![a, b, c, d].every(Number.isFinite)) throw new BadRequestException("Coordonnées invalides.");
-    return this.svc.quote(String(vehicleType ?? ""), { lat: a, lng: b }, { lat: c, lng: d });
+    return this.svc.quote(String(vehicleType ?? ""), String(packageType ?? "small"), { lat: a, lng: b }, { lat: c, lng: d });
   }
 
   @Get("pending")

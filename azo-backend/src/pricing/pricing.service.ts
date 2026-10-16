@@ -405,18 +405,23 @@ export class PricingService {
 
   /* ------------------------------------------------------------ Livraison de colis */
 
-  /** Tarif (base + km) d'un Speeder pour livrer un colis, ou `null` s'il ne livre pas. */
-  deliveryRule(vehicle: string): { base: number; perKm: number } | null {
-    return this.config.delivery?.vehicles?.[vehicle] ?? null;
+  /**
+   * Tarif (base + km) d'un Speeder pour livrer un colis, ou `null` s'il ne livre pas ce type de colis.
+   * Moto : la base dépend du type de colis (document, petit, moyen) ; tricycle : base unique (gros colis compris).
+   */
+  deliveryRule(vehicle: string, packageType: string = "small"): { base: number; perKm: number } | null {
+    const rule = this.config.delivery?.vehicles?.[vehicle];
+    if (!rule) return null;
+    const base = rule.baseByPackage ? rule.baseByPackage[packageType] : rule.base;
+    return typeof base === "number" ? { base, perKm: rule.perKm } : null;
   }
 
-  /** Prix d'une livraison de colis : base + kilomètres × tarif au km. */
-  deliveryPrice(vehicle: string, km: number): number {
-    const rule = this.deliveryRule(vehicle);
-    if (!rule) throw new Error(`Véhicule de livraison inconnu : ${vehicle}`);
+  /** Prix d'une livraison de colis : base (selon le colis) + kilomètres × tarif au km. */
+  deliveryPrice(vehicle: string, km: number, packageType: string = "small"): number {
+    const rule = this.deliveryRule(vehicle, packageType);
+    if (!rule) throw new Error(`Livraison impossible : ${vehicle} / ${packageType}`);
     return Math.round(rule.base + Math.max(km, 0) * rule.perKm);
   }
-
   /* ------------------------------------------------------------ Coursier personnel */
 
   /** Durées de réservation proposées (heures). */

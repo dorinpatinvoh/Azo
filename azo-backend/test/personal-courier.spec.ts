@@ -172,12 +172,12 @@ describe("Réservation d'un coursier personnel", () => {
     await expect(service.accept("k1", "d1")).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("colis : prix serveur = base + km × tarif du Speeder (moto 200 + 80/km, tricycle 225 + 80/km)", async () => {
+  it("colis : prix serveur = base du colis + km × tarif du Speeder (moto 70/km, tricycle 225 + 80/km)", async () => {
     const { service, prisma } = make();
     jest.spyOn(service as any, "routeKm").mockResolvedValue(10);
     const dto = { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER", price: 200, pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
     await service.create("c1", { ...dto, vehicleType: "ZEM_ESSENCE" });
-    expect(prisma.delivery.create.mock.calls[0][0].data.price).toBe(1000);
+    expect(prisma.delivery.create.mock.calls[0][0].data.price).toBe(820); // petit colis : 120 + 10 × 70
     await service.create("c1", { ...dto, vehicleType: "ZEM_TRICYCLE" });
     expect(prisma.delivery.create.mock.calls[1][0].data.price).toBe(1025);
   });
@@ -189,11 +189,16 @@ describe("Réservation d'un coursier personnel", () => {
     await expect(service.create("c1", { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER" } as any)).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("devis : A vers B à 1 km en Speeder à essence = 200 + 80 = 280 F", async () => {
+  it("devis : A vers B à 1 km en Speeder à essence : document 170 F, petit colis 190 F, colis moyen 270 F ; tricycle 305 F", async () => {
     const { service } = make();
     jest.spyOn(service as any, "routeKm").mockResolvedValue(1);
-    expect(await service.quote("ZEM_ESSENCE", { lat: 6.37, lng: 2.39 }, { lat: 6.38, lng: 2.4 })).toEqual({ km: 1, price: 280 });
-    expect(await service.quote("ZEM_TRICYCLE", { lat: 6.37, lng: 2.39 }, { lat: 6.38, lng: 2.4 })).toEqual({ km: 1, price: 305 });
+    const a = { lat: 6.37, lng: 2.39 };
+    const b = { lat: 6.38, lng: 2.4 };
+    expect(await service.quote("ZEM_ESSENCE", "doc", a, b)).toEqual({ km: 1, price: 170 });
+    expect(await service.quote("ZEM_ESSENCE", "small", a, b)).toEqual({ km: 1, price: 190 });
+    expect(await service.quote("ZEM_ESSENCE", "medium", a, b)).toEqual({ km: 1, price: 270 });
+    expect(await service.quote("ZEM_TRICYCLE", "large", a, b)).toEqual({ km: 1, price: 305 });
+    await expect(service.quote("ZEM_ESSENCE", "large", a, b)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it("gros colis : réservé au tricycle", async () => {

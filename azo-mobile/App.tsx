@@ -468,7 +468,8 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
           goTo("personal-courier");
           break;
         case "location":
-          goTo("rental");
+          // la location de voitures n'est pas encore ouverte : « Bientôt disponible »
+          Alert.alert(tr("app.soon.title"), tr("app.soon.text"));
           break;
         case "courses":
           goTo("courses"); // historique des trajets

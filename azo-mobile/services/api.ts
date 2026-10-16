@@ -732,8 +732,8 @@ export const deliveryApi = {
   }) => api.post<Delivery>(`${P}/deliveries`, body),
   mine: () => api.get<Delivery[]>(`${P}/deliveries`),
   /** Prix exact d'un colis, calculé par le serveur sur la distance de l'itinéraire. */
-  quote: (q: { vehicleType: VehicleType; pickupLat: number; pickupLng: number; dropLat: number; dropLng: number }) =>
-    api.get<{ km: number; price: number }>(`${P}/deliveries/quote?vehicleType=${q.vehicleType}&pickupLat=${q.pickupLat}&pickupLng=${q.pickupLng}&dropLat=${q.dropLat}&dropLng=${q.dropLng}`),
+  quote: (q: { vehicleType: VehicleType; packageType: string; pickupLat: number; pickupLng: number; dropLat: number; dropLng: number }) =>
+    api.get<{ km: number; price: number }>(`${P}/deliveries/quote?vehicleType=${q.vehicleType}&packageType=${q.packageType}&pickupLat=${q.pickupLat}&pickupLng=${q.pickupLng}&dropLat=${q.dropLat}&dropLng=${q.dropLng}`),
   track: (id: string) => api.get<DeliveryTrack>(`${P}/deliveries/${id}/track`),
   /** Coursier : position GPS pendant la mission. */
   location: (id: string, body: { latitude: number; longitude: number; accuracy?: number }) =>
