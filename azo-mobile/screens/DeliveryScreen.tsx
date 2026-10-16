@@ -28,6 +28,8 @@ const PACKAGE_TYPES = [
   { id: "doc", label: "Document / Pli", note: "Pli urgent < 1 kg", icon: "drafts" as const },
   { id: "small", label: "Petit Colis", note: "Sac / Repas < 5 kg", icon: "shopping-bag" as const },
   { id: "medium", label: "Colis Moyen", note: "Carton < 15 kg", icon: "inventory-2" as const },
+  // Réapparaît seulement quand le Speeder tricycle est choisi
+  { id: "large", label: "Gros Colis", note: "Volumineux, livré en tricycle", icon: "local-shipping" as const, tricycleOnly: true },
 ];
 
 // Le Speeder dont le client a besoin pour son colis (seuls les livreurs de ce véhicule voient la mission)
@@ -47,14 +49,16 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
 
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
 
-type Props = { onBack: () => void; onConfirm: () => void };
+type Props = { onBack: () => void; onConfirm: () => void; initialDrop?: Place | null; initialSpeeder?: VehicleType | null };
 
-export default function DeliveryScreen({ onBack }: Props) {
+export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: Props) {
   const [selectedType, setSelectedType] = useState("small");
-  const [speeder, setSpeeder] = useState<VehicleType>("ZEM_ESSENCE");
+  const [speeder, setSpeeder] = useState<VehicleType>(initialSpeeder && initialSpeeder !== "GAZELLE" && initialSpeeder !== "KOALA" && initialSpeeder !== "LEOPARD" ? initialSpeeder : "ZEM_ESSENCE");
   const [routeKm, setRouteKm] = useState<number | null>(null);
   const [pickup, setPickup] = useState<Place | null>(null);
-  const [drop, setDrop] = useState<Place | null>(null);
+  const [drop, setDrop] = useState<Place | null>(initialDrop ?? null);
+  // Prix exact calculé par le serveur sur la distance de l'itinéraire (base + km × tarif du Speeder)
+  const [quote, setQuote] = useState<{ km: number; price: number } | null>(null);
   const [payer, setPayer] = useState<"me" | "recipient">("me");
   const [loading, setLoading] = useState(false);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -63,7 +67,27 @@ export default function DeliveryScreen({ onBack }: Props) {
 
   // Prix estimé (le serveur recalcule sur l'itinéraire) : base + km × tarif ; la base n'est jamais affichée
   const rule = tarification().delivery?.vehicles?.[speeder];
-  const estimate = rule && routeKm !== null ? Math.round(rule.base + routeKm * rule.perKm) : null;
+  const estimate = quote ? quote.price : rule && routeKm !== null ? Math.round(rule.base + routeKm * rule.perKm) : null;
+
+  useEffect(() => {
+    // le gros colis ne se livre qu'en tricycle
+    if (speeder !== "ZEM_TRICYCLE" && selectedType === "large") setSelectedType("small");
+  }, [speeder, selectedType]);
+
+  useEffect(() => {
+    if (!pickup || !drop) {
+      setQuote(null);
+      return;
+    }
+    let alive = true;
+    deliveryApi
+      .quote({ vehicleType: speeder, pickupLat: pickup.latitude, pickupLng: pickup.longitude, dropLat: drop.latitude, dropLng: drop.longitude })
+      .then((q) => alive && setQuote(q))
+      .catch(() => alive && setQuote(null));
+    return () => {
+      alive = false;
+    };
+  }, [speeder, pickup?.latitude, pickup?.longitude, drop?.latitude, drop?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedPackage = PACKAGE_TYPES.find((p) => p.id === selectedType) ?? PACKAGE_TYPES[1];
 
@@ -237,9 +261,19 @@ export default function DeliveryScreen({ onBack }: Props) {
           </View>
         ) : null}
 
+        <Text style={styles.sectionTitle}>Quel Speeder pour ton colis ?</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {SPEEDERS.map((v) => (
+            <Pressable key={v.id} style={[styles.payerChip, { flexGrow: 1, flexBasis: "45%" }, speeder === v.id && styles.payerChipActive]} onPress={() => setSpeeder(v.id)}>
+              <MaterialIcons name={v.icon} size={18} color={speeder === v.id ? colors.onPrimary : colors.onSurfaceVariant} />
+              <Text style={[styles.payerText, speeder === v.id && { color: colors.onPrimary }]}>{v.label}{tarification().delivery?.vehicles?.[v.id] ? ` · ${fcfa(tarification().delivery!.vehicles![v.id]!.perKm)}/km` : ""}</Text>
+            </Pressable>
+          ))}
+        </View>
+
         <Text style={styles.sectionTitle}>Que souhaites-tu confier au livreur ?</Text>
         <View style={{ gap: spacing.sm }}>
-          {PACKAGE_TYPES.map((p) => {
+          {PACKAGE_TYPES.filter((p) => !("tricycleOnly" in p && p.tricycleOnly) || speeder === "ZEM_TRICYCLE").map((p) => {
             const active = p.id === selectedType;
             return (
               <Pressable
@@ -269,16 +303,6 @@ export default function DeliveryScreen({ onBack }: Props) {
           })}
         </View>
 
-        <Text style={styles.sectionTitle}>Quel Speeder pour ton colis ?</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {SPEEDERS.map((v) => (
-            <Pressable key={v.id} style={[styles.payerChip, { flexGrow: 1, flexBasis: "45%" }, speeder === v.id && styles.payerChipActive]} onPress={() => setSpeeder(v.id)}>
-              <MaterialIcons name={v.icon} size={18} color={speeder === v.id ? colors.onPrimary : colors.onSurfaceVariant} />
-              <Text style={[styles.payerText, speeder === v.id && { color: colors.onPrimary }]}>{v.label}{tarification().delivery?.vehicles?.[v.id] ? ` · ${fcfa(tarification().delivery!.vehicles![v.id]!.perKm)}/km` : ""}</Text>
-            </Pressable>
-          ))}
-        </View>
-
         <Text style={styles.sectionTitle}>Adresses de la mission</Text>
         <PlacePickerMap pickup={pickup} drop={drop} onPickup={setPickup} onDrop={setDrop} onRouteKm={setRouteKm} pickupLabel="Point de ramassage / Départ" dropLabel="Point de livraison / Destination" />
 
@@ -290,6 +314,7 @@ export default function DeliveryScreen({ onBack }: Props) {
         </View>
 
         <Text style={styles.sectionTitle}>Règlement de la course{estimate !== null ? ` (${fcfa(estimate)})` : ""}</Text>
+        {quote ? <Text style={styles.typeNote}>Distance : {quote.km.toLocaleString("fr-FR")} km · prix calculé sur l'itinéraire</Text> : null}
         <View style={styles.payerRow}>
           <Pressable
             style={[styles.payerChip, payer === "me" && styles.payerChipActive]}

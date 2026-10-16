@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   AppState,
+  Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -22,6 +23,8 @@ import { useI18n, type MessageKey } from "../i18n";
 type Props = {
   clientName?: string;
   onSelectService: (serviceId: string) => void;
+  /** Lieu en 1 clic + type de commande + Speeder choisi dans la fenêtre. */
+  onQuickOrder?: (placeId: string, kind: QuickKind, option: string) => void;
   onNavigateTab?: (tabId: ClientTab) => void;
 };
 
@@ -73,6 +76,35 @@ const OTHER_SERVICES: { id: string; labelKey: MessageKey; icon: keyof typeof Mat
   { id: "courses", labelKey: "home.other.rides", icon: "receipt-long", bg: colors.primaryFixed, fg: colors.primary },
 ];
 
+export type QuickKind = "ride" | "delivery" | "personal";
+
+// Fenêtre des lieux en 1 clic : d'abord le type de commande, puis le Speeder adapté
+const QUICK_KINDS: { id: QuickKind; label: string; sub: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
+  { id: "ride", label: "Course simple", sub: "Un Speeder t'emmène", icon: "two-wheeler" },
+  { id: "delivery", label: "Livraison", sub: "Envoyer un colis", icon: "local-shipping" },
+  { id: "personal", label: "Coursier personnel", sub: "Un coursier pour toi", icon: "directions-run" },
+];
+const QUICK_OPTIONS: Record<QuickKind, { id: string; label: string; sub?: string }[]> = {
+  ride: [
+    { id: "zem", label: "Speeder moto", sub: "Essence ou électrique" },
+    { id: "tricycle", label: "Speeder tricycle", sub: "Courses simples" },
+    { id: "transport", label: "Speeder Voiture", sub: "Confort & Clim" },
+  ],
+  delivery: [
+    { id: "ZEM_ESSENCE", label: "Speeder à essence" },
+    { id: "ZEM_ELECTRIC", label: "Speeder électrique" },
+    { id: "ZEM_TRICYCLE", label: "Speeder tricycle", sub: "Gros colis possible" },
+  ],
+  personal: [
+    { id: "ZEM_ESSENCE", label: "Speeder à essence" },
+    { id: "ZEM_ELECTRIC", label: "Speeder électrique" },
+    { id: "ZEM_TRICYCLE", label: "Speeder tricycle" },
+    { id: "GAZELLE", label: "Speeder Gazelle" },
+    { id: "KOALA", label: "Speeder Koala" },
+    { id: "LEOPARD", label: "Speeder Léopard" },
+  ],
+};
+
 // Lieux favoris de Cotonou en 1 clic
 const QUICK_DESTINATIONS: { id: string; labelKey: MessageKey; icon: keyof typeof MaterialIcons.glyphMap; service: string }[] = [
   { id: "etoile", labelKey: "home.dest.etoile", icon: "place", service: "zem" },
@@ -85,7 +117,8 @@ const QUICK_DESTINATIONS: { id: string; labelKey: MessageKey; icon: keyof typeof
 // Économie du Speeder électrique sur un trajet de référence, calculée avec le barème (jamais écrite à la main).
 const PROMO_KM = 5;
 
-export default function HomeScreen({ clientName = "", onSelectService, onNavigateTab }: Props) {
+export default function HomeScreen({ clientName = "", onSelectService, onQuickOrder, onNavigateTab }: Props) {
+  const [quick, setQuick] = useState<{ id: string; label: string; kind: QuickKind | null } | null>(null);
   const insets = useSafeAreaInsets();
   const { t, locale } = useI18n();
   const [name, setName] = useState(clientName);
@@ -188,18 +221,7 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
           </Pressable>
         </View>
 
-        {/* Barre de recherche rapide + Destinations en 1 clic */}
-        <Pressable style={styles.quickSearchBox} onPress={() => onSelectService("zem")}>
-          <View style={styles.quickSearchIcon}>
-            <MaterialIcons name="search" size={22} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.quickSearchTitle}>{t("home.search.title")}</Text>
-            <Text style={styles.quickSearchSub}>{t("home.search.sub")}</Text>
-          </View>
-          <MaterialIcons name="arrow-forward-ios" size={16} color={colors.onSurfaceVariant} />
-        </Pressable>
-
+        {/* Destinations en 1 clic : une fenêtre demande ensuite course, livraison ou coursier personnel */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -209,13 +231,52 @@ export default function HomeScreen({ clientName = "", onSelectService, onNavigat
             <Pressable
               key={d.id}
               style={styles.quickChip}
-              onPress={() => onSelectService(d.service)}
+              onPress={() => setQuick({ id: d.id, label: t(d.labelKey), kind: null })}
             >
               <MaterialIcons name={d.icon} size={15} color={colors.primary} />
               <Text style={styles.quickChipText}>{t(d.labelKey)}</Text>
             </Pressable>
           ))}
         </ScrollView>
+
+        <Modal visible={!!quick} transparent animationType="fade" onRequestClose={() => setQuick(null)}>
+          <Pressable style={styles.quickBackdrop} onPress={() => setQuick(null)}>
+            <Pressable style={styles.quickSheet} onPress={() => undefined}>
+              <Text style={styles.quickSheetTitle}>{quick?.kind ? "Quel Speeder ?" : `Vers ${quick?.label ?? ""}`}</Text>
+              <Text style={styles.quickSheetSub}>{quick?.kind ? "Choisis ton Speeder, puis finalise ta commande." : "Que veux-tu faire ?"}</Text>
+              {!quick?.kind
+                ? QUICK_KINDS.map((k) => (
+                    <Pressable key={k.id} style={styles.quickOption} onPress={() => setQuick((q) => (q ? { ...q, kind: k.id } : q))}>
+                      <MaterialIcons name={k.icon} size={22} color={colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.quickOptionTitle}>{k.label}</Text>
+                        <Text style={styles.quickOptionSub}>{k.sub}</Text>
+                      </View>
+                    </Pressable>
+                  ))
+                : QUICK_OPTIONS[quick.kind].map((o) => (
+                    <Pressable
+                      key={o.id}
+                      style={styles.quickOption}
+                      onPress={() => {
+                        const q = quick;
+                        setQuick(null);
+                        if (q?.kind) onQuickOrder?.(q.id, q.kind, o.id);
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.quickOptionTitle}>{o.label}</Text>
+                        {o.sub ? <Text style={styles.quickOptionSub}>{o.sub}</Text> : null}
+                      </View>
+                      <MaterialIcons name="arrow-forward-ios" size={14} color={colors.onSurfaceVariant} />
+                    </Pressable>
+                  ))}
+              <Pressable style={styles.quickCancel} onPress={() => setQuick(null)}>
+                <Text style={styles.quickCancelText}>Annuler</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {/* Section 1 : Déplacement immédiat (2 grandes cartes côte à côte) */}
         <View style={styles.sectionHeader}>
@@ -485,6 +546,15 @@ const styles = StyleSheet.create({
   },
 
   // Main Services (2 hero cards)
+  quickBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  quickSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, gap: spacing.sm },
+  quickSheetTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  quickSheetSub: { ...typography.bodyMd, color: colors.onSurfaceVariant, marginBottom: spacing.xs },
+  quickOption: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surfaceContainerLow },
+  quickOptionTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
+  quickOptionSub: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  quickCancel: { alignSelf: "center", paddingVertical: spacing.sm },
+  quickCancelText: { ...typography.labelLg, color: colors.primary, fontWeight: "700" },
   mainServicesRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.lg },
   mainServiceCard: {
     flex: 1,

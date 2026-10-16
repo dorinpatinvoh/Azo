@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  ImageBackground,
   Text,
   TextInput,
   View,
@@ -346,12 +347,15 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
         >
           {/* Bandeau d'accueil de l'écran du numéro : aucun retour, jamais vers l'onboarding */}
           {step === "phone" ? (
-            <LinearGradient
-              colors={[colors.onPrimaryFixed, colors.primary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.hero}
-            >
+            <ImageBackground source={require("../assets/zemback.png")} resizeMode="cover" style={styles.hero} imageStyle={{ borderRadius: 28 }}>
+              {/* voile violet : garde le texte blanc lisible sur la photo */}
+              <LinearGradient
+                colors={["rgba(47,0,76,0.82)", "rgba(113,0,175,0.72)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
               <View style={styles.heroCircleA} pointerEvents="none" />
               <View style={styles.heroCircleB} pointerEvents="none" />
               <View style={styles.heroTop}>
@@ -396,7 +400,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
                   </View>
                 ))}
               </View>
-            </LinearGradient>
+            </ImageBackground>
           ) : (
             <>
           {/* En-tête épuré : flèche retour à gauche (code), verrou (inscription) */}

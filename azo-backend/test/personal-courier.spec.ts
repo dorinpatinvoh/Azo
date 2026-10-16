@@ -188,4 +188,19 @@ describe("Réservation d'un coursier personnel", () => {
     await expect(service.create("c1", { ...dto, vehicleType: "GAZELLE" })).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.create("c1", { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER" } as any)).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it("devis : A vers B à 1 km en Speeder à essence = 200 + 80 = 280 F", async () => {
+    const { service } = make();
+    jest.spyOn(service as any, "routeKm").mockResolvedValue(1);
+    expect(await service.quote("ZEM_ESSENCE", { lat: 6.37, lng: 2.39 }, { lat: 6.38, lng: 2.4 })).toEqual({ km: 1, price: 280 });
+    expect(await service.quote("ZEM_TRICYCLE", { lat: 6.37, lng: 2.39 }, { lat: 6.38, lng: 2.4 })).toEqual({ km: 1, price: 305 });
+  });
+
+  it("gros colis : réservé au tricycle", async () => {
+    const { service } = make();
+    jest.spyOn(service as any, "routeKm").mockResolvedValue(2);
+    const dto = { packageType: "large", pickupAddress: "A", dropAddress: "B", payer: "SENDER", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
+    await expect(service.create("c1", { ...dto, vehicleType: "ZEM_ESSENCE" })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create("c1", { ...dto, vehicleType: "ZEM_TRICYCLE" })).resolves.toBeDefined();
+  });
 });

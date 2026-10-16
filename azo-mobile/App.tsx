@@ -39,6 +39,8 @@ import AgencyDashboardScreen from "./screens/AgencyDashboardScreen";
 import AdminDashboardScreen from "./screens/AdminDashboardScreen";
 import AdminFinanceScreen from "./screens/AdminFinanceScreen";
 import PersonalCourierScreen from "./screens/PersonalCourierScreen";
+import { POPULAR_PLACES } from "./config/quickPlaces";
+import type { QuickKind } from "./screens/HomeScreen";
 import type { AdminTab } from "./components/AdminTabBar";
 import MarketplaceEscrowScreen from "./screens/MarketplaceEscrowScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
@@ -52,6 +54,8 @@ import {
   providersApi,
   ProviderRef,
   ProviderType,
+  VehicleType,
+  type Place,
   wakeServer,
   setToken,
   userApi,
@@ -166,6 +170,9 @@ function AppInner() {
   const [rideVehicle, setRideVehicle] = useState<string>("zem-express");
   // Speeder choisi directement depuis l'accueil (ex. tricycle) : saute l'étape de choix du véhicule
   const [rideZem, setRideZem] = useState<"ZEM_TRICYCLE" | null>(null);
+  // Lieu en 1 clic de l'accueil + Speeder choisi dans la fenêtre : préremplissent la commande
+  const [quickDest, setQuickDest] = useState<Place | null>(null);
+  const [quickSpeeder, setQuickSpeeder] = useState<VehicleType | null>(null);
   const [isAuthRestoring, setIsAuthRestoring] = useState<boolean>(true);
   const [forceReady, setForceReady] = useState<boolean>(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -437,6 +444,8 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
 
   const handleSelectService = useCallback(
     (service: string) => {
+      setQuickDest(null);
+      setQuickSpeeder(null);
       switch (service) {
         case "transport":
           setRideVehicle("car-confort");
@@ -462,14 +471,32 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
           goTo("rental");
           break;
         case "courses":
+          goTo("courses"); // historique des trajets
+          break;
         case "marketplace":
-          goTo("marketplace");
+          // la boutique n'est pas encore ouverte : petit message « Bientôt disponible »
+          Alert.alert(tr("app.soon.title"), tr("app.soon.text"));
           break;
         default:
           Alert.alert(tr("app.soon.title"), tr("app.soon.text"));
       }
     },
     [goTo]
+  );
+
+  /** Lieu en 1 clic : course simple, livraison ou coursier personnel, avec le Speeder choisi. */
+  const handleQuickOrder = useCallback(
+    (placeId: string, kind: QuickKind, option: string) => {
+      const place = POPULAR_PLACES.find((p) => p.id === placeId) ?? null;
+      if (kind === "ride") {
+        handleSelectService(option);
+      } else {
+        setQuickSpeeder(option as VehicleType);
+        goTo(kind === "delivery" ? "delivery" : "personal-courier");
+      }
+      setQuickDest(place);
+    },
+    [goTo, handleSelectService]
   );
 
   /**
@@ -641,6 +668,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
         {route === "home" && (
           <HomeScreen
             onSelectService={handleSelectService}
+            onQuickOrder={handleQuickOrder}
             onNavigateTab={goTo}
           />
         )}
@@ -649,6 +677,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
           <RideBookingScreen
             service={rideVehicle === "car-confort" ? "transport" : "zem"}
             initialZemType={rideZem}
+            initialDestination={quickDest}
             onBack={() => goBack()}
             onRecharge={() => goTo("wallet")}
             onConfirmed={(id, label) => {
@@ -685,12 +714,14 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
           <PersonalCourierScreen
             onBack={() => goBack()}
             onRecharge={() => goTo("wallet")}
-            onBooked={() => goTo("delivery")}
+            onBooked={() => undefined}
+            initialDrop={quickDest}
+            initialVehicle={quickSpeeder}
           />
         )}
 
         {route === "delivery" && (
-          <DeliveryScreen onBack={() => goBack()} onConfirm={() => goTo("home")} />
+          <DeliveryScreen onBack={() => goBack()} onConfirm={() => goTo("home")} initialDrop={quickDest} initialSpeeder={quickSpeeder} />
         )}
 
         {route === "rental" && (

@@ -13,6 +13,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { Estimate, Place, PlaceSuggestion, VehicleType, errorCode, errorMessage, placesApi, rideApi, ridesApi, walletApi } from "../services/api";
 import SchedulePicker from "../components/SchedulePicker";
+import { POPULAR_PLACES } from "../config/quickPlaces";
 import {
   CAR_VEHICLES,
   ZEM_VEHICLES,
@@ -30,6 +31,8 @@ type Props = {
   onRecharge: () => void;
   /** Speeder déjà choisi depuis l'accueil (ex. tricycle). */
   initialZemType?: VehicleType | null;
+  /** Destination choisie depuis l'accueil (lieux en 1 clic). */
+  initialDestination?: Place | null;
   onConfirmed: (rideId: string, destinationLabel: string) => void;
 };
 type Target = "origin" | "destination";
@@ -49,14 +52,6 @@ const VEHICLES: Record<VehicleType, { icon: keyof typeof MaterialIcons.glyphMap 
 };
 const vLabel = (v: VehicleType) => tr(`veh.${v}.label` as MessageKey);
 const vShort = (v: VehicleType) => tr(`veh.${v}.short` as MessageKey);
-const POPULAR_PLACES: Place[] = [
-  { id: "etoile", title: "Place de l'Étoile Rouge", subtitle: "Cotonou Centre", latitude: 6.3725, longitude: 2.4061 },
-  { id: "dantokpa", title: "Marché Dantokpa", subtitle: "St Michel, Cotonou", latitude: 6.3728, longitude: 2.4339 },
-  { id: "aeroport", title: "Aéroport de Cotonou", subtitle: "Cadjèhoun", latitude: 6.3572, longitude: 2.3844 },
-  { id: "ganhi", title: "Ganhi Quartier des Affaires", subtitle: "Cotonou", latitude: 6.3556, longitude: 2.4398 },
-  { id: "haievive", title: "Les Cocotiers / Haie Vive", subtitle: "Cotonou", latitude: 6.3589, longitude: 2.3976 },
-  { id: "calavi", title: "Carrefour IITA Calavi", subtitle: "Abomey-Calavi", latitude: 6.4225, longitude: 2.3397 },
-];
 const ERROR_COLOR = "#B3261B";
 
 // Adresses enregistrées (domicile, travail) : gardées sur le téléphone, aucun serveur
@@ -222,7 +217,7 @@ const fmtKm = (n: number) => `${n.toLocaleString(numLocale(), { maximumFractionD
 const fmtDuration = (min: number) =>
   min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")}`;
 
-export default function RideBookingScreen({ service, onBack, onRecharge, onConfirmed, initialZemType }: Props) {
+export default function RideBookingScreen({ service, onBack, onRecharge, onConfirmed, initialZemType, initialDestination }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const gps = useCurrentLocation();
@@ -240,9 +235,9 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
   );
 
   const [origin, setOrigin] = useState<Place | null>(null);
-  const [destination, setDestination] = useState<Place | null>(null);
+  const [destination, setDestination] = useState<Place | null>(initialDestination ?? null);
   const [originText, setOriginText] = useState("");
-  const [destText, setDestText] = useState("");
+  const [destText, setDestText] = useState(initialDestination?.title ?? "");
   const [focus, setFocus] = useState<Target | null>(null);
   const [pickTarget, setPickTarget] = useState<Target | null>(null);
   const [suggestions, setSuggestions] = useState<Place[]>([]);

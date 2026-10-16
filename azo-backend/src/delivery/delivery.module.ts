@@ -105,6 +105,13 @@ export class DeliveryService {
     }
   }
 
+  /** Devis d'un colis : le prix affiché au client est exactement celui que le serveur facturera (distance de l'itinéraire). */
+  async quote(vehicleType: string, pickup: { lat: number; lng: number }, drop: { lat: number; lng: number }) {
+    if (!this.pricing.deliveryRule(vehicleType)) throw new BadRequestException("Choisis un Speeder moto (essence ou électrique) ou un tricycle pour ton colis.");
+    const km = Math.round((await this.routeKm(pickup, drop)) * 10) / 10;
+    return { km, price: this.pricing.deliveryPrice(vehicleType, km) };
+  }
+
   async create(clientId: string, dto: CreateDeliveryDto) {
     const { mode, vehicleType, bookingHours, pickupLat, pickupLng, dropLat, dropLng, scheduledAt: scheduledRaw, price: askedPrice, dropAddress: askedDrop, ...base } = dto;
     const personal = mode === "PERSONAL";
@@ -147,6 +154,9 @@ export class DeliveryService {
       const express = vehicleType ?? "ZEM_ESSENCE";
       if (!this.pricing.deliveryRule(express)) {
         throw new BadRequestException("Choisis un Speeder moto (essence ou électrique) ou un tricycle pour ton colis.");
+      }
+      if (base.packageType === "large" && express !== "ZEM_TRICYCLE") {
+        throw new BadRequestException("Un gros colis se livre en Speeder tricycle.");
       }
       if (pickupLat === undefined || pickupLng === undefined || dropLat === undefined || dropLng === undefined) {
         throw new BadRequestException("Choisis le ramassage et la livraison dans la liste de suggestions (ou sur la carte) pour calculer le prix.");
@@ -542,6 +552,13 @@ export class DeliveryController {
   @Get()
   list(@CurrentUser() u) {
     return this.svc.list(u.userId);
+  }
+
+  @Get("quote")
+  quote(@Query("vehicleType") vehicleType: string, @Query("pickupLat") pLat: string, @Query("pickupLng") pLng: string, @Query("dropLat") dLat: string, @Query("dropLng") dLng: string) {
+    const [a, b, c, d] = [pLat, pLng, dLat, dLng].map(Number);
+    if (![a, b, c, d].every(Number.isFinite)) throw new BadRequestException("Coordonnées invalides.");
+    return this.svc.quote(String(vehicleType ?? ""), { lat: a, lng: b }, { lat: c, lng: d });
   }
 
   @Get("pending")

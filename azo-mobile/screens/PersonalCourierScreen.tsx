@@ -11,7 +11,7 @@ import { Delivery, Place, VehicleType, deliveryApi, errorMessage, walletApi } fr
 import CourierTrackMap from "../components/CourierTrackMap";
 import { tarification } from "../services/tarification";
 
-type Props = { onBack: () => void; onRecharge: () => void; onBooked: () => void };
+type Props = { onBack: () => void; onRecharge: () => void; onBooked: () => void; initialDrop?: Place | null; initialVehicle?: VehicleType | null };
 
 type VehicleOption = { id: VehicleType; label: string; icon: keyof typeof MaterialIcons.glyphMap };
 
@@ -46,10 +46,10 @@ function crowKm(a: Place, b: Place) {
   return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: Props) {
+export default function PersonalCourierScreen({ onBack, onRecharge, onBooked, initialDrop, initialVehicle }: Props) {
   const cfg = tarification().personalCourier;
   const durations = cfg?.durations ?? [];
-  const [vehicle, setVehicle] = useState<VehicleType>("ZEM_ESSENCE");
+  const [vehicle, setVehicle] = useState<VehicleType>(initialVehicle ?? "ZEM_ESSENCE");
   const [hours, setHours] = useState<number>(durations[0]?.hours ?? 5);
   // « Plus de 3 jours » : nombre de jours entiers (4 à 14), la course est alors forcément programmée
   const [longBooking, setLongBooking] = useState(false);
@@ -57,7 +57,7 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked }: 
   const [scheduledAt, setScheduledAt] = useState<Date | null>(null);
   const [scheduleMode, setScheduleMode] = useState(false);
   const [pickup, setPickup] = useState<Place | null>(null);
-  const [drop, setDrop] = useState<Place | null>(null);
+  const [drop, setDrop] = useState<Place | null>(initialDrop ?? null);
   const [balance, setBalance] = useState<number | null>(null);
   const [routeKm, setRouteKm] = useState<number | null>(null);
   const [bookings, setBookings] = useState<Delivery[]>([]);
