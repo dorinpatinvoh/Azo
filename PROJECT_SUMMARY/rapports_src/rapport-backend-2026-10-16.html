@@ -1,8 +1,8 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 6 commits sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>) · 31 suites / 332 tests · mise à jour de 10 h 48</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 8 commits sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>, <code>9b06eef5</code>, <code>e5b16227</code>) · 31 suites / 335 tests · mise à jour de 10 h 48</span></div>
 
 <h2>1. En résumé</h2>
-<p>Deux changements côté serveur, tous dans <code>delivery/</code> : un <b>devis de colis</b> (<code>GET /deliveries/quote</code>) qui donne au client exactement le prix que le serveur facturera, et la règle <b>« gros colis = Speeder tricycle uniquement »</b>. Aucune migration aujourd'hui. Je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>13e14dec</code>).</p>
+<p>Deux changements côté serveur, tous dans <code>delivery/</code> : un <b>devis de colis</b> (<code>GET /deliveries/quote</code>) qui donne au client exactement le prix que le serveur facturera, et la règle <b>« gros colis = Speeder tricycle uniquement »</b>. Aucune migration aujourd'hui. Je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>e5b16227</code>).</p>
 <div class="box warn"><b>À vérifier :</b> (1) le devis utilise OSRM, et <b>à défaut</b> la distance à vol d'oiseau × 1,3 : si OSRM est indisponible depuis Render, le prix peut être plus élevé que la distance réelle (§2) ; (2) le prix affiché au client et le prix facturé viennent du même calcul, mais sont <b>deux appels OSRM</b> distincts : un écart de quelques dizaines de mètres est possible.</div>
 
 <h2>2. Devis de colis (<code>GET /deliveries/quote</code>)</h2>
@@ -56,9 +56,29 @@
 <li><b>Réserve</b> : le prélèvement mensuel des Speeders indépendants additionne les écritures « Gain de course » ; elles sont désormais brutes, mais ce prélèvement est à 0 % depuis le 15 octobre, sans effet.</li>
 </ul>
 
+<h2>3sexies. Heure de fin de course, compteur et note du Speeder, pourboire (<code>rides/</code>)</h2>
+<ul>
+<li><b>Cause commune</b> : <code>RidesService.settle</code> n'enregistrait <b>jamais</b> <code>completedAt</code>. Or le pourboire (<code>TipsService</code>, « course non éligible »), le chat après course (<code>messages.service</code>) et les gains du jour / 7 / 30 jours du Speeder (<code>ride-extras.service</code>) en dépendent : ils ne fonctionnaient pas. Corrigé : <code>completedAt: new Date()</code> à la fin de la course.</li>
+<li><b>Compteur de courses</b> : <code>ProviderProfile.jobsCompleted</code> n'était augmenté que pour les <b>livraisons</b> ; il est maintenant augmenté à chaque course payée (hors transaction de paiement, jamais bloquant).</li>
+<li><b>Migration de rattrapage</b> <code>20261016180000_rides_completed_at_stats</code> (idempotente) : <code>completedAt</code> = date de la demande pour les courses terminées sans heure de fin ; <code>jobsCompleted</code> recalculé (courses + livraisons terminées) ; note moyenne et nombre de notes recalculés depuis <code>Ride.rating</code>, en ignorant les notes antérieures à <code>User.ratingResetAt</code>. Appliquée avec succès sur une base de test créée depuis zéro.</li>
+<li>Tests : <code>rides-drop-code.spec.ts</code> (heure de fin enregistrée, compteur incrémenté).</li>
+</ul>
+
+<h2>3septies. Agences : l'argent d'avant le recrutement reste au Speeder (<code>agencies/</code>)</h2>
+<ul>
+<li><b>Problème</b> : l'agence pouvait retirer n'importe quelle somme du portefeuille d'un de ses chauffeurs et voyait son solde entier, y compris l'argent gagné avant son recrutement.</li>
+<li><b>Modèle</b> : <code>User.agencyJoinedAt</code> et <code>User.agencyProtectedBalance</code> (migration <code>20261016200000_agency_protected_balance</code>). Au rattachement (<code>attachDriver</code>), le solde du chauffeur est enregistré comme <b>part protégée</b> ; au détachement, elle retombe à 0.</li>
+<li><b>Retrait par l'agence</b> (<code>transfer</code>, direction <code>withdraw</code>) : débit conditionnel au <b>solde ≥ montant + part protégée</b> ; sinon 400 <code>AGENCY_PROTECTED_BALANCE</code> (« Tu peux retirer au plus X FCFA… »). Les recharges de l'agence (<code>fund</code>) rendent la somme accessible à l'agence comme avant.</li>
+<li><b>Visibilité</b> : le tableau de bord (<code>roster[].balance</code>) et la réponse des transferts (<code>driver.balance</code>) ne renvoient plus que <b>solde − part protégée</b> (0 F au départ) ; le solde personnel n'est jamais exposé à l'agence.</li>
+<li><b>Retrait personnel du chauffeur</b> (<code>WalletService.withdraw</code>) : la part protégée est ramenée à son solde restant (<code>LEAST</code>), pour ne jamais protéger plus que ce qu'il possède.</li>
+<li><b>Rattrapage des chauffeurs déjà rattachés</b> : la migration reconstitue leur solde à la date du rattachement (événement <code>AGENCY_ATTACHED</code>) à partir de leurs transactions antérieures, borné entre 0 et le solde actuel. <b>Estimation</b> : validée en syntaxe sur une base vide, pas sur de vraies données ; à vérifier après déploiement sur un chauffeur déjà recruté (il doit apparaître à 0 F).</li>
+<li>Tests : <code>agencies-owner.spec.ts</code> (+2 : retrait jusqu'à la part accessible, retrait refusé au-delà).</li>
+<li><b>Question ouverte</b> : quand le chauffeur retire lui-même plus que sa part personnelle, ses retraits entament-ils d'abord la part de l'agence (choix actuel : la part protégée suit le solde, le chauffeur n'est jamais pénalisé) ?</li>
+</ul>
+
 <h2>4. Qualité et limites</h2>
 <ul>
-<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>31 suites / 332 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis à 1 km par type de colis (170 / 190 / 270 F en essence, 305 F en tricycle) ; prix à la création (petit colis 10 km = 820 F) ; gros colis refusé en moto et accepté en tricycle.</li>
+<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>31 suites / 335 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis à 1 km par type de colis (170 / 190 / 270 F en essence, 305 F en tricycle) ; prix à la création (petit colis 10 km = 820 F) ; gros colis refusé en moto et accepté en tricycle.</li>
 <li><b>Non vérifié :</b> l'appel OSRM depuis Render ; la route de devis avec un vrai compte ; l'écart entre devis et prix facturé sur de vrais trajets.</li>
 <li><b>Pas de test dédié</b> pour la validation des paramètres du devis dans le contrôleur.</li>
 </ul>
@@ -82,6 +102,8 @@
 <tr><td><code>38c4f4e3</code></td><td>Recherche : résultats en ligne conservés (nouvel ordre, 16 résultats), test</td></tr>
 <tr><td><code>0ad4ace4</code></td><td>Plus de course en double (création idempotente, une seule course active, copies annulées à la fin), tests</td></tr>
 <tr><td><code>13e14dec</code></td><td>Correctif <code>typeLabelOf</code> (récursion infinie) ; commission visible (crédit + débit), notifications, détail par course côté admin ; tests</td></tr>
+<tr><td><code>9b06eef5</code></td><td>Heure de fin de course enregistrée, compteur de courses, note du Speeder, migration de rattrapage ; tests</td></tr>
+<tr><td><code>e5b16227</code></td><td>Argent d'avant le recrutement protégé contre l'agence (migration, retrait plafonné, solde masqué) ; tests</td></tr>
 </table>
 <div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>

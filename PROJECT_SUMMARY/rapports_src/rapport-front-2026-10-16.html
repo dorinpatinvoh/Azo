@@ -1,9 +1,9 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 6 commits poussés sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>) · mise à jour de 10 h 48</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 8 commits poussés sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>, <code>9b06eef5</code>, <code>e5b16227</code>) · mise à jour de 10 h 48</span></div>
 
 <h2>1. En résumé</h2>
 <p>Aujourd'hui, le mobile a gagné <b>un prix des colis exact calculé par le serveur</b>, <b>le « Gros colis » réservé au Speeder tricycle</b>, <b>une fenêtre de choix sur les lieux en un clic</b> de l'accueil (course simple, livraison ou coursier personnel, puis le Speeder), <b>une photo de fond</b> sur l'écran du numéro, et deux corrections de l'accueil (Boutique, Mes trajets). Tout compile (<code>tsc</code> sans erreur).</p>
-<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>15:38</b>) contient tout. <b>Le backend doit être déployé avant</b> (nouvelle route de devis <code>GET /deliveries/quote</code>), sinon l'écran des colis n'affichera pas de prix. <b>Priorités de test :</b> le prix d'un colis (ex. 1 km en Speeder à essence = 280 F), le Gros colis en tricycle, la fenêtre des lieux en un clic.</div>
+<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>16:54</b>) contient tout. <b>Le backend doit être déployé avant</b> (nouvelle route de devis <code>GET /deliveries/quote</code>), sinon l'écran des colis n'affichera pas de prix. <b>Priorités de test :</b> le prix d'un colis (ex. 1 km en Speeder à essence = 280 F), le Gros colis en tricycle, la fenêtre des lieux en un clic.</div>
 
 <h2>2. Colis : prix, gros colis et nouvelle mise en page (« Envoyer un colis »)</h2>
 <ul>
@@ -48,6 +48,29 @@
 <li><b>« Internal server error » dans l'onglet « Actifs »</b> de la file admin : bug <b>serveur</b> (voir le rapport backend), corrigé ; aucun changement d'écran nécessaire pour cette partie.</li>
 </ul>
 
+<h2>2sexies. Fenêtres de dialogue aux couleurs de la charte</h2>
+<ul>
+<li><b>Audit</b> : 124 alertes natives d'Android dans 27 fichiers (confirmations, erreurs, succès, annulations…) ne suivaient pas la charte. Elles sont toutes remplacées par <code>BrandAlert</code> (<code>components/BrandAlert.tsx</code>, monté une fois dans <code>App.tsx</code>) : fond de la charte, coins arrondis, <b>icône ronde selon le sens</b> (succès, erreur, danger, information), polices de la marque, bouton principal en dégradé violet-orange, boutons secondaires et rouge pour les actions dangereuses ; les titres sont débarrassés de leurs émojis. Même signature que <code>Alert.alert</code> : <code>BrandAlert.alert(titre, message, boutons)</code> ; les alertes s'affichent l'une après l'autre ; le retour du téléphone ferme celles qu'on peut refuser.</li>
+<li><b>Autres fenêtres (18 modales)</b> : choix de photo, langue, profil du Speeder, proposition d'un Speeder, discussion, retrait admin, type de compte… utilisent déjà les couleurs et polices de la charte (quelques valeurs figées subsistent : blanc, vert et rouge des repères de carte). Aucun changement nécessaire.</li>
+<li><b>Non vérifié sur un téléphone.</b></li>
+</ul>
+
+<h2>2septies. Profil Speeder : photo obligatoire, avis et compteur</h2>
+<ul>
+<li><b>Photo de profil obligatoire</b> pour les Speeders, coursiers et livreurs (<code>hooks/useProfilePhotoReminder.ts</code>) : rappel à l'ouverture de l'espace tant qu'il n'y a pas de photo, et <b>passage « en ligne » refusé</b> sans photo, avec un bouton « Ajouter ma photo ». La photo reste enregistrée <b>sur le téléphone</b> : le client ne la voit pas encore dans le popup du Speeder (champ photo côté serveur à ajouter).</li>
+<li><b>Popup du Speeder chez le client</b> : la note affichait « 0.0 » tant que personne n'avait noté ; elle affiche « Nouveau » puis « 4.5 (12) » (note et nombre d'avis). Le nombre de courses est à jour (correctif serveur : il n'était augmenté que pour les livraisons).</li>
+<li><b>Pourboire</b> : il était toujours refusé (« course non éligible ») car le serveur n'enregistrait pas l'heure de fin de la course ; corrigé côté serveur (même cause pour le chat après course et les gains du jour). Aucun changement d'écran.</li>
+</ul>
+
+<h2>2octies. Portefeuille, barres du bas, cartes, agence</h2>
+<ul>
+<li><b>Barre du bas sur AZƆ̀ Pay</b> : elle disparaissait en ouvrant le portefeuille (écran à part, sans barre). L'écran affiche maintenant la barre de l'espace de l'utilisateur — client, Speeder, coursier ou agence — avec « AZƆ̀ Pay » actif ; un autre onglet touché ouvre l'écran correspondant (un prestataire retrouve son espace sur l'onglet choisi).</li>
+<li><b>Portefeuille client</b> : bloc « Recharge sécurisée avec FedaPay » (logo <code>assets/logo_feda.png</code>) et moyens acceptés au Bénin d'après la documentation FedaPay : MTN Mobile Money, Moov Money, Celtiis Cash, Visa, Mastercard (4 langues). BMO et Coris Money, cités par la documentation, ne sont pas affichés tant que ton compte FedaPay ne les confirme pas.</li>
+<li><b>Cartes plus stables</b> : la carte ne reçoit plus que ce qui change (nouveau tableau identique à chaque affichage, frappe dans un champ) ; une seule carte active dans le choix des lieux (l'aperçu est retiré quand la carte plein écran est ouverte) ; l'itinéraire réessaie deux fois avant de disparaître ; le serveur de tuiles de secours n'intervient qu'après 8 échecs.</li>
+<li><b>Radar Speeder</b> : la ligne « Destination » d'une demande est en gras et foncée.</li>
+<li><b>Espace agence</b> : la liste des chauffeurs et la fenêtre de recharge / retrait affichent « Disponible pour l'agence » (la part gagnée ou rechargée depuis le rattachement) ; le solde d'avant le recrutement n'est plus montré (règle serveur, voir le rapport backend).</li>
+</ul>
+
 <h2>3. Accueil client</h2>
 <ul>
 <li><b>Barre « Chercher une destination… » supprimée.</b></li>
@@ -62,11 +85,11 @@
 </ul>
 
 <h2>5. Ce qui n'est pas encore commité</h2>
-<p>Rien côté mobile : tout est sur <code>main</code> (dernier commit <code>13e14dec</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
+<p>Rien côté mobile : tout est sur <code>main</code> (dernier commit <code>e5b16227</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
 
 <h2>6. APK et environnement</h2>
 <ul>
-<li>Build local (Gradle hors ligne), signé avec la clé de debug : dernier APK à <b>15:38</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code>. Désinstaller l'ancienne version si l'installation est refusée.</li>
+<li>Build local (Gradle hors ligne), signé avec la clé de debug : dernier APK à <b>16:54</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code>. Désinstaller l'ancienne version si l'installation est refusée.</li>
 <li>Pour tester un colis, il faut un livreur express avec un véhicule : <code>node --env-file=.env scripts/create-provider.js &lt;numéro&gt; --profile livreur-express --vehicle ZEM_TRICYCLE</code> (avec l'URL externe et <code>--allow-remote</code> pour la base Render).</li>
 <li><b>Sécurité :</b> pense à changer le mot de passe de la base Render après les tests.</li>
 </ul>
@@ -82,6 +105,8 @@
 <tr><td>Tricycle et petits colis</td><td>Le tricycle applique 225 F + 80 F/km à tous les types de colis (pas seulement le gros colis) : à confirmer</td></tr>
 <tr><td>Textes de la fenêtre des lieux</td><td>En français seulement (pas de traduction en, es, de)</td></tr>
 <tr><td>Quartiers reculés</td><td>Seules Cotonou et Abomey-Calavi sont couvertes ; Sô-Ava, Ouidah, Sèmè-Podji, Tori-Bossito, Zè à faire ; cahier officiel INSAE (RGPH4) à récupérer pour corriger les arrondissements</td></tr>
+<tr><td>Photo du Speeder visible par le client</td><td>La photo reste sur le téléphone : champ photo côté serveur et affichage dans le popup à faire</td></tr>
+<tr><td>Tests sur téléphone</td><td>Rien de ce rapport n'a été essayé sur un téléphone : fenêtres de dialogue, barre du bas AZƆ̀ Pay, photo obligatoire, portefeuille FedaPay, cartes</td></tr>
 <tr><td>Plan de tests internes</td><td>Pas mis à jour</td></tr>
 </table>
 
@@ -94,6 +119,8 @@
 <tr><td><code>38c4f4e3</code></td><td>Correctif : carte standard toujours affichée (pharmacies, commerces), résultats en ligne conservés dans la recherche</td></tr>
 <tr><td><code>0ad4ace4</code></td><td>Distance à parcourir pendant la course ; plus de course en double (côté serveur)</td></tr>
 <tr><td><code>13e14dec</code></td><td>Barre du bas admin sur la liste des dossiers ; commission annoncée au prestataire ; commission par course dans les finances admin ; correctif du libellé de dossier (erreur serveur)</td></tr>
+<tr><td><code>9b06eef5</code></td><td>Fenêtres de dialogue aux couleurs de la charte ; photo de profil obligatoire ; avis et compteur de courses ; cartes plus stables ; portefeuille FedaPay ; destination en gras ; correctifs serveur (pourboire, compteur)</td></tr>
+<tr><td><code>e5b16227</code></td><td>Barre du bas sur AZƆ̀ Pay pour tous les profils ; solde d'avant recrutement caché à l'agence</td></tr>
 </table>
 <div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>
