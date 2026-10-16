@@ -1,8 +1,8 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 4 commits sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>) · 29 suites / 322 tests · mise à jour de 10 h 48</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 5 commits sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>) · 30 suites / 328 tests · mise à jour de 10 h 48</span></div>
 
 <h2>1. En résumé</h2>
-<p>Deux changements côté serveur, tous dans <code>delivery/</code> : un <b>devis de colis</b> (<code>GET /deliveries/quote</code>) qui donne au client exactement le prix que le serveur facturera, et la règle <b>« gros colis = Speeder tricycle uniquement »</b>. Aucune migration aujourd'hui. Je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>38c4f4e3</code>).</p>
+<p>Deux changements côté serveur, tous dans <code>delivery/</code> : un <b>devis de colis</b> (<code>GET /deliveries/quote</code>) qui donne au client exactement le prix que le serveur facturera, et la règle <b>« gros colis = Speeder tricycle uniquement »</b>. Aucune migration aujourd'hui. Je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>0ad4ace4</code>).</p>
 <div class="box warn"><b>À vérifier :</b> (1) le devis utilise OSRM, et <b>à défaut</b> la distance à vol d'oiseau × 1,3 : si OSRM est indisponible depuis Render, le prix peut être plus élevé que la distance réelle (§2) ; (2) le prix affiché au client et le prix facturé viennent du même calcul, mais sont <b>deux appels OSRM</b> distincts : un écart de quelques dizaines de mètres est possible.</div>
 
 <h2>2. Devis de colis (<code>GET /deliveries/quote</code>)</h2>
@@ -28,9 +28,19 @@
 <li>Tests : <code>places-gazetteer.spec.ts</code> (6 tests : village reculé sans accent, quartiers d'un arrondissement, tri par proximité, adresse du quartier connu, repli sur la ville proche, résultats en ligne conservés).</li>
 </ul>
 
+<h2>3ter. Course en double : popup « accepter une course déjà faite » (<code>rides/</code>)</h2>
+<ul>
+<li><b>Symptôme (test réel)</b> : après la fin d'une course (paiement effectué), le client ou le Speeder reçoit une proposition à accepter pour une course déjà faite.</li>
+<li><b>Cause</b> : <code>RidesService.create</code> n'avait aucune protection. Un double appui sur « Confirmer », ou un renvoi après une coupure réseau, créait <b>deux courses</b> identiques. La première était menée à terme ; la copie restait <code>PENDING</code> (visible sur les radars, puis <code>OFFERED</code> au client). Aucun chemin du code ne remet une course démarrée en recherche (vérifié : l'annulation est refusée dès <code>IN_PROGRESS</code> ; seule la transaction de paiement écrit le statut final).</li>
+<li><b>Correction 1 — création</b> : une demande immédiate est refusée ou rendue idempotente s'il existe déjà une course active du client (<code>PENDING</code> non expirée, ou <code>OFFERED</code> / <code>MATCHED</code> / <code>ARRIVED</code> / <code>IN_PROGRESS</code> de moins de 6 h). <b>Même trajet</b> (même véhicule, départ et arrivée à moins de 150 m) : la course existante est renvoyée, sans nouvelle ligne. <b>Autre trajet</b> : 409 <code>RIDE_ALREADY_ACTIVE</code> (« Tu as déjà une course en cours… »). Les courses programmées sont exclues du contrôle.</li>
+<li><b>Correction 2 — nettoyage</b> (<code>cancelStaleDuplicates</code>, appelé après le paiement) : toute autre demande immédiate du même client restée <code>PENDING</code> ou <code>OFFERED</code> (6 dernières heures) est annulée sans débit, avec les événements temps réel habituels (retrait des radars, fin de l'offre). Les copies déjà créées pendant les tests sont ainsi annulées à la prochaine course terminée par ce client, ou expirent d'elles-mêmes après 20 minutes. Un échec du nettoyage n'empêche jamais le paiement.</li>
+<li><b>Point non élucidé</b> : l'équipe a aussi noté « l'argent est défalqué mais moi le Zem… » (phrase inachevée). Le débit du client et le crédit du Speeder se font dans la même transaction ; non reproduit. À vérifier avec le solde du Speeder après une course.</li>
+<li>Tests : <code>rides-duplicate.spec.ts</code> (3 tests : même trajet renvoyé, autre trajet refusé, création normale) ; <code>rides-drop-code.spec.ts</code> (+3 : annulation refusée en cours de trajet, fin de course écrit seulement <code>COMPLETED</code>, copie annulée à la fin).</li>
+</ul>
+
 <h2>4. Qualité et limites</h2>
 <ul>
-<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>29 suites / 322 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis à 1 km par type de colis (170 / 190 / 270 F en essence, 305 F en tricycle) ; prix à la création (petit colis 10 km = 820 F) ; gros colis refusé en moto et accepté en tricycle.</li>
+<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>30 suites / 328 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis à 1 km par type de colis (170 / 190 / 270 F en essence, 305 F en tricycle) ; prix à la création (petit colis 10 km = 820 F) ; gros colis refusé en moto et accepté en tricycle.</li>
 <li><b>Non vérifié :</b> l'appel OSRM depuis Render ; la route de devis avec un vrai compte ; l'écart entre devis et prix facturé sur de vrais trajets.</li>
 <li><b>Pas de test dédié</b> pour la validation des paramètres du devis dans le contrôleur.</li>
 </ul>
@@ -52,6 +62,7 @@
 <tr><td><code>fc6f3fb5</code></td><td>Base des colis moto selon le type (document 100, petit 120, moyen 200 ; 70 F/km), devis avec <code>packageType</code>, tests mis à jour</td></tr>
 <tr><td><code>94eaecee</code></td><td>Base de 236 quartiers et villages, recherche et géocodage améliorés, rayon du radar élargi (15 / 20 / 30 km), test</td></tr>
 <tr><td><code>38c4f4e3</code></td><td>Recherche : résultats en ligne conservés (nouvel ordre, 16 résultats), test</td></tr>
+<tr><td><code>0ad4ace4</code></td><td>Plus de course en double (création idempotente, une seule course active, copies annulées à la fin), tests</td></tr>
 </table>
 <div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>
