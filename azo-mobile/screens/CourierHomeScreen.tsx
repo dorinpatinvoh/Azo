@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   BackHandler,
   Linking,
   Pressable,
@@ -32,6 +31,8 @@ import LanguageSheet from "../components/LanguageSheet";
 import { useAvatar } from "../utils/avatar";
 import { languageInfo, useI18n } from "../i18n";
 import { displayName, initials } from "./ProfileScreen";
+import { BrandAlert } from "../components/BrandAlert";
+import { useProfilePhotoReminder } from "../hooks/useProfilePhotoReminder";
 
 type Props = {
   onLogout: () => void;
@@ -82,6 +83,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
   const [user, setUser] = useState<UserProfile | null>(null);
   const [langOpen, setLangOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const { ensurePhoto } = useProfilePhotoReminder(() => setAvatarOpen(true));
   useEffect(() => {
     userApi.me().then(setUser).catch(() => undefined);
   }, []);
@@ -220,7 +222,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
       setOtpInput("");
       await loadAccount();
     } catch (e) {
-      Alert.alert("Mission indisponible", errorMessage(e));
+      BrandAlert.alert("Mission indisponible", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -230,7 +232,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
     if (!activeDelivery) return;
     const clean = otpInput.replace(/\D/g, "");
     if (clean.length !== 4) {
-      Alert.alert("Code à 4 chiffres", "Saisis le code à 4 chiffres fourni par le client ou le destinataire.");
+      BrandAlert.alert("Code à 4 chiffres", "Saisis le code à 4 chiffres fourni par le client ou le destinataire.");
       return;
     }
     setBusy(true);
@@ -239,7 +241,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
         await deliveryApi.confirmPickup(activeDelivery.id, clean);
         setOtpInput("");
         await loadAccount();
-        Alert.alert(
+        BrandAlert.alert(
           "Ramassage validé ✅",
           "Colis pris en charge ! Dirige-toi vers l'adresse de livraison et demande le code de remise à 4 chiffres au destinataire."
         );
@@ -251,13 +253,13 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
         const gross = done.price ?? activeDelivery.price;
         const commission = done.commission ?? Math.round(gross * 0.15);
         const pct = gross > 0 ? Math.round((commission / gross) * 1000) / 10 : 0;
-        Alert.alert(
+        BrandAlert.alert(
           "Livraison terminée 🎉",
           `Mission : ${fcfa(gross)}\nCommission AZƆ̀ ${pct.toLocaleString("fr-FR")} % débitée : −${fcfa(commission)}\nTu reçois : +${fcfa(gross - commission)} sur ton portefeuille AZƆ̀ Pay.`
         );
       }
     } catch (e) {
-      Alert.alert("Code invalide", errorMessage(e));
+      BrandAlert.alert("Code invalide", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -265,7 +267,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
 
   function handleCancelMission() {
     if (!activeDelivery) return;
-    Alert.alert(
+    BrandAlert.alert(
       "Annuler cette mission",
       "Veux-tu vraiment te désister ? La mission sera reproposée aux autres coursiers.",
       [
@@ -280,7 +282,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
               setOtpInput("");
               await loadAccount();
             } catch (e) {
-              Alert.alert("Impossible d'annuler", errorMessage(e));
+              BrandAlert.alert("Impossible d'annuler", errorMessage(e));
             } finally {
               setBusy(false);
             }
@@ -291,7 +293,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
   }
 
   function confirmExit() {
-    Alert.alert("Espace Coursier & Livreur", "Que souhaites-tu faire ?", [
+    BrandAlert.alert("Espace Coursier & Livreur", "Que souhaites-tu faire ?", [
       { text: "Annuler", style: "cancel" },
       ...(onOpenDossier ? [{ text: "Mon dossier KYC", onPress: onOpenDossier }] : []),
       {
@@ -324,7 +326,11 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
         </View>
         <Switch
           value={online}
-          onValueChange={setOnline}
+          onValueChange={(value) => {
+            // Photo de profil obligatoire pour recevoir des missions
+            if (value && !ensurePhoto()) return;
+            setOnline(value);
+          }}
           trackColor={{ false: colors.surfaceContainerHigh, true: colors.primaryFixed }}
           thumbColor={online ? colors.primary : colors.outline}
         />

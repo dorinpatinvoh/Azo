@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   BackHandler,
   KeyboardAvoidingView,
@@ -51,6 +50,7 @@ import {
   normalizeName,
   registrationError,
 } from "../utils/registration";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Step = "phone" | "code" | "register";
 
@@ -114,7 +114,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
   // La voix se tait quand on quitte l'écran, sauf le message de fin d'inscription
   useEffect(() => () => { if (!spokenDone.current) stopSpeaking(); }, []);
   function notify(title: string, message: string) {
-    Alert.alert(title, message);
+    BrandAlert.alert(title, message);
     if (talk) speakText(`${title}. ${message}`, voiceLang);
   }
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Modal, TextInput, View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
+import { ActivityIndicator, AppState, Image, Modal, TextInput, View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,20 +10,22 @@ import { errorMessage, walletApi, WalletTransaction } from "../services/api";
 import PaymentWebView from "../components/PaymentWebView";
 import { MIN_RECHARGE, RECHARGE_POLL_MAX_MS, RECHARGE_POLL_MS, RECHARGE_PRESETS } from "../config/wallet";
 import { useI18n, type MessageKey } from "../i18n";
+import { BrandAlert } from "../components/BrandAlert";
 
 const ACTIONS: { id: string; labelKey: MessageKey; icon: keyof typeof MaterialIcons.glyphMap }[] = [
   { id: "recharge", labelKey: "wallet.act.recharge", icon: "add-circle" },
   { id: "history", labelKey: "wallet.act.history", icon: "receipt-long" },
 ];
 
-// Moyens de paiement acceptés (aucun numéro ni carte inventés : le serveur ne liste pas encore les comptes liés)
+// Moyens acceptés par FedaPay au Bénin (documentation FedaPay : MTN, Moov, Celtiis, cartes Visa et Mastercard).
+// Aucun numéro ni carte inventés : le serveur ne liste pas les comptes liés, le choix se fait sur la page FedaPay.
 const PAYMENT_METHODS: { id: string; label: string; metaKey: MessageKey; icon: string }[] = [
   { id: "momo", label: "MTN Mobile Money", metaKey: "wallet.pm.mobile", icon: "MTN" },
-  { id: "celtiis", label: "Celtiis Cash Bénin", metaKey: "wallet.pm.mobile", icon: "CLTS" },
-  { id: "moov", label: "Moov Money Bénin", metaKey: "wallet.pm.mobile", icon: "MOOV" },
+  { id: "moov", label: "Moov Money", metaKey: "wallet.pm.mobile", icon: "MOOV" },
+  { id: "celtiis", label: "Celtiis Cash", metaKey: "wallet.pm.mobile", icon: "CLTS" },
   { id: "visa", label: "Visa", metaKey: "wallet.pm.card", icon: "VISA" },
+  { id: "mastercard", label: "Mastercard", metaKey: "wallet.pm.card", icon: "MC" },
 ];
-
 type Props = { onBack: () => void };
 
 export default function WalletScreen({ onBack }: Props) {
@@ -88,7 +90,7 @@ export default function WalletScreen({ onBack }: Props) {
       finished.current = true;
       setAwaiting(null);
       setPayUrl(null);
-      Alert.alert(
+      BrandAlert.alert(
         t("wallet.recharge.done.title"),
         t("wallet.recharge.done.body", { amount: mine.amount.toLocaleString(locale), balance: data.balance.toLocaleString(locale) })
       );
@@ -96,11 +98,11 @@ export default function WalletScreen({ onBack }: Props) {
       finished.current = true;
       setAwaiting(null);
       setPayUrl(null);
-      Alert.alert(t("wallet.recharge.title"), t("wallet.recharge.failed"));
+      BrandAlert.alert(t("wallet.recharge.title"), t("wallet.recharge.failed"));
     } else if (Date.now() - pending.since > RECHARGE_POLL_MAX_MS) {
       finished.current = true;
       setAwaiting(null);
-      Alert.alert(t("wallet.recharge.title"), t("wallet.recharge.timeout"));
+      BrandAlert.alert(t("wallet.recharge.title"), t("wallet.recharge.timeout"));
     }
   }, [load, locale, t]);
 
@@ -122,7 +124,7 @@ export default function WalletScreen({ onBack }: Props) {
 
   async function startRecharge() {
     if (!rechargeValid) {
-      Alert.alert(t("common.error"), t("wallet.recharge.min", { min: MIN_RECHARGE }));
+      BrandAlert.alert(t("common.error"), t("wallet.recharge.min", { min: MIN_RECHARGE }));
       return;
     }
     setRechargeBusy(true);
@@ -133,7 +135,7 @@ export default function WalletScreen({ onBack }: Props) {
       setAwaiting({ transactionId, amount: rechargeValue, since: Date.now() });
       if (url) setPayUrl(url);
     } catch (e) {
-      Alert.alert(t("common.error"), errorMessage(e));
+      BrandAlert.alert(t("common.error"), errorMessage(e));
     } finally {
       setRechargeBusy(false);
     }
@@ -201,25 +203,32 @@ export default function WalletScreen({ onBack }: Props) {
         </View>
 
         {canRecharge && (
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>{t("wallet.methods")}</Text>
-        </View>
-)}
-        {canRecharge && (
-        <View style={{ gap: spacing.sm }}>
-          {PAYMENT_METHODS.map((m) => (
-            <View key={m.id} style={styles.paymentCard}>
-              <View style={styles.paymentLogo}>
-                <Text style={styles.paymentLogoText}>{m.icon}</Text>
+          <View style={styles.fedaCard}>
+            <View style={styles.fedaHead}>
+              <View style={styles.fedaLogoBox}>
+                <Image source={require("../assets/logo_feda.png")} style={styles.fedaLogo} resizeMode="contain" accessibilityLabel="FedaPay" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.paymentLabel}>{m.label}</Text>
-                <Text style={styles.paymentMeta}>{t(m.metaKey)}</Text>
+                <Text style={styles.fedaTitle}>{t("wallet.fedapay.title")}</Text>
+                <Text style={styles.fedaSub}>{t("wallet.fedapay.sub")}</Text>
               </View>
             </View>
-          ))}
-        </View>
-)}
+            <Text style={styles.fedaAccepted}>{t("wallet.fedapay.accepted")}</Text>
+            <View style={styles.fedaChips}>
+              {PAYMENT_METHODS.map((m) => (
+                <View key={m.id} style={styles.fedaChip}>
+                  <View style={styles.fedaChipBadge}>
+                    <Text style={styles.fedaChipBadgeText}>{m.icon}</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.fedaChipLabel}>{m.label}</Text>
+                    <Text style={styles.fedaChipMeta}>{t(m.metaKey)}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         <View style={styles.sectionHeaderRow} onLayout={(e) => { activityY.current = e.nativeEvent.layout.y; }}>
           <Text style={styles.sectionTitle}>{t("wallet.activity")}</Text>
@@ -351,6 +360,19 @@ const styles = StyleSheet.create({
   sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm, marginTop: spacing.sm },
   sectionTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "700" },
   sectionAction: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
+  fedaCard: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, gap: spacing.sm, borderWidth: 1, borderColor: colors.surfaceContainer },
+  fedaHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  fedaLogoBox: { width: 96, height: 72, overflow: "hidden", borderRadius: radius.lg, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.surfaceContainer },
+  fedaLogo: { width: 150, height: 150, marginLeft: -27, marginTop: -33 },
+  fedaTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "800" },
+  fedaSub: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 2 },
+  fedaAccepted: { ...typography.labelSm, color: colors.onSurfaceVariant, textTransform: "uppercase", marginTop: spacing.xs },
+  fedaChips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  fedaChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.lg, paddingVertical: 8, paddingHorizontal: 10, flexGrow: 1, flexBasis: "46%" },
+  fedaChipBadge: { minWidth: 40, height: 28, borderRadius: radius.md, backgroundColor: colors.surfaceContainerLowest, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
+  fedaChipBadgeText: { ...typography.labelSm, color: colors.tertiary, fontWeight: "800" },
+  fedaChipLabel: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
+  fedaChipMeta: { ...typography.bodySm, color: colors.onSurfaceVariant },
   paymentCard: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   paymentLogo: { width: 40, height: 40, borderRadius: radius.full, backgroundColor: colors.surfaceContainer, alignItems: "center", justifyContent: "center" },
   paymentLogoText: { ...typography.labelSm, color: colors.secondary, fontWeight: "700" },

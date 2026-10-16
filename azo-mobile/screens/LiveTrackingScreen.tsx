@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Alert, Linking, Share, ScrollView, useWindowDimensions } from "react-native";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Animated, Easing, Linking, Share, ScrollView, useWindowDimensions } from "react-native";
 import BackButton from "../components/BackButton";
 import OSMMapView, { OSMMarker, type LatLng } from "../components/OSMMapView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,6 +18,7 @@ import TripDistanceBanner from "../components/TripDistanceBanner";
 import { fmtKm } from "../utils/geo";
 import { useI18n, type MessageKey } from "../i18n";
 import { EMERGENCY_NUMBERS } from "../config/emergency";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Props = { rideId: string; destinationLabel?: string; onClose: () => void; onFinish?: () => void };
 const POLL_MS = 3000;
@@ -139,7 +140,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
     const prev = prevStatusRef.current;
     prevStatusRef.current = status;
     if (status === "PENDING" && (prev === "MATCHED" || prev === "ARRIVED")) {
-      Alert.alert(t("live.driverCancelled.title"), t("live.driverCancelled.body"));
+      BrandAlert.alert(t("live.driverCancelled.title"), t("live.driverCancelled.body"));
     }
   }, [ride?.status, t]);
 
@@ -419,9 +420,9 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
     const here = driverPos ?? myPos;
     try {
       await rideApi.sos(ride.id, here ? { lat: here.latitude, lng: here.longitude } : undefined);
-      Alert.alert(t("sos.sentTitle"), t("sos.sent"));
+      BrandAlert.alert(t("sos.sentTitle"), t("sos.sent"));
     } catch {
-      Alert.alert(t("sos.title"), t("sos.failed"));
+      BrandAlert.alert(t("sos.title"), t("sos.failed"));
     }
   }
 
@@ -430,7 +431,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
       const me = await userApi.me();
       const phone = me.emergencyContact?.phone;
       if (!phone) {
-        Alert.alert(t("sos.title"), t("sos.noContact"));
+        BrandAlert.alert(t("sos.title"), t("sos.noContact"));
         return;
       }
       const here = driverPos ?? myPos;
@@ -440,12 +441,12 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
       ].filter(Boolean).join("\n");
       await Linking.openURL(`sms:${phone}?body=${encodeURIComponent(body)}`);
     } catch {
-      Alert.alert(t("sos.title"), t("sos.noContact"));
+      BrandAlert.alert(t("sos.title"), t("sos.noContact"));
     }
   }
 
   function handleSos() {
-    Alert.alert(t("sos.title"), t("sos.body"), [
+    BrandAlert.alert(t("sos.title"), t("sos.body"), [
       { text: t("sos.alertAzo"), onPress: sosAlertAzo },
       { text: t("sos.contact"), onPress: sosTextContact },
       { text: t("sos.police", { number: EMERGENCY_NUMBERS.police }), onPress: () => Linking.openURL(`tel:${EMERGENCY_NUMBERS.police}`) },
@@ -475,12 +476,12 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
 
   function handleCancelRide() {
     if (!ride) return;
-    Alert.alert(t("live.cancel.title"), ride.driver ? t("live.cancel.withDriver") : t("live.cancel.noDriver"), [
+    BrandAlert.alert(t("live.cancel.title"), ride.driver ? t("live.cancel.withDriver") : t("live.cancel.noDriver"), [
       { text: t("live.cancel.keep"), style: "cancel" },
       { text: t("live.cancel.confirm"), style: "destructive", onPress: async () => {
         setCancelling(true);
         try { setRide(await rideApi.cancel(ride.id)); }
-        catch (e) { Alert.alert(t("live.cancel.failed"), errorMessage(e)); }
+        catch (e) { BrandAlert.alert(t("live.cancel.failed"), errorMessage(e)); }
         finally { setCancelling(false); }
       } },
     ]);

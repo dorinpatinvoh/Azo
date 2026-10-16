@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Alert } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { artisansApi } from "../services/api";
+import { BrandAlert } from "../components/BrandAlert";
 
 const CATEGORIES = [
   { id: "couture", label: "Couture", icon: "checkroom" as const },
@@ -30,11 +31,11 @@ export default function ArtisansScreen({ onBack, onRequestArtisan }: Props) {
   async function handleRequest(id: number) {
     try {
       await artisansApi.request(category ?? "general");
-      Alert.alert("Demande envoyée", "L'artisan sera notifié de ta demande.", [
+      BrandAlert.alert("Demande envoyée", "L'artisan sera notifié de ta demande.", [
         { text: "OK", onPress: () => onRequestArtisan(id) },
       ]);
     } catch (e: any) {
-      Alert.alert("Erreur", e.message);
+      BrandAlert.alert("Erreur", e.message);
     }
   }
 

@@ -158,16 +158,32 @@ export default function PlacePickerMap({ pickup, drop, onPickup, onDrop, pickupL
       return;
     }
     const controller = new AbortController();
-    getDrivingRoute({ latitude: pickup.latitude, longitude: pickup.longitude }, { latitude: drop.latitude, longitude: drop.longitude }, controller.signal)
-      .then((r) => {
-        setRoute(r.coordinates);
-        onRouteKm?.(r.distanceKm);
-      })
-      .catch(() => {
-        setRoute(undefined);
-        onRouteKm?.(null);
-      });
-    return () => controller.abort();
+    let cancelled = false;
+    const from = { latitude: pickup.latitude, longitude: pickup.longitude };
+    const to = { latitude: drop.latitude, longitude: drop.longitude };
+    // Le service d'itinéraire public limite le débit : on réessaie deux fois avant d'effacer le tracé, pour qu'il ne clignote pas
+    const attempt = (n: number) => {
+      getDrivingRoute(from, to, controller.signal)
+        .then((r) => {
+          if (cancelled) return;
+          setRoute(r.coordinates);
+          onRouteKm?.(r.distanceKm);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          if (n < 2) {
+            setTimeout(() => !cancelled && attempt(n + 1), 900 * (n + 1));
+            return;
+          }
+          setRoute(undefined);
+          onRouteKm?.(null);
+        });
+    };
+    attempt(0);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickup?.latitude, pickup?.longitude, drop?.latitude, drop?.longitude]);
 
@@ -205,7 +221,7 @@ export default function PlacePickerMap({ pickup, drop, onPickup, onDrop, pickupL
     <View style={{ gap: spacing.sm }}>
       {/* Aperçu : un appui ouvre la carte plein écran, comme pour commander une course */}
       <View style={styles.map}>
-        <OSMMapView center={centerCoord} markers={markers} polyline={route} fitMarkerIds={pickup && drop ? ["pickup", "drop"] : undefined} zoom={15} />
+        {open ? null : <OSMMapView center={centerCoord} markers={markers} polyline={route} fitMarkerIds={pickup && drop ? ["pickup", "drop"] : undefined} zoom={15} />}
         <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(true)} accessibilityLabel="Ouvrir la carte" />
         <View style={styles.openChip} pointerEvents="none">
           <MaterialIcons name="open-in-full" size={16} color={colors.primary} />

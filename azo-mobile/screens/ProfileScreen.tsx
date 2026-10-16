@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Switch } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Switch } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -17,6 +17,7 @@ import { fcfa } from "../utils/rideDisplay";
 import { formatBeninPhoneDisplay } from "../utils/phone";
 import { languageInfo, useI18n } from "../i18n";
 import { speakKey, stopSpeaking } from "../i18n/voice";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Props = {
   /** Retour à la page précédente (barre d'application). */
@@ -73,7 +74,7 @@ export default function ProfileScreen({ onBack, onNavigateTab, onOpenNotificatio
   const isClient = !user?.role || user.role === "CLIENT";
 
   function confirmLogout() {
-    Alert.alert(t("profile.logout.title"), t("profile.logout.body"), [
+    BrandAlert.alert(t("profile.logout.title"), t("profile.logout.body"), [
       { text: t("common.cancel"), style: "cancel" },
       { text: t("profile.logout"), style: "destructive", onPress: onLogout },
     ]);

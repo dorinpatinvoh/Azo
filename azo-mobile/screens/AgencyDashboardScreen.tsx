@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   BackHandler,
   Linking,
   Modal,
@@ -46,6 +45,7 @@ import {
   formatBeninPhoneInput,
   isValidBeninPhone,
 } from "../utils/phone";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Props = {
   onBack: () => void;
@@ -162,7 +162,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
 
   async function handleAttachDriver() {
     if (!phoneValid) {
-      Alert.alert(t("ag.phoneRequired.title"), t("ag.phoneRequired.body"));
+      BrandAlert.alert(t("ag.phoneRequired.title"), t("ag.phoneRequired.body"));
       return;
     }
     setAdding(true);
@@ -171,12 +171,12 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
       setAddVisible(false);
       setPhoneInput("");
       await load();
-      Alert.alert(
+      BrandAlert.alert(
         t("ag.attached.title"),
         t("ag.attached.body", { name: res.driver.fullName || formatBeninPhoneDisplay(res.driver.phone) })
       );
     } catch (e) {
-      Alert.alert(t("ag.attachFailed"), errorMessage(e));
+      BrandAlert.alert(t("ag.attachFailed"), errorMessage(e));
     } finally {
       setAdding(false);
     }
@@ -194,7 +194,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
   async function handleTransfer() {
     if (!xferMember) return;
     if (!Number.isInteger(xferValue) || xferValue < 1) {
-      Alert.alert(t("ag.xfer.failed"), t("ag.xfer.amountInvalid"));
+      BrandAlert.alert(t("ag.xfer.failed"), t("ag.xfer.amountInvalid"));
       return;
     }
     setXferBusy(true);
@@ -204,7 +204,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
       const name = xferMember.fullName || formatBeninPhoneDisplay(xferMember.phone);
       setXferMember(null);
       await load();
-      Alert.alert(
+      BrandAlert.alert(
         t(xferMode === "fund" ? "ag.xfer.doneFund.title" : "ag.xfer.doneWithdraw.title"),
         t(xferMode === "fund" ? "ag.xfer.doneFund.body" : "ag.xfer.doneWithdraw.body", {
           name,
@@ -213,7 +213,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
         })
       );
     } catch (e) {
-      Alert.alert(t("ag.xfer.failed"), errorMessage(e));
+      BrandAlert.alert(t("ag.xfer.failed"), errorMessage(e));
     } finally {
       setXferBusy(false);
     }
@@ -224,7 +224,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
 
   function confirmActivation() {
     if (!data) return;
-    Alert.alert(
+    BrandAlert.alert(
       t("ag.activate.title"),
       t("ag.activate.body", { fee: fcfa(data.agency.activationFee), plan: agencyPlanName(data.agency.plan) }),
       [
@@ -236,7 +236,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
             try {
               const res = await agenciesApi.activate();
               await load();
-              Alert.alert(
+              BrandAlert.alert(
                 t("ag.activated.title"),
                 t("ag.activated.body", {
                   plan: agencyPlanName(res.plan),
@@ -245,7 +245,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                 })
               );
             } catch (e) {
-              Alert.alert(t("ag.activateFailed"), errorMessage(e));
+              BrandAlert.alert(t("ag.activateFailed"), errorMessage(e));
             } finally {
               setActivating(false);
             }
@@ -257,7 +257,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
 
   function confirmDetach(member: AgencyRosterMember) {
     const label = member.fullName || formatBeninPhoneDisplay(member.phone);
-    Alert.alert(
+    BrandAlert.alert(
       t("ag.detach.title"),
       t("ag.detach.body", { name: label }),
       [
@@ -271,7 +271,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
               await agenciesApi.detachDriver(member.id);
               await load();
             } catch (e) {
-              Alert.alert(t("common.error"), errorMessage(e));
+              BrandAlert.alert(t("common.error"), errorMessage(e));
             } finally {
               setDetachingId(null);
             }
@@ -282,7 +282,7 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
   }
 
   function confirmLogout() {
-    Alert.alert(t("ag.logout.title"), t("ag.logout.body"), [
+    BrandAlert.alert(t("ag.logout.title"), t("ag.logout.body"), [
       { text: t("common.cancel"), style: "cancel" },
       ...(onOpenDossier ? [{ text: t("ag.logout.dossier"), onPress: onOpenDossier }] : []),
       {

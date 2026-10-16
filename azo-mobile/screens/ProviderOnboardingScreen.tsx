@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -30,6 +29,7 @@ import {
   errorMessage,
   providersApi,
 } from "../services/api";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Props = {
   onSubmitted: () => void; // -> écran « Dossier en cours »
@@ -456,7 +456,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
   async function goNext() {
     const problem = validateStep(step);
     if (problem) {
-      Alert.alert("Il manque une information", problem);
+      BrandAlert.alert("Il manque une information", problem);
       return;
     }
     setBusy(true);
@@ -465,7 +465,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         await saveDraft();
       } else if (step === 4) {
         if (!consents.truth || !consents.charter || !consents.geo) {
-          Alert.alert("Engagements à accepter", "Les trois cases doivent être cochées pour déposer le dossier.");
+          BrandAlert.alert("Engagements à accepter", "Les trois cases doivent être cochées pour déposer le dossier.");
           return;
         }
         if (!dossier) throw new Error("Dossier introuvable : reprends depuis le début.");
@@ -475,7 +475,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       }
       setStep((s) => Math.min(TOTAL_STEPS - 1, s + 1));
     } catch (e) {
-      Alert.alert("Impossible de continuer", errorMessage(e));
+      BrandAlert.alert("Impossible de continuer", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -498,7 +498,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     if (mode === "camera") {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert(
+        BrandAlert.alert(
           "Accès à l'appareil photo refusé",
           "AZƆ̀ a besoin de l'appareil photo pour vérifier ton identité. Autorise-le dans les réglages du téléphone.",
           [{ text: "OK" }]
@@ -510,7 +510,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("Accès à la galerie refusé", "Autorise l'accès aux photos dans les réglages du téléphone.");
+      BrandAlert.alert("Accès à la galerie refusé", "Autorise l'accès aux photos dans les réglages du téléphone.");
       return null;
     }
     const res = await ImagePicker.launchImageLibraryAsync(pickerOpts);
@@ -523,7 +523,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       try {
         targetDossier = await saveDraft();
       } catch (e) {
-        Alert.alert("Dossier non enregistré", errorMessage(e));
+        BrandAlert.alert("Dossier non enregistré", errorMessage(e));
         return;
       }
     }
@@ -543,7 +543,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       });
       await refresh();
     } catch (e) {
-      Alert.alert("Envoi impossible", errorMessage(e));
+      BrandAlert.alert("Envoi impossible", errorMessage(e));
     } finally {
       setUploading((s) => ({ ...s, [kind]: false }));
     }
@@ -555,16 +555,16 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     if (!raw.trim()) return;
     const iso = parseFrDate(raw);
     if (!iso) {
-      Alert.alert("Date invalide", "Utilise le format JJ/MM/AAAA, par exemple 12/03/2030.");
+      BrandAlert.alert("Date invalide", "Utilise le format JJ/MM/AAAA, par exemple 12/03/2030.");
       return;
     }
     setBusy(true);
     try {
       await providersApi.declareDocument(dossier.id, kind, iso);
       await refresh();
-      Alert.alert("Date enregistrée", `Date d'expiration enregistrée (${raw.trim()}).`);
+      BrandAlert.alert("Date enregistrée", `Date d'expiration enregistrée (${raw.trim()}).`);
     } catch (e) {
-      Alert.alert("Impossible d'enregistrer", errorMessage(e));
+      BrandAlert.alert("Impossible d'enregistrer", errorMessage(e));
     } finally {
       setBusy(false);
     }

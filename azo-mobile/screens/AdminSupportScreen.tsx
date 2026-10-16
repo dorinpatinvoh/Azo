@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AdminTabBar, { type AdminTab } from "../components/AdminTabBar";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -7,6 +7,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { SupportStatus, SupportTicket, SupportTicketSummary, errorMessage, supportApi } from "../services/api";
 import { useI18n } from "../i18n";
+import { BrandAlert } from "../components/BrandAlert";
 
 const FILTERS: (SupportStatus | undefined)[] = ["OPEN", "ANSWERED", "CLOSED", undefined];
 const STATUS_COLOR: Record<SupportStatus, string> = { OPEN: "#b45309", ANSWERED: "#0a7a3b", CLOSED: "#5d5662" };
@@ -39,7 +40,7 @@ export default function AdminSupportScreen({ onBack, onNavigateTab }: { onBack: 
       setOpen(await supportApi.admin.get(id));
       setReply("");
     } catch (e) {
-      Alert.alert(t("common.error"), errorMessage(e));
+      BrandAlert.alert(t("common.error"), errorMessage(e));
     }
   }
 
@@ -51,7 +52,7 @@ export default function AdminSupportScreen({ onBack, onNavigateTab }: { onBack: 
       setReply("");
       setOpen(await supportApi.admin.get(open.id));
     } catch (e) {
-      Alert.alert(t("common.error"), errorMessage(e));
+      BrandAlert.alert(t("common.error"), errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -64,7 +65,7 @@ export default function AdminSupportScreen({ onBack, onNavigateTab }: { onBack: 
       await supportApi.admin.close(open.id);
       setOpen(await supportApi.admin.get(open.id));
     } catch (e) {
-      Alert.alert(t("common.error"), errorMessage(e));
+      BrandAlert.alert(t("common.error"), errorMessage(e));
     } finally {
       setBusy(false);
     }

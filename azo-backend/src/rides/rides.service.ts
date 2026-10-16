@@ -1678,6 +1678,7 @@ export class RidesService {
         where,
         data: {
           status: "COMPLETED",
+          completedAt: new Date(),
           commission,
           finalPrice: amount,
           settledDistanceMeters: options.settledDistanceMeters,
@@ -1703,6 +1704,12 @@ export class RidesService {
       return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
     });
     this.gateway.clearRideLocations(rideId);
+    // Une course de plus au compteur affiché au client dans le profil du Speeder (jamais bloquant pour le paiement)
+    try {
+      await this.prisma.providerProfile.updateMany({ where: { userId: driverId }, data: { jobsCompleted: { increment: 1 } } });
+    } catch (e: any) {
+      this.logger.warn(`jobsCompleted ${rideId} : ${e?.message ?? e}`);
+    }
     await this.cancelStaleDuplicates(rideId, ride.clientId).catch((e) => this.logger.warn(`cancelStaleDuplicates ${rideId} : ${e?.message ?? e}`));
     await this.notifications
       .push(ride.clientId, "Course terminée", `${amount} FCFA débités de ton portefeuille.`, "payment", {

@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, TextInput, StyleSheet, Pressable, ScrollView,
-  ActivityIndicator, Linking, Keyboard, Alert,
-  Platform,
+  ActivityIndicator, Linking, Keyboard, Platform,
 } from "react-native";
 // Supprime l'ancien import de MapView, UrlTile, Marker
 import * as SecureStore from "expo-secure-store";
@@ -24,6 +23,7 @@ import {
 import { useCurrentLocation } from "../hooks/useCurrentLocation";
 import { getDrivingRoute, type DrivingRoute } from "../services/routing";
 import { getLanguage, languageInfo, tr, useI18n, type MessageKey } from "../i18n";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Props = {
   service: "transport" | "zem";
@@ -311,7 +311,7 @@ export default function RideBookingScreen({ service, onBack, onRecharge, onConfi
     }
   };
   const askRemoveSaved = (key: SavedKey) => {
-    Alert.alert(t("place.removeTitle", { name: t(`place.${key}` as MessageKey) }), t("place.removeBody"), [
+    BrandAlert.alert(t("place.removeTitle", { name: t(`place.${key}` as MessageKey) }), t("place.removeBody"), [
       { text: t("common.cancel"), style: "cancel" },
       { text: t("place.remove"), style: "destructive", onPress: () => { const next = { ...saved }; delete next[key]; persistSaved(next); } },
     ]);

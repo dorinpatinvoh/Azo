@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
@@ -10,6 +10,7 @@ import PlacePickerMap from "../components/PlacePickerMap";
 import { Delivery, Place, VehicleType, deliveryApi, errorMessage, walletApi } from "../services/api";
 import CourierTrackMap from "../components/CourierTrackMap";
 import { tarification } from "../services/tarification";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Props = { onBack: () => void; onRecharge: () => void; onBooked: () => void; initialDrop?: Place | null; initialVehicle?: VehicleType | null };
 
@@ -92,11 +93,11 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked, in
 
   async function confirm() {
     if (!pickup) {
-      Alert.alert("Départ requis", "Choisis ton point de départ dans la liste de suggestions.");
+      BrandAlert.alert("Départ requis", "Choisis ton point de départ dans la liste de suggestions.");
       return;
     }
     if ((scheduleMode || longBooking) && !scheduledAt) {
-      Alert.alert("Heure de départ requise", longBooking ? "Au-delà de 3 jours, programme le début de ta réservation." : "Choisis le jour et l'heure de ton départ.");
+      BrandAlert.alert("Heure de départ requise", longBooking ? "Au-delà de 3 jours, programme le début de ta réservation." : "Choisis le jour et l'heure de ton départ.");
       return;
     }
     setLoading(true);
@@ -115,13 +116,13 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked, in
         ...(drop ? { dropLat: drop.latitude, dropLng: drop.longitude } : {}),
       });
       loadBookings();
-      Alert.alert(
+      BrandAlert.alert(
         "Coursier personnel demandé ✅",
         `Montant réservé : ${fcfa(d.price)}. Le total final sera calculé à la fin, selon les kilomètres parcourus.\nCode de départ : ${d.pickupCode}\nCode de fin : ${d.deliveryCode}\n\nConserve ces codes : ton coursier te les demandera. Il reste réservé pour toi pendant toute la durée choisie.`,
         [{ text: "OK", onPress: onBooked }]
       );
     } catch (e) {
-      Alert.alert("Impossible de commander", errorMessage(e));
+      BrandAlert.alert("Impossible de commander", errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -161,9 +162,9 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked, in
             {["PENDING", "MATCHED"].includes(b.status) ? (
               <Pressable
                 onPress={() =>
-                  Alert.alert("Annuler la réservation", "Veux-tu annuler cette demande ?", [
+                  BrandAlert.alert("Annuler la réservation", "Veux-tu annuler cette demande ?", [
                     { text: "Non", style: "cancel" },
-                    { text: "Annuler", style: "destructive", onPress: () => deliveryApi.cancel(b.id).then(loadBookings).catch((e) => Alert.alert("Erreur", errorMessage(e))) },
+                    { text: "Annuler", style: "destructive", onPress: () => deliveryApi.cancel(b.id).then(loadBookings).catch((e) => BrandAlert.alert("Erreur", errorMessage(e))) },
                   ])
                 }
               >

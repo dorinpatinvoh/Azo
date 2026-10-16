@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
@@ -8,6 +8,7 @@ import { maskPersonName } from "../utils/phone";
 import { offerExpirySeconds } from "../config/radar";
 import { useI18n } from "../i18n";
 import DriverProfileSheet from "./DriverProfileSheet";
+import { BrandAlert } from ".//BrandAlert";
 
 type Props = {
   ride: Ride;
@@ -43,7 +44,8 @@ export default function DriverOfferCard({ ride, onChanged }: Props) {
   const driver = ride.driver;
   const profile = driver?.profile ?? null;
   const name = profile?.displayName || driver?.displayName || maskPersonName(driver?.fullName, t("live.driverDefault"));
-  const rating = typeof profile?.rating === "number" ? profile.rating.toFixed(1) : t("offer.new");
+  const hasRatings = typeof profile?.rating === "number" && (profile?.ratingCount ?? 0) > 0;
+  const rating = hasRatings ? `${(profile!.rating as number).toFixed(1)} (${profile!.ratingCount})` : t("offer.new");
   const km = ride.offer?.distanceKm;
   const eta = ride.offer?.etaMinutes;
 
@@ -54,7 +56,7 @@ export default function DriverOfferCard({ ride, onChanged }: Props) {
       setSheetOpen(false);
       onChanged(next);
     } catch (e) {
-      Alert.alert(t("offer.failed"), errorMessage(e));
+      BrandAlert.alert(t("offer.failed"), errorMessage(e));
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -10,6 +10,7 @@ import { UserProfile, errorMessage, isRouteMissing, setToken, userApi } from "..
 import { cleanBeninDigits, formatBeninPhoneDisplay, formatBeninPhoneInput, isValidBeninPhone, toBeninE164 } from "../utils/phone";
 import { GENDER_OPTIONS, isValidName, normalizeName, type Gender } from "../utils/registration";
 import { useI18n } from "../i18n";
+import { BrandAlert } from ".//BrandAlert";
 
 type SheetProps = { visible: boolean; onClose: () => void; user: UserProfile | null; onSaved: (user: UserProfile) => void };
 
@@ -55,7 +56,7 @@ function Primary({ label, onPress, busy, disabled }: { label: string; onPress: (
 /** Erreur de l'enregistrement : « pas encore disponible » si la route manque, sinon le message du serveur. */
 function useFail() {
   const { t } = useI18n();
-  return (e: unknown) => Alert.alert(t("common.error"), isRouteMissing(e) ? t("edit.unavailable") : errorMessage(e));
+  return (e: unknown) => BrandAlert.alert(t("common.error"), isRouteMissing(e) ? t("edit.unavailable") : errorMessage(e));
 }
 
 /* ---------------------------------------------------------------- e-mail */
@@ -182,10 +183,10 @@ export function IdentitySheet({ visible, onClose, user, onSaved, direct }: Sheet
     try {
       if (direct) {
         onSaved(await userApi.correctIdentity(changes));
-        Alert.alert(t("edit.saved"));
+        BrandAlert.alert(t("edit.saved"));
       } else {
         await userApi.requestIdentityCorrection({ ...changes, reason: reason.trim() });
-        Alert.alert(t("edit.identity.sent"));
+        BrandAlert.alert(t("edit.identity.sent"));
       }
       onClose();
     } catch (e) {
@@ -263,7 +264,7 @@ export function PhoneChangeSheet({ visible, onClose, user, onSaved }: SheetProps
         await SecureStore.setItemAsync("userToken", result.token).catch(() => undefined);
       }
       onSaved(result);
-      Alert.alert(t("edit.phone.done"));
+      BrandAlert.alert(t("edit.phone.done"));
       onClose();
     } catch (e) {
       fail(e);

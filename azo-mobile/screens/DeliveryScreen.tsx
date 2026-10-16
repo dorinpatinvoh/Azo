@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Pressable,
   RefreshControl,
@@ -23,6 +22,7 @@ import RideChatModal from "../components/RideChatModal";
 import CourierTrackMap from "../components/CourierTrackMap";
 import PlacePickerMap from "../components/PlacePickerMap";
 import { tarification } from "../services/tarification";
+import { BrandAlert } from "../components/BrandAlert";
 
 const PACKAGE_TYPES = [
   { id: "doc", label: "Document / Pli", note: "Pli urgent < 1 kg", icon: "drafts" as const },
@@ -115,7 +115,7 @@ export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: 
 
   async function handleConfirm() {
     if (!pickup || !drop) {
-      Alert.alert("Adresses requises", "Indique l'adresse de ramassage et l'adresse de livraison.");
+      BrandAlert.alert("Adresses requises", "Indique l'adresse de ramassage et l'adresse de livraison.");
       return;
     }
     setLoading(true);
@@ -132,19 +132,19 @@ export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: 
         payer: payer === "me" ? "SENDER" : "RECIPIENT",
       });
       await loadMine();
-      Alert.alert(
+      BrandAlert.alert(
         "Livreur en recherche 📦",
         `Code de ramassage (expéditeur) : ${d.pickupCode}\nCode de remise (destinataire) : ${d.deliveryCode}\n\nConserve ces codes : le livreur en aura besoin pour valider chaque étape.`
       );
     } catch (e) {
-      Alert.alert("Impossible de commander", errorMessage(e));
+      BrandAlert.alert("Impossible de commander", errorMessage(e));
     } finally {
       setLoading(false);
     }
   }
 
   function handleCancel(d: Delivery) {
-    Alert.alert("Annuler la livraison", "Veux-tu annuler cette demande de livreur ?", [
+    BrandAlert.alert("Annuler la livraison", "Veux-tu annuler cette demande de livreur ?", [
       { text: "Non", style: "cancel" },
       {
         text: "Annuler la demande",
@@ -154,7 +154,7 @@ export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: 
             await deliveryApi.cancel(d.id);
             await loadMine();
           } catch (e) {
-            Alert.alert("Erreur", errorMessage(e));
+            BrandAlert.alert("Erreur", errorMessage(e));
           }
         },
       },

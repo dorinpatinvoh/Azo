@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
 import { marketplaceApi } from "../services/api";
+import { BrandAlert } from "../components/BrandAlert";
 
 const ITEMS = [
   { id: 1, label: "2 Paniers de Tomates fraîches", note: "Triées fermes", price: 2500 },
@@ -27,11 +28,11 @@ export default function MarketplaceEscrowScreen({ onBack, onConfirm }: Props) {
         market: "Grand Marché Dantokpa",
         items: ITEMS.map((i) => ({ label: i.label, note: i.note, price: i.price })),
       });
-      Alert.alert("Coursier envoyé", "Ton argent est bloqué en séquestre jusqu'à validation de la livraison.", [
+      BrandAlert.alert("Coursier envoyé", "Ton argent est bloqué en séquestre jusqu'à validation de la livraison.", [
         { text: "OK", onPress: onConfirm },
       ]);
     } catch (e: any) {
-      Alert.alert("Commande impossible", e.message);
+      BrandAlert.alert("Commande impossible", e.message);
     } finally {
       setLoading(false);
     }

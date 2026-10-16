@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, View, Text, StyleSheet, Pressable, ScrollView, Alert } from "react-native";
+import { ActivityIndicator, View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { RentalFormula, RentalVehicle, errorMessage, rentalApi } from "../services/api";
 import { useI18n } from "../i18n";
+import { BrandAlert } from "../components/BrandAlert";
 
 const FORMULA_ORDER: RentalFormula[] = ["4h", "day", "week"];
 
@@ -43,13 +44,13 @@ export default function VehicleRentalScreen({ onBack, onReserve }: Props) {
     setBusyId(v.id);
     try {
       const booking = await rentalApi.book({ vehicleId: v.id, formula, ...(formula === "day" ? { days } : {}) });
-      Alert.alert(
+      BrandAlert.alert(
         t("rent.booked"),
         t("rent.bookedBody", { name: v.name, formula: t(`rent.f.${formula}` as const), price: money(booking.totalPrice ?? priceFor(v) ?? 0) }),
         [{ text: "OK", onPress: () => onReserve(v.id) }]
       );
     } catch (e) {
-      Alert.alert(t("common.error"), errorMessage(e));
+      BrandAlert.alert(t("common.error"), errorMessage(e));
     } finally {
       setBusyId(null);
     }

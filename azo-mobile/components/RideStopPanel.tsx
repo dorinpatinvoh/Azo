@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { Ride, errorMessage, ridesApi } from "../services/api";
 import { fcfa } from "../utils/rideDisplay";
 import { getLanguage, languageInfo, useI18n } from "../i18n";
+import { BrandAlert } from ".//BrandAlert";
 
 type Props = {
   ride: Ride;
@@ -59,14 +60,14 @@ export default function RideStopPanel({ ride, role, onChanged }: Props) {
       const res = await action(ride.id);
       onChanged("id" in res ? res : { ...ride, stopRequest: res.stopRequest ?? null });
     } catch (e) {
-      Alert.alert(failureTitle, errorMessage(e));
+      BrandAlert.alert(failureTitle, errorMessage(e));
     } finally {
       setBusy(false);
     }
   }
 
   function confirmRequest() {
-    Alert.alert(
+    BrandAlert.alert(
       t("stop.askTitle"),
       t("stop.askBody", {
         distance: km(ride.traveledMeters ?? 0),
@@ -81,7 +82,7 @@ export default function RideStopPanel({ ride, role, onChanged }: Props) {
   }
 
   function confirmAccept() {
-    Alert.alert(
+    BrandAlert.alert(
       t("stop.acceptTitle"),
       t("stop.acceptBody", {
         amount: typeof price === "number" ? fcfa(price) : t("stop.amountByDistance"),

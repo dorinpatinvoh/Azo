@@ -31,6 +31,7 @@ import {
   providersApi,
 } from "../services/api";
 import { formatBeninPhoneDisplay } from "../utils/phone";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Props = {
   onBack: () => void;
@@ -263,10 +264,10 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
       if (selectedId) await loadDetail(selectedId);
       else await loadQueue();
       setError(null);
-      if (successMessage) Alert.alert("Fait", successMessage);
+      if (successMessage) BrandAlert.alert("Fait", successMessage);
     } catch (e) {
       setError(errorMessage(e));
-      Alert.alert("Action impossible", errorMessage(e));
+      BrandAlert.alert("Action impossible", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -284,7 +285,7 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
     const target = reason;
     setReason(null);
     if (text.length < 5) {
-      Alert.alert("Motif trop court", "Indique au moins 5 caractères : le candidat doit pouvoir se corriger.");
+      BrandAlert.alert("Motif trop court", "Indique au moins 5 caractères : le candidat doit pouvoir se corriger.");
       return;
     }
     const action = target.action;
@@ -298,7 +299,7 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
   }
 
   function confirmExit() {
-    Alert.alert("Quitter la console admin", "Que souhaites-tu faire ?", [
+    BrandAlert.alert("Quitter la console admin", "Que souhaites-tu faire ?", [
       { text: "Annuler", style: "cancel" },
       ...(onOpenDashboard
         ? [{ text: "Tableau de bord", onPress: onOpenDashboard }]

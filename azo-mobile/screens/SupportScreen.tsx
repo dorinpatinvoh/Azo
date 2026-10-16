@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { SupportCategory, SupportStatus, SupportTicket, SupportTicketSummary, errorMessage, supportApi } from "../services/api";
 import { useI18n } from "../i18n";
+import { BrandAlert } from "../components/BrandAlert";
 
 const CATEGORIES: SupportCategory[] = ["RIDE", "PAYMENT", "ACCOUNT", "SAFETY", "OTHER"];
 const STATUS_COLOR: Record<SupportStatus, string> = { OPEN: "#b45309", ANSWERED: "#0a7a3b", CLOSED: "#5d5662" };
@@ -44,13 +45,13 @@ export default function SupportScreen({ onBack }: { onBack: () => void }) {
       setReply("");
       setMode("detail");
     } catch (e) {
-      Alert.alert(t("common.error"), errorMessage(e));
+      BrandAlert.alert(t("common.error"), errorMessage(e));
     }
   }
 
   async function submitNew() {
     if (subject.trim().length < 3 || message.trim().length < 3) {
-      Alert.alert(t("common.error"), t("sup.tooShort"));
+      BrandAlert.alert(t("common.error"), t("sup.tooShort"));
       return;
     }
     setBusy(true);
@@ -61,9 +62,9 @@ export default function SupportScreen({ onBack }: { onBack: () => void }) {
       setCategory("OTHER");
       setMode("list");
       await load();
-      Alert.alert(t("sup.sentTitle"), t("sup.sentBody"));
+      BrandAlert.alert(t("sup.sentTitle"), t("sup.sentBody"));
     } catch (e) {
-      Alert.alert(t("common.error"), errorMessage(e));
+      BrandAlert.alert(t("common.error"), errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -78,7 +79,7 @@ export default function SupportScreen({ onBack }: { onBack: () => void }) {
       setOpen(await supportApi.get(open.id));
       load();
     } catch (e) {
-      Alert.alert(t("common.error"), errorMessage(e));
+      BrandAlert.alert(t("common.error"), errorMessage(e));
     } finally {
       setBusy(false);
     }

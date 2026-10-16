@@ -8,8 +8,7 @@ import {
   ScrollView,
   Pressable,
   useWindowDimensions,
-  Alert,
-} from "react-native";
+  } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -17,6 +16,7 @@ import Svg, { Defs, LinearGradient as SvgGradient, RadialGradient, Stop, Path, C
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { ridesApi, VehicleType } from "../services/api";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Vehicle = {
   id: string;
@@ -103,7 +103,7 @@ export default function RideRequestScreen({ onBack, onConfirm }: Props) {
       });
       onConfirm(selected, ride.id);
     } catch (e: any) {
-      Alert.alert("Course impossible", e.message);
+      BrandAlert.alert("Course impossible", e.message);
     } finally {
       setLoading(false);
     }

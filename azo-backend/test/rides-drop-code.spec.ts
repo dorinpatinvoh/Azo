@@ -214,4 +214,12 @@ describe("une course démarrée ne repart jamais en recherche", () => {
     expect(cancel?.[0].data).toEqual({ status: "CANCELLED" });
     expect((gateway as any).emitRideRemoved).toHaveBeenCalledWith("copie", "cancelled");
   });
+
+  it("enregistre l'heure de fin (pourboire, chat après course, gains) et ajoute une course au compteur du Speeder", async () => {
+    const { service, prisma, tx } = makeService({ dropCode: "4829" });
+    (prisma as any).providerProfile = { updateMany: jest.fn().mockResolvedValue({ count: 1 }) };
+    await service.complete("ride-1", driverId, "4829");
+    expect(tx.ride.updateMany.mock.calls[0][0].data.completedAt).toBeInstanceOf(Date);
+    expect((prisma as any).providerProfile.updateMany).toHaveBeenCalledWith({ where: { userId: driverId }, data: { jobsCompleted: { increment: 1 } } });
+  });
 });

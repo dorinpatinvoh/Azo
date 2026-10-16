@@ -8,7 +8,7 @@ import {
   PlusJakartaSans_800ExtraBold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import { useFonts as useInter, Inter_400Regular } from "@expo-google-fonts/inter";
-import { View, ActivityIndicator, Pressable, Text, StyleSheet, Alert, Platform, BackHandler, AppState } from "react-native";
+import { View, ActivityIndicator, Pressable, Text, StyleSheet, Platform, BackHandler, AppState } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 import SplashScreen, { ONBOARDING_SEEN_KEY } from "./screens/SplashScreen";
@@ -69,6 +69,7 @@ import {
 } from "./services/pushNotifications";
 import { colors, radius, spacing } from "./theme/colors";
 import { FONT } from "./theme/fontNormalize";
+import { BrandAlert, BrandAlertHost } from "./components/BrandAlert";
 
 // Initialisation sûre (ne s'exécute pas sur Expo Go Android)
 setupNotificationHandler();
@@ -198,7 +199,7 @@ function AppInner() {
         const draft = me.provider;
         if (!draft || draft.status !== "DRAFT") return;
         const label = draft.type === "AGENCY" ? "Agence de flotte" : draft.type === "COURIER" ? (draft.activity?.categoryId === "COURSIER_PERSONNEL" ? "Coursier personnel" : "Livreur express") : "Speeder (Zem)";
-        Alert.alert(
+        BrandAlert.alert(
           "Inscription en cours",
           `Tu as commencé une inscription « ${label} » sans la terminer. Que veux-tu faire ?`,
           [
@@ -207,7 +208,7 @@ function AppInner() {
               text: "Supprimer",
               style: "destructive",
               onPress: () =>
-                Alert.alert(
+                BrandAlert.alert(
                   "Supprimer cette inscription ?",
                   "Les informations et les pièces déjà envoyées seront effacées. Tu pourras recommencer plus tard.",
                   [
@@ -222,9 +223,9 @@ function AppInner() {
                             setSignupType(null);
                             SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
 SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
-                            Alert.alert("Inscription supprimée", "Ton inscription en cours a été supprimée.");
+                            BrandAlert.alert("Inscription supprimée", "Ton inscription en cours a été supprimée.");
                           })
-                          .catch(() => Alert.alert("Suppression impossible", "Vérifie ta connexion et réessaie."));
+                          .catch(() => BrandAlert.alert("Suppression impossible", "Vérifie ta connexion et réessaie."));
                       },
                     },
                   ]
@@ -469,17 +470,17 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
           break;
         case "location":
           // la location de voitures n'est pas encore ouverte : « Bientôt disponible »
-          Alert.alert(tr("app.soon.title"), tr("app.soon.text"));
+          BrandAlert.alert(tr("app.soon.title"), tr("app.soon.text"));
           break;
         case "courses":
           goTo("courses"); // historique des trajets
           break;
         case "marketplace":
           // la boutique n'est pas encore ouverte : petit message « Bientôt disponible »
-          Alert.alert(tr("app.soon.title"), tr("app.soon.text"));
+          BrandAlert.alert(tr("app.soon.title"), tr("app.soon.text"));
           break;
         default:
-          Alert.alert(tr("app.soon.title"), tr("app.soon.text"));
+          BrandAlert.alert(tr("app.soon.title"), tr("app.soon.text"));
       }
     },
     [goTo]
@@ -872,6 +873,8 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
             }}
           />
         )}
+        {/* Fenêtres de dialogue aux couleurs de la charte (remplacent les alertes natives) */}
+        <BrandAlertHost />
       </RootErrorBoundary>
     </SafeAreaProvider>
   );

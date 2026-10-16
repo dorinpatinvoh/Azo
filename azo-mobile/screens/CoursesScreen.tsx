@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Share, View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
+import { Share, View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
@@ -12,6 +12,7 @@ import { useI18n, type MessageKey } from "../i18n";
 import {
   fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL, STATUS_INFO, ACTIVE_STATUSES, DEMO_RIDES,
 } from "../utils/rideDisplay";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Filter = "ALL" | "ACTIVE" | "COMPLETED" | "CANCELLED";
 
@@ -58,7 +59,7 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
       const receipt = await ridesApi.receipt(ride.id);
       await Share.share({ message: receiptText(receipt, VEHICLE_LABEL[ride.vehicleType], locale) });
     } catch (e) {
-      Alert.alert(t("receipt.failed"), errorMessage(e));
+      BrandAlert.alert(t("receipt.failed"), errorMessage(e));
     }
   }, [locale, t]);
 

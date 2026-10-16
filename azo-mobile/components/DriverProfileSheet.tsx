@@ -66,7 +66,7 @@ export default function DriverProfileSheet({ visible, onClose, rideId, name, pro
 
   const data = profile ?? fetched;
   const displayName = data?.displayName || name;
-  const rating = typeof data?.rating === "number" ? data.rating.toFixed(1) : t("offer.new");
+  const rating = typeof data?.rating === "number" && (data?.ratingCount ?? 0) > 0 ? data.rating.toFixed(1) : t("offer.new");
   const since = data?.memberSince
     ? new Date(data.memberSince).toLocaleDateString(locale, { month: "short", year: "numeric" })
     : "—";

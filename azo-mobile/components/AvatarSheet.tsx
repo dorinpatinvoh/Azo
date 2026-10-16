@@ -1,10 +1,11 @@
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { useI18n } from "../i18n";
 import { clearAvatar, pickAvatar, useAvatar } from "../utils/avatar";
+import { BrandAlert } from ".//BrandAlert";
 
 type Props = { visible: boolean; onClose: () => void };
 
@@ -20,7 +21,7 @@ export default function AvatarSheet({ visible, onClose }: Props) {
       const result = await pickAvatar(mode);
       if (result === "ok") onClose();
       else if (result === "denied") {
-        Alert.alert(
+        BrandAlert.alert(
           t(mode === "camera" ? "avatar.denied.camera" : "avatar.denied.library"),
           t("avatar.denied.body"),
           [
@@ -30,7 +31,7 @@ export default function AvatarSheet({ visible, onClose }: Props) {
         );
       }
     } catch {
-      Alert.alert(t("common.error"), t("avatar.failed"));
+      BrandAlert.alert(t("common.error"), t("avatar.failed"));
     } finally {
       setBusy(false);
     }

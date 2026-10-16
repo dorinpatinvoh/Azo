@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, TextInput, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
@@ -10,6 +10,7 @@ import { tipSettings } from "../config/tips";
 import { useI18n, type MessageKey } from "../i18n";
 import { VEHICLE_LABEL } from "../utils/rideDisplay";
 import { maskPersonName } from "../utils/phone";
+import { BrandAlert } from "../components/BrandAlert";
 
 const COMPLIMENTS: { id: string; labelKey: MessageKey; icon: "sanitizer" | "two-wheeler" | "sentiment-satisfied" | "alt-route" }[] = [
   { id: "clean", labelKey: "rate.c.clean", icon: "sanitizer" },
@@ -77,7 +78,7 @@ export default function RideRatingScreen({ onDone, rideId }: Props) {
       if (rideId) await ridesApi.rate(rideId, stars);
       onDone();
     } catch (e: any) {
-      Alert.alert(t("common.error"), e.message);
+      BrandAlert.alert(t("common.error"), e.message);
     }
   }
 

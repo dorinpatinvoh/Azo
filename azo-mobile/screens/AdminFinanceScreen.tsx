@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   RefreshControl,
@@ -19,6 +18,7 @@ import { typography } from "../theme/typography";
 import { AdminCommissionRow, AdminCompanyWithdrawal, AdminFinanceSummary, adminApi, errorMessage } from "../services/api";
 import { cleanBeninDigits, formatBeninPhoneDisplay, formatBeninPhoneInput, isValidBeninPhone } from "../utils/phone";
 import AdminTabBar, { type AdminTab } from "../components/AdminTabBar";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Props = {
   onNavigateTab?: (tab: AdminTab) => void;
@@ -114,9 +114,9 @@ export default function AdminFinanceScreen({ onNavigateTab }: Props) {
       setAmount("");
       setNote("");
       await load();
-      Alert.alert("Retrait enregistré", `${fcfa(amountValue)} à verser sur ${formatBeninPhoneDisplay(phoneDigits)}. Marque-le comme versé une fois l'argent envoyé.`);
+      BrandAlert.alert("Retrait enregistré", `${fcfa(amountValue)} à verser sur ${formatBeninPhoneDisplay(phoneDigits)}. Marque-le comme versé une fois l'argent envoyé.`);
     } catch (e) {
-      Alert.alert("Retrait impossible", errorMessage(e));
+      BrandAlert.alert("Retrait impossible", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -131,14 +131,14 @@ export default function AdminFinanceScreen({ onNavigateTab }: Props) {
       setReference("");
       await load();
     } catch (e) {
-      Alert.alert("Opération impossible", errorMessage(e));
+      BrandAlert.alert("Opération impossible", errorMessage(e));
     } finally {
       setBusy(false);
     }
   }
 
   function confirmCancel(w: AdminCompanyWithdrawal) {
-    Alert.alert("Annuler ce retrait ?", `${fcfa(w.amount)} redeviendront disponibles.`, [
+    BrandAlert.alert("Annuler ce retrait ?", `${fcfa(w.amount)} redeviendront disponibles.`, [
       { text: "Non", style: "cancel" },
       {
         text: "Annuler le retrait",
@@ -148,7 +148,7 @@ export default function AdminFinanceScreen({ onNavigateTab }: Props) {
             await adminApi.cancelWithdrawal(w.id);
             await load();
           } catch (e) {
-            Alert.alert("Opération impossible", errorMessage(e));
+            BrandAlert.alert("Opération impossible", errorMessage(e));
           }
         },
       },

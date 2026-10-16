@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, TextInput, StyleSheet, Pressable, ScrollView, Switch,
-  ActivityIndicator, RefreshControl, Alert, Linking, useWindowDimensions, BackHandler,
+  ActivityIndicator, RefreshControl, Linking, useWindowDimensions, BackHandler,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -38,6 +38,8 @@ import DriverOfferWaiting from "../components/DriverOfferWaiting";
 import { nearbyRadiusKm } from "../config/radar";
 import { ApiError, userApi, type UserProfile } from "../services/api";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
+import { BrandAlert } from "../components/BrandAlert";
+import { useProfilePhotoReminder } from "../hooks/useProfilePhotoReminder";
 
 type Props = {
   onLogout: () => void;
@@ -270,7 +272,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         : outcome === "cancelled" ? "Le client a annulé sa demande."
         : outcome === "expired" ? "Le client n'a pas répondu à temps."
         : "Le client a choisi un autre Speeder ou n'a pas répondu à temps.";
-      Alert.alert("Proposition terminée", message + " Tu peux accepter une autre demande.");
+      BrandAlert.alert("Proposition terminée", message + " Tu peux accepter une autre demande.");
       loadPending().catch(() => undefined);
     },
     [loadPending]
@@ -370,7 +372,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
       if (!p?.rideId || p.rideId !== activeRideRef.current?.id) return;
       setActiveRide(null);
       loadPending().catch(() => undefined);
-      Alert.alert("Course annulée", "Le client a annulé la course. Tu peux accepter une autre demande.");
+      BrandAlert.alert("Course annulée", "Le client a annulé la course. Tu peux accepter une autre demande.");
     });
     socket.on("ride:removed", () => {
       loadPending().catch(() => undefined);
@@ -401,7 +403,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         if (fresh.status === "COMPLETED" || fresh.status === "CANCELLED") {
           setActiveRide(null);
           await loadAccount();
-          Alert.alert(
+          BrandAlert.alert(
             fresh.status === "COMPLETED" ? "Course terminée" : "Course annulée",
             fresh.status === "COMPLETED"
               ? "Le paiement a été effectué sur ton portefeuille AZƆ̀ Pay."
@@ -753,13 +755,17 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
 
   const recent = useMemo(() => history.slice(0, 4), [history]);
 
+  const { ensurePhoto } = useProfilePhotoReminder(() => setAvatarOpen(true));
+
   async function handleToggleOnline(value: boolean) {
     if (!value && (activeRide || offered)) {
-      Alert.alert("Course en cours", "Termine ou annule ta course avant de passer hors ligne.");
+      BrandAlert.alert("Course en cours", "Termine ou annule ta course avant de passer hors ligne.");
       return;
     }
+    // Photo de profil obligatoire pour recevoir des demandes
+    if (value && !ensurePhoto()) return;
     if (value && gpsStatus === "denied") {
-      Alert.alert(
+      BrandAlert.alert(
         "Localisation refusée",
         "Pour recevoir des courses, autorise la localisation dans les réglages du téléphone."
       );
@@ -777,7 +783,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
       if (accepted.status === "OFFERED") setOffered(accepted);
       else setActiveRide(accepted);
     } catch (e) {
-      Alert.alert("Impossible d'accepter", errorMessage(e));
+      BrandAlert.alert("Impossible d'accepter", errorMessage(e));
       loadPending().catch(() => undefined); // elle est peut-être déjà prise par un autre
     } finally {
       setBusy(false);
@@ -792,7 +798,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
       setOffered(null);
       loadPending().catch(() => undefined);
     } catch (e) {
-      Alert.alert("Annulation impossible", errorMessage(e));
+      BrandAlert.alert("Annulation impossible", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -804,7 +810,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     try {
       setActiveRide(await ridesApi.arrive(activeRide.id));
       setPinInput("");
-      Alert.alert(
+      BrandAlert.alert(
         "Arrivée confirmée",
         "Le client a été averti. Demande-lui le code Bouclier affiché dans son application avant de démarrer."
       );
@@ -822,7 +828,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
       } catch {
         // Pas de réseau non plus pour la relecture : on affiche l'erreur d'origine.
       }
-      Alert.alert("Impossible de confirmer l'arrivée", errorMessage(e));
+      BrandAlert.alert("Impossible de confirmer l'arrivée", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -832,7 +838,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     if (!activeRide) return;
     const clean = pinInput.replace(/\D/g, "");
     if (clean.length !== 4) {
-      Alert.alert(
+      BrandAlert.alert(
         "Code Bouclier AZƆ̀ requis",
         "Après avoir signalé ton arrivée, demande au client son code à 4 chiffres."
       );
@@ -845,7 +851,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
       setDropCodeInput("");
       setDropCodeEntryOpen(false);
     } catch (e) {
-      Alert.alert("Démarrage impossible", errorMessage(e));
+      BrandAlert.alert("Démarrage impossible", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -859,7 +865,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
       setDropCodeInput("");
       setDropCodeEntryOpen(true);
     } catch (e) {
-      Alert.alert("Impossible de demander le code", errorMessage(e));
+      BrandAlert.alert("Impossible de demander le code", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -875,11 +881,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     if (!activeRide) return;
     const cleanPin = dropCodeInput.replace(/\D/g, "");
     if (cleanPin.length !== 4) {
-      Alert.alert("Code d'arrivée requis", "Demande au client son code d'arrivée à 4 chiffres pour terminer la course.");
+      BrandAlert.alert("Code d'arrivée requis", "Demande au client son code d'arrivée à 4 chiffres pour terminer la course.");
       return;
     }
     const gain = stopAccepted && typeof activeRide.stopRequest?.price === "number" ? activeRide.stopRequest.price : activeRide.price;
-    Alert.alert(
+    BrandAlert.alert(
       "Confirmer l'arrivée à destination ?",
       `Le paiement de ${fcfa(gain)} sera effectué après validation du code.`,
       [
@@ -899,9 +905,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
               const commission = done.commission ?? 0;
               const net = gross - commission;
               const pct = gross > 0 ? Math.round((commission / gross) * 1000) / 10 : 0;
-              Alert.alert("Course terminée 🎉", `Course : ${fcfa(gross)}\nCommission AZƆ̀ ${pct.toLocaleString("fr-FR")} % débitée : −${fcfa(commission)}\nTu reçois : +${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`);
+              BrandAlert.alert("Course terminée 🎉", `Course : ${fcfa(gross)}\nCommission AZƆ̀ ${pct.toLocaleString("fr-FR")} % débitée : −${fcfa(commission)}\nTu reçois : +${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`);
             } catch (e) {
-              Alert.alert("Impossible de terminer", errorMessage(e));
+              BrandAlert.alert("Impossible de terminer", errorMessage(e));
             } finally {
               setBusy(false);
             }
@@ -913,7 +919,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
 
   function handleCancel() {
     if (!activeRide) return;
-    Alert.alert("Annuler la course ?", "Le client sera prévenu et la course repartira en recherche pour un autre Speeder.", [
+    BrandAlert.alert("Annuler la course ?", "Le client sera prévenu et la course repartira en recherche pour un autre Speeder.", [
       { text: "Garder la course", style: "cancel" },
       {
         text: "Annuler la course",
@@ -926,7 +932,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
             await loadAccount();
             loadPending().catch(() => undefined);
           } catch (e) {
-            Alert.alert("Annulation impossible", errorMessage(e));
+            BrandAlert.alert("Annulation impossible", errorMessage(e));
           } finally {
             setBusy(false);
           }
@@ -936,7 +942,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   }
 
   function handleWithdraw() {
-    Alert.alert(
+    BrandAlert.alert(
       "Retrait Mobile Money",
       "Le retrait automatique vers MTN MoMo / Moov arrive avec le branchement FedaPay. En attendant, ton solde AZƆ̀ Pay est disponible dans l'onglet Portefeuille."
     );
@@ -948,7 +954,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   }, [activeRide?.id, offered?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleLogout() {
-    Alert.alert("Déconnexion", "Quitter ton espace Speeder ?", [
+    BrandAlert.alert("Déconnexion", "Quitter ton espace Speeder ?", [
       { text: "Annuler", style: "cancel" },
       {
         text: "Se déconnecter",
@@ -1538,9 +1544,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
           if (!target) return;
           try {
             await ridesApi.rateClient(target.rideId, stars);
-            Alert.alert(tr("cr.thanks"));
+            BrandAlert.alert(tr("cr.thanks"));
           } catch (e) {
-            Alert.alert(tr("cr.failed"), errorMessage(e));
+            BrandAlert.alert(tr("cr.failed"), errorMessage(e));
           }
         }}
       />
@@ -1627,7 +1633,7 @@ const styles = StyleSheet.create({
   requestIcon: { width: 44, height: 44, borderRadius: radius.full, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
   requestTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
   requestClient: { ...typography.bodySm, color: colors.onSurface, fontWeight: "600" },
-  requestDestination: { ...typography.bodySm, color: colors.onSurfaceVariant },
+  requestDestination: { ...typography.bodySm, color: colors.onSurface, fontWeight: "800" },
   requestMeta: { ...typography.bodySm, color: colors.onSurfaceVariant },
   acceptBtn: { backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: 16, paddingVertical: 10 },
   acceptBtnDisabled: { opacity: 0.5 },

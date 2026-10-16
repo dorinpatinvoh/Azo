@@ -109,8 +109,10 @@ function buildMapHtml(initial?: LatLng) {
       // En cas d'échec de tuiles (réseau faible, zone reculée), un second serveur est ajouté EN DESSOUS : il ne sert qu'à
       // combler les tuiles manquantes, il ne remplace jamais la carte standard.
       var underlayAdded = false;
+      var tileErrors = 0;
       primaryTiles.on('tileerror', function () {
-        if (underlayAdded) return;
+        tileErrors += 1;
+        if (underlayAdded || tileErrors < 8) return;
         underlayAdded = true;
         L.tileLayer('https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', Object.assign({ zIndex: 1 }, tileOpts)).addTo(map);
       });
@@ -435,6 +437,7 @@ export default function OSMMapView({
   const [following, setFollowing] = useState(true);
   const sentPolylineKeyRef = useRef<string | null>(null);
   const sentPolyline2KeyRef = useRef<string | null>(null);
+  const lastSigRef = useRef<string | null>(null);
   // Clé stable : un tableau recréé à chaque affichage ne doit pas relancer l envoi vers la carte.
   const fitKey = fitMarkerIds ? fitMarkerIds.join("|") : "";
 
@@ -477,6 +480,10 @@ export default function OSMMapView({
       zoom,
     };
     latestPayloadRef.current = payload;
+    // Signature du contenu : si rien n'a changé (nouveau tableau identique, frappe dans un champ…), on n'envoie rien à la carte
+    const sig = JSON.stringify([payload.center, payload.markers, payload.follow, payload.fitIds, payload.zoom, polylineKey(simplified), polylineKey(simplified2)]);
+    if (sig === lastSigRef.current) return;
+    lastSigRef.current = sig;
     inject(payload);
   }, [center?.latitude, center?.longitude, markers, simplified, simplified2, followMarkerId, fitKey, zoom, inject]);
 

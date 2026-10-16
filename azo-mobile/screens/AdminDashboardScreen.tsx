@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -23,6 +22,7 @@ import {
   errorMessage,
 } from "../services/api";
 import { formatBeninPhoneDisplay } from "../utils/phone";
+import { BrandAlert } from "../components/BrandAlert";
 
 type Props = {
   onBack: () => void;
@@ -83,7 +83,7 @@ export default function AdminDashboardScreen({ onBack, onOpenProviders, onNaviga
   function toggleBlockUser(u: AdminUserItem) {
     const nextStatus = u.status === "BLOCKED" ? "ACTIVE" : "BLOCKED";
     const label = u.fullName || formatBeninPhoneDisplay(u.phone);
-    Alert.alert(
+    BrandAlert.alert(
       nextStatus === "BLOCKED" ? `Bloquer ${label}` : `Réactiver ${label}`,
       nextStatus === "BLOCKED"
         ? "Cet utilisateur ne pourra plus utiliser l'application tant que son compte reste bloqué."
@@ -99,7 +99,7 @@ export default function AdminDashboardScreen({ onBack, onOpenProviders, onNaviga
               await adminApi.setUserStatus(u.id, nextStatus);
               await load();
             } catch (e) {
-              Alert.alert("Action impossible", errorMessage(e));
+              BrandAlert.alert("Action impossible", errorMessage(e));
             } finally {
               setBusyUserId(null);
             }
