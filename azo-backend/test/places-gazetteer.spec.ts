@@ -34,4 +34,16 @@ describe("Lieux : quartiers et villages d'Abomey-Calavi et de Cotonou", () => {
     const r = await make().reverseGeocode(6.4969, 2.6289);
     expect(r.address).toMatch(/Porto-Novo|Position/);
   });
+
+  it("garde les résultats en ligne (pharmacies, commerces…) et y ajoute les quartiers connus", async () => {
+    const service = new PlacesService();
+    (service as any).getJson = jest.fn().mockImplementation(async (url: string) => {
+      if (url.includes("photon")) {
+        return { features: Array.from({ length: 10 }, (_, i) => ({ properties: { name: `Pharmacie ${i}`, countrycode: "BJ" }, geometry: { coordinates: [2.3 + i / 1000, 6.4] } })) };
+      }
+      return [];
+    });
+    const { results } = await service.search("Pharmacie Togba", "6.43", "2.31");
+    expect(results.filter((r: any) => String(r.title).startsWith("Pharmacie")).length).toBe(10);
+  });
 });

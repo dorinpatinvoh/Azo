@@ -218,18 +218,18 @@ export class PlacesService {
       .slice(0, 8)
       .map(({ g, i }) => gazetteerPlace(g, i));
 
-    let combined = this.dedupe([...known, ...onlineResults, ...localMatches]);
-    // Les lieux les plus proches de la personne d'abord (deux villages peuvent porter le même nom)
+    // Ordre : quartiers/villages dont le nom commence par la saisie, puis TOUS les résultats en ligne (pharmacies, commerces,
+    // écoles… dans l'ordre de pertinence des services de cartes), puis le reste des quartiers connus, puis la liste de secours.
     const la0 = Number(lat);
     const lo0 = Number(lng);
-    if (lat && lng && Number.isFinite(la0) && Number.isFinite(lo0)) {
-      combined = combined
-        .map((it) => ({ it, d: distanceKm(la0, lo0, Number(it.latitude), Number(it.longitude)) }))
-        .sort((x, y) => x.d - y.d)
-        .map((x) => x.it);
-    }
-    combined = combined.slice(0, 12);
-
+    const hasPos = !!lat && !!lng && Number.isFinite(la0) && Number.isFinite(lo0);
+    const byDistance = (arr: any[]) =>
+      hasPos ? [...arr].sort((x, y) => distanceKm(la0, lo0, Number(x.latitude), Number(x.longitude)) - distanceKm(la0, lo0, Number(y.latitude), Number(y.longitude))) : arr;
+    const knownSorted = byDistance(known);
+    const q0 = words[0] ?? "";
+    const knownFirst = knownSorted.filter((k) => norm(k.title).startsWith(q0)).slice(0, 4);
+    const knownRest = knownSorted.filter((k) => !knownFirst.includes(k));
+    const combined = this.dedupe([...knownFirst, ...onlineResults, ...knownRest, ...byDistance(localMatches)]).slice(0, 16);
     const data = { results: combined };
     if (combined.length > 0) {
       this.cache.set(key, { at: Date.now(), data });

@@ -104,17 +104,15 @@ function buildMapHtml(initial?: LatLng) {
     <script>
       var map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([${startLat}, ${startLng}], 14);
       var tileOpts = { maxZoom: 19, detectRetina: true, updateWhenIdle: false, keepBuffer: 4 };
-      var primaryTiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', tileOpts).addTo(map);
-      // Serveur de secours (style humanitaire, détaillé en zone rurale) si trop de tuiles échouent
-      var tileErrors = 0;
-      var usingFallback = false;
+      // Carte OpenStreetMap standard : TOUJOURS la couche du dessus (pharmacies, commerces, écoles…).
+      var primaryTiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', Object.assign({ zIndex: 2 }, tileOpts)).addTo(map);
+      // En cas d'échec de tuiles (réseau faible, zone reculée), un second serveur est ajouté EN DESSOUS : il ne sert qu'à
+      // combler les tuiles manquantes, il ne remplace jamais la carte standard.
+      var underlayAdded = false;
       primaryTiles.on('tileerror', function () {
-        tileErrors += 1;
-        if (tileErrors >= 6 && !usingFallback) {
-          usingFallback = true;
-          map.removeLayer(primaryTiles);
-          L.tileLayer('https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', tileOpts).addTo(map);
-        }
+        if (underlayAdded) return;
+        underlayAdded = true;
+        L.tileLayer('https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', Object.assign({ zIndex: 1 }, tileOpts)).addTo(map);
       });
       var accuracyLayer = L.layerGroup().addTo(map);
       var markersLayer = L.layerGroup().addTo(map);
