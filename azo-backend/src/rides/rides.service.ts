@@ -487,7 +487,7 @@ export class RidesService {
 
     const driverVehicle = driver?.provider?.vehicleType ?? null;
     const settings = this.pricing.radarSettings();
-    // Rayon : paramètre explicite → nearbyRadiusKm (10) comme défaut pour le radar avec position
+    // Rayon : paramètre explicite → nearbyRadiusKm (20) comme défaut pour le radar avec position
     const effectiveRadius =
       typeof radiusKm === "number"
         ? Math.min(Math.max(1, radiusKm), settings.maxRadiusKm)

@@ -21,7 +21,7 @@ import { RegistrationCompleteGuard } from "../common/guards/registration-complet
 class RadarQueryDto {
   @IsOptional() @Type(() => Number) @Min(-90) @Max(90) lat?: number;
   @IsOptional() @Type(() => Number) @Min(-180) @Max(180) lng?: number;
-  /** Rayon de recherche explicite en km. Défaut : radar.nearbyRadiusKm (10 km). */
+  /** Rayon de recherche explicite en km. Défaut : radar.nearbyRadiusKm (20 km). */
   @IsOptional() @Type(() => Number) @Min(1) @Max(50) radiusKm?: number;
 
   /** Position complète uniquement : une latitude sans longitude est ignorée. */
