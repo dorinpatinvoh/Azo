@@ -1,9 +1,9 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 8 commits poussés sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>, <code>9b06eef5</code>, <code>e5b16227</code>) · mise à jour de 10 h 48</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 8 commits poussés sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>, <code>9b06eef5</code>, <code>e5b16227</code>, <code>fd83e17d</code>) · mise à jour de 10 h 48</span></div>
 
 <h2>1. En résumé</h2>
 <p>Aujourd'hui, le mobile a gagné <b>un prix des colis exact calculé par le serveur</b>, <b>le « Gros colis » réservé au Speeder tricycle</b>, <b>une fenêtre de choix sur les lieux en un clic</b> de l'accueil (course simple, livraison ou coursier personnel, puis le Speeder), <b>une photo de fond</b> sur l'écran du numéro, et deux corrections de l'accueil (Boutique, Mes trajets). Tout compile (<code>tsc</code> sans erreur).</p>
-<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>16:54</b>) contient tout. <b>Le backend doit être déployé avant</b> (nouvelle route de devis <code>GET /deliveries/quote</code>), sinon l'écran des colis n'affichera pas de prix. <b>Priorités de test :</b> le prix d'un colis (ex. 1 km en Speeder à essence = 280 F), le Gros colis en tricycle, la fenêtre des lieux en un clic.</div>
+<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>18:48</b>) contient tout. <b>Le backend doit être déployé avant</b> (nouvelle route de devis <code>GET /deliveries/quote</code>), sinon l'écran des colis n'affichera pas de prix. <b>Priorités de test :</b> le prix d'un colis (ex. 1 km en Speeder à essence = 280 F), le Gros colis en tricycle, la fenêtre des lieux en un clic.</div>
 
 <h2>2. Colis : prix, gros colis et nouvelle mise en page (« Envoyer un colis »)</h2>
 <ul>
@@ -71,6 +71,16 @@
 <li><b>Espace agence</b> : la liste des chauffeurs et la fenêtre de recharge / retrait affichent « Disponible pour l'agence » (la part gagnée ou rechargée depuis le rattachement) ; le solde d'avant le recrutement n'est plus montré (règle serveur, voir le rapport backend).</li>
 </ul>
 
+<h2>2nonies. Suivi des commandes, positions et distance</h2>
+<ul>
+<li><b>Onglet Courses du client</b> : les commandes de <b>colis et de coursier personnel</b> apparaissent dans la même liste que les courses (<code>components/DeliveryTrackingCard.tsx</code>), avec les filtres et les compteurs. Une commande en cours montre l'état, le trajet, la <b>carte du livreur en direct</b> et ses kilomètres, les codes (ramassage / remise, départ / fin), un bouton « Message » et « Annuler la demande » ; actualisation toutes les 8 s. Après une commande, la fenêtre propose « Suivre ma commande » qui ouvre cet onglet.</li>
+<li><b>Prestataires</b> : la mission ou la course <b>en cours</b> se suit aussi dans l'onglet <b>Historique</b> (coursier, livreur) et <b>Activité</b> (Speeder) : carte violette avec l'état, le trajet, les km et un bouton pour ouvrir la mission ; l'historique du livreur montre aussi les missions annulées.</li>
+<li><b>Position plus précise du client</b> (<code>hooks/useCurrentLocation.ts</code>) : le mode « équilibré », qui se trompe de plusieurs dizaines de mètres, est remplacé par le meilleur point du GPS (jusqu'à 7 s, arrêt dès 20 m de précision).</li>
+<li><b>Position du Speeder en continu</b> : pendant une course (vers le client, arrivé, démarrée), son téléphone renvoie sa position toutes les 3 s, même à l'arrêt ; sans cela, un Speeder immobile n'émettait plus rien (ex. au départ de la course).</li>
+<li><b>Compteur de km et prix qui montaient sans bouger</b> : bug du calcul serveur (voir le rapport backend), corrigé ; la bannière « Distance à parcourir » et le prix proposé en cas d'arrêt en cours de route en bénéficient.</li>
+<li><b>À confirmer</b> : plaque du Speeder (affichée masquée aujourd'hui, ex. « ••-••-AZ ») — doit-elle être complète ou cachée ? Question posée, rien modifié.</li>
+</ul>
+
 <h2>3. Accueil client</h2>
 <ul>
 <li><b>Barre « Chercher une destination… » supprimée.</b></li>
@@ -85,11 +95,11 @@
 </ul>
 
 <h2>5. Ce qui n'est pas encore commité</h2>
-<p>Rien côté mobile : tout est sur <code>main</code> (dernier commit <code>e5b16227</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
+<p>Rien côté mobile : tout est sur <code>main</code> (dernier commit <code>fd83e17d</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
 
 <h2>6. APK et environnement</h2>
 <ul>
-<li>Build local (Gradle hors ligne), signé avec la clé de debug : dernier APK à <b>16:54</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code>. Désinstaller l'ancienne version si l'installation est refusée.</li>
+<li>Build local (Gradle hors ligne), signé avec la clé de debug : dernier APK à <b>18:48</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code>. Désinstaller l'ancienne version si l'installation est refusée.</li>
 <li>Pour tester un colis, il faut un livreur express avec un véhicule : <code>node --env-file=.env scripts/create-provider.js &lt;numéro&gt; --profile livreur-express --vehicle ZEM_TRICYCLE</code> (avec l'URL externe et <code>--allow-remote</code> pour la base Render).</li>
 <li><b>Sécurité :</b> pense à changer le mot de passe de la base Render après les tests.</li>
 </ul>
@@ -121,6 +131,7 @@
 <tr><td><code>13e14dec</code></td><td>Barre du bas admin sur la liste des dossiers ; commission annoncée au prestataire ; commission par course dans les finances admin ; correctif du libellé de dossier (erreur serveur)</td></tr>
 <tr><td><code>9b06eef5</code></td><td>Fenêtres de dialogue aux couleurs de la charte ; photo de profil obligatoire ; avis et compteur de courses ; cartes plus stables ; portefeuille FedaPay ; destination en gras ; correctifs serveur (pourboire, compteur)</td></tr>
 <tr><td><code>e5b16227</code></td><td>Barre du bas sur AZƆ̀ Pay pour tous les profils ; solde d'avant recrutement caché à l'agence</td></tr>
+<tr><td><code>fd83e17d</code></td><td>Distance sans bruit GPS ; position du client plus précise et du Speeder en continu ; suivi des colis dans l'onglet Courses ; mission en cours dans les onglets des prestataires</td></tr>
 </table>
 <div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>
