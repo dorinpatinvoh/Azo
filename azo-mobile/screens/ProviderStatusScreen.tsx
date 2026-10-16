@@ -126,13 +126,49 @@ export default function ProviderStatusScreen({ onEdit, onEnterWorkspace, onBack 
     return (
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <Header onBack={onBack} />
-        <View style={styles.center}>
-          <MaterialIcons name="badge" size={44} color={colors.primary} />
+        <ScrollView contentContainerStyle={styles.introScroll} showsVerticalScrollIndicator={false}>
+          <View style={styles.introIcon}>
+            <MaterialIcons name="badge" size={40} color={colors.onPrimary} />
+          </View>
           <Text style={styles.title}>Deviens prestataire AZƆ̀</Text>
           <Text style={[styles.muted, { textAlign: "center" }]}>
-            Speeder indépendant ou agence de flotte : dépose un dossier,
-            il est vérifié par un administrateur avant l'ouverture de ton espace métier.
+            Choisis ton activité, dépose ton dossier : il est vérifié par un administrateur avant l'ouverture de ton espace métier.
           </Text>
+
+          <View style={styles.introChips}>
+            {["Speeder", "Coursier personnel", "Livreur express"].map((l) => (
+              <View key={l} style={styles.introChip}><Text style={styles.introChipText}>{l}</Text></View>
+            ))}
+          </View>
+
+          <View style={styles.introCard}>
+            <Text style={styles.cardTitle}>Pourquoi nous rejoindre</Text>
+            {[
+              ["payments", "Tes gains arrivent sur ton portefeuille AZƆ̀ Pay"],
+              ["schedule", "Tu choisis quand tu travailles : en ligne, hors ligne"],
+              ["verified-user", "Des clients vérifiés et des codes de sécurité à chaque course"],
+            ].map(([icon, text]) => (
+              <View key={text} style={styles.introRow}>
+                <MaterialIcons name={icon as any} size={20} color={colors.primary} />
+                <Text style={styles.introRowText}>{text}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.introCard}>
+            <Text style={styles.cardTitle}>Comment ça marche</Text>
+            {[
+              ["1", "Tu remplis ton dossier et envoies tes pièces"],
+              ["2", "Un administrateur vérifie ton dossier"],
+              ["3", "Ton espace métier s'ouvre : tu reçois des missions"],
+            ].map(([n, text]) => (
+              <View key={n} style={styles.introRow}>
+                <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>{n}</Text></View>
+                <Text style={styles.introRowText}>{text}</Text>
+              </View>
+            ))}
+          </View>
+
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <Pressable style={styles.primaryBtn} onPress={onEdit}>
             <Text style={styles.primaryText}>Commencer mon inscription</Text>
@@ -140,7 +176,7 @@ export default function ProviderStatusScreen({ onEdit, onEnterWorkspace, onBack 
           <Pressable style={styles.secondaryBtn} onPress={onBack}>
             <Text style={styles.secondaryText}>Continuer comme client</Text>
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -388,6 +424,16 @@ function ChecklistRow({ item }: { item: ProviderChecklistItem }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  introScroll: { padding: spacing.lg, gap: spacing.md, alignItems: "center" },
+  introIcon: { width: 84, height: 84, borderRadius: 42, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", marginTop: spacing.md },
+  introChips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
+  introChip: { backgroundColor: colors.primaryFixed, paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full },
+  introChipText: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
+  introCard: { alignSelf: "stretch", backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, gap: spacing.sm, borderWidth: 1, borderColor: colors.surfaceContainer },
+  introRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  introRowText: { ...typography.bodyMd, color: colors.onSurface, flex: 1 },
+  stepBadge: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
+  stepBadgeText: { ...typography.labelSm, color: colors.primary, fontWeight: "800" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: spacing.lg },
   header: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xs },
   iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceContainer },

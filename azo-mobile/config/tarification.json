@@ -119,9 +119,9 @@
   },
   "radar": {
     "strictVehicleMatch": true,
-    "searchRadiusKm": 8,
-    "nearbyRadiusKm": 10,
-    "maxRadiusKm": 15,
+    "searchRadiusKm": 15,
+    "nearbyRadiusKm": 20,
+    "maxRadiusKm": 30,
     "pendingExpiryMinutes": 20,
     "driverNotificationMax": 30
   },

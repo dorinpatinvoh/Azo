@@ -103,9 +103,19 @@ function buildMapHtml(initial?: LatLng) {
     <div id="map"></div>
     <script>
       var map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([${startLat}, ${startLng}], 14);
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19, detectRetina: true, updateWhenIdle: false, keepBuffer: 4
-      }).addTo(map);
+      var tileOpts = { maxZoom: 19, detectRetina: true, updateWhenIdle: false, keepBuffer: 4 };
+      var primaryTiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', tileOpts).addTo(map);
+      // Serveur de secours (style humanitaire, détaillé en zone rurale) si trop de tuiles échouent
+      var tileErrors = 0;
+      var usingFallback = false;
+      primaryTiles.on('tileerror', function () {
+        tileErrors += 1;
+        if (tileErrors >= 6 && !usingFallback) {
+          usingFallback = true;
+          map.removeLayer(primaryTiles);
+          L.tileLayer('https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', tileOpts).addTo(map);
+        }
+      });
       var accuracyLayer = L.layerGroup().addTo(map);
       var markersLayer = L.layerGroup().addTo(map);
       var polylineLayer = L.layerGroup().addTo(map);

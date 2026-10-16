@@ -99,7 +99,7 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
         </Text>
       </View>
 
-      <View style={styles.filtersRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filtersRow}>
         {FILTERS.map((f) => {
           const active = f.id === filter;
           return (
@@ -108,13 +108,28 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
 
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{rides.filter((r) => r.status === "COMPLETED").length}</Text>
+            <Text style={styles.statLabel}>Terminées</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{rides.filter((r) => ACTIVE_STATUSES.includes(r.status)).length}</Text>
+            <Text style={styles.statLabel}>En cours</Text>
+          </View>
+          <View style={[styles.statCard, styles.statCardMain]}>
+            <Text style={[styles.statValue, { color: "#fff" }]}>{fcfa(totalSpent)}</Text>
+            <Text style={[styles.statLabel, { color: "rgba(255,255,255,0.85)" }]}>Dépensés</Text>
+          </View>
+        </View>
+
         {offline && (
           <View style={styles.offlineBanner}>
             <MaterialIcons name="cloud-off" size={16} color={colors.tertiary} />
@@ -158,8 +173,20 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
                     <Text style={styles.cardTitle}>{VEHICLE_LABEL[r.vehicleType]}</Text>
                     <Text style={styles.cardMeta}>{relativeDay(r.createdAt)}</Text>
                   </View>
-                  <Text style={styles.price}>{fcfa(r.price)}</Text>
+                  <Text style={[styles.price, r.status === "CANCELLED" && styles.priceCancelled]}>{fcfa(r.price)}</Text>
                 </View>
+                {r.originLabel || r.destLabel ? (
+                  <View style={styles.routeBox}>
+                    <View style={styles.routeLine}>
+                      <View style={[styles.routeDot, { backgroundColor: "#2e7d32" }]} />
+                      <Text style={styles.routeText} numberOfLines={1}>{r.originLabel ?? "Départ"}</Text>
+                    </View>
+                    <View style={styles.routeLine}>
+                      <View style={[styles.routeDot, { backgroundColor: "#b3261b" }]} />
+                      <Text style={styles.routeText} numberOfLines={1}>{r.destLabel ?? "Destination"}</Text>
+                    </View>
+                  </View>
+                ) : null}
                 <View style={styles.cardBottom}>
                   <View style={[styles.pill, { backgroundColor: st.bg }]}>
                     <Text style={[styles.pillText, { color: st.color }]}>{st.label}</Text>
@@ -198,7 +225,18 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm },
   title: { ...typography.headlineLg, color: colors.onSurface, fontWeight: "800" },
   subtitle: { ...typography.bodyMd, color: colors.onSurfaceVariant, marginTop: 2 },
+  filtersScroll: { flexGrow: 0 },
   filtersRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  statsRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
+  statCard: { flex: 1, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: "center", borderWidth: 1, borderColor: colors.surfaceContainer },
+  statCardMain: { backgroundColor: colors.primary, borderColor: colors.primary, flex: 1.4 },
+  statValue: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  statLabel: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 2 },
+  priceCancelled: { color: colors.outline, textDecorationLine: "line-through" },
+  routeBox: { gap: 6, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.lg, padding: spacing.sm },
+  routeLine: { flexDirection: "row", alignItems: "center", gap: 8 },
+  routeDot: { width: 9, height: 9, borderRadius: 5 },
+  routeText: { ...typography.bodySm, color: colors.onSurface, flex: 1 },
   chip: { paddingHorizontal: 14, height: 34, borderRadius: radius.full, backgroundColor: colors.surfaceContainer, alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: colors.primary },
   chipText: { ...typography.labelMd, color: colors.onSurfaceVariant },

@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 import { IsNumber, Max, Min } from "class-validator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import gazetteerData from "./benin-gazetteer.json";
 
 class ReverseGeocodeDto {
   @IsNumber() @Min(-90) @Max(90) latitude: number;
@@ -46,6 +47,55 @@ const BENIN_DEFAULT_PLACES = [
   { id: "akpakpa", title: "Akpakpa Centre", subtitle: "Cotonou", latitude: 6.3739, longitude: 2.4533 },
 ];
 
+// Villes et communes du Bénin (repli hors ligne, position approximative du centre) : un lieu éloigné reste trouvable même sans réponse des services de cartes.
+const BENIN_TOWNS = [
+  { id: "t_portonovo", title: "Porto-Novo", subtitle: "Ouémé", latitude: 6.4969, longitude: 2.6289 },
+  { id: "t_semekpodji", title: "Sèmè-Podji", subtitle: "Ouémé", latitude: 6.3833, longitude: 2.6167 },
+  { id: "t_ouidah", title: "Ouidah", subtitle: "Atlantique", latitude: 6.363, longitude: 2.085 },
+  { id: "t_allada", title: "Allada", subtitle: "Atlantique", latitude: 6.665, longitude: 2.151 },
+  { id: "t_toffo", title: "Toffo", subtitle: "Atlantique", latitude: 6.8497, longitude: 2.0828 },
+  { id: "t_sosava", title: "Sô-Ava (Ganvié)", subtitle: "Atlantique", latitude: 6.4667, longitude: 2.4167 },
+  { id: "t_gdpopo", title: "Grand-Popo", subtitle: "Mono", latitude: 6.2833, longitude: 1.8167 },
+  { id: "t_lokossa", title: "Lokossa", subtitle: "Mono", latitude: 6.6386, longitude: 1.7167 },
+  { id: "t_pobe", title: "Pobè", subtitle: "Plateau", latitude: 6.9833, longitude: 2.6667 },
+  { id: "t_sakete", title: "Sakété", subtitle: "Plateau", latitude: 6.7333, longitude: 2.6583 },
+  { id: "t_ketou", title: "Kétou", subtitle: "Plateau", latitude: 7.3583, longitude: 2.6 },
+  { id: "t_abomey", title: "Abomey", subtitle: "Zou", latitude: 7.1829, longitude: 1.9912 },
+  { id: "t_bohicon", title: "Bohicon", subtitle: "Zou", latitude: 7.1782, longitude: 2.0667 },
+  { id: "t_dassa", title: "Dassa-Zoumè", subtitle: "Collines", latitude: 7.75, longitude: 2.1833 },
+  { id: "t_savalou", title: "Savalou", subtitle: "Collines", latitude: 7.9283, longitude: 1.9753 },
+  { id: "t_parakou", title: "Parakou", subtitle: "Borgou", latitude: 9.337, longitude: 2.6303 },
+  { id: "t_djougou", title: "Djougou", subtitle: "Donga", latitude: 9.7085, longitude: 1.666 },
+  { id: "t_natitingou", title: "Natitingou", subtitle: "Atacora", latitude: 10.3042, longitude: 1.3796 },
+  { id: "t_kandi", title: "Kandi", subtitle: "Alibori", latitude: 11.1342, longitude: 2.9386 },
+  { id: "t_malanville", title: "Malanville", subtitle: "Alibori", latitude: 11.8683, longitude: 3.3833 },
+];
+
+/**
+ * Quartiers et villages de Cotonou (13 arrondissements) et d'Abomey-Calavi (9 arrondissements), avec leur arrondissement.
+ * Données OpenStreetMap du 16/10/2026 (voir PROJECT_SUMMARY/QUARTIERS_VILLAGES_ELOIGNES_*.pdf) : ils restent trouvables
+ * même quand les services de cartes en ligne ne connaissent pas le lieu ou ne répondent pas.
+ * À Abomey-Calavi, l'arrondissement est rattaché par proximité du chef-lieu (limites absentes d'OSM).
+ */
+type GazetteerEntry = { title: string; type: string; arr: string; commune: string; latitude: number; longitude: number };
+const GAZETTEER = gazetteerData as GazetteerEntry[];
+const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+const gazetteerPlace = (g: GazetteerEntry, i: number) => ({
+  id: `gaz${i}`,
+  title: g.title,
+  subtitle: g.commune === "Cotonou" ? `${g.type}, ${g.arr}, Cotonou` : `${g.type}, arrondissement de ${g.arr}, Abomey-Calavi`,
+  latitude: g.latitude,
+  longitude: g.longitude,
+});
+
+const distanceKm = (aLat: number, aLng: number, bLat: number, bLng: number) => {
+  const rad = (x: number) => (x * Math.PI) / 180;
+  const dLat = rad(bLat - aLat);
+  const dLng = rad(bLng - aLng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+};
+
 @Injectable()
 export class PlacesService {
   private readonly base = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
@@ -63,31 +113,54 @@ export class PlacesService {
     return await res.json();
   }
 
+  /** Quartier ou village connu le plus proche d'un point (distance maximale en km). */
+  nearestKnownPlace(latitude: number, longitude: number, maxKm = 0.7) {
+    let best: { g: GazetteerEntry; d: number } | null = null;
+    for (const g of GAZETTEER) {
+      const d = distanceKm(latitude, longitude, g.latitude, g.longitude);
+      if (d <= maxKm && (!best || d < best.d)) best = { g, d };
+    }
+    return best?.g ?? null;
+  }
+
   async reverseGeocode(latitude: number, longitude: number) {
-    try {
-      const data = await this.getJson(
-        `${this.base}/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=fr&lat=${latitude}&lon=${longitude}`
-      );
-      if (!data?.error) {
+    const known = this.nearestKnownPlace(latitude, longitude);
+    if (known) {
+      const where = known.commune === "Cotonou" ? `${known.arr}, Cotonou` : `${known.arr}, Abomey-Calavi`;
+      const address = `${known.title}, ${where}`;
+      return { address, fullAddress: address, latitude, longitude };
+    }
+    // On essaie le niveau le plus précis (rue, quartier), puis des niveaux plus larges (village, arrondissement, commune)
+    // pour les zones reculées où OpenStreetMap n'a pas de détail à l'échelle de la rue.
+    for (const zoom of [18, 14, 10]) {
+      try {
+        const data = await this.getJson(
+          `${this.base}/reverse?format=jsonv2&zoom=${zoom}&addressdetails=1&accept-language=fr&lat=${latitude}&lon=${longitude}`
+        );
+        if (data?.error) continue;
         const a = data.address ?? {};
-        const area = a.neighbourhood ?? a.suburb ?? a.quarter ?? a.village ?? a.road;
-        const city = a.city ?? a.town ?? a.municipality ?? a.county ?? a.state;
-        const parts = [area, city].filter((p, i, arr) => p && arr.indexOf(p) === i);
-        const address = parts.length ? parts.join(", ") : String(data.display_name ?? "Position sélectionnée");
+        const area = a.neighbourhood ?? a.suburb ?? a.quarter ?? a.hamlet ?? a.village ?? a.locality ?? a.city_district ?? a.road;
+        const arrondissement = a.city_district ?? a.suburb;
+        const city = a.city ?? a.town ?? a.municipality ?? a.county ?? a.state_district ?? a.state;
+        const parts = [area, arrondissement, city].filter((p, i, arr) => p && arr.indexOf(p) === i);
+        if (!parts.length && !data.display_name) continue;
+        const address = parts.length ? parts.join(", ") : String(data.display_name).split(",").slice(0, 3).join(",").trim();
         return { address, fullAddress: data.display_name ?? address, latitude, longitude };
+      } catch {
+        // service de cartes lent ou indisponible : on essaie le niveau suivant, puis le repli ci-dessous
       }
-    } catch {
-      // Fallback gracieux si Nominatim timeout
     }
 
+    // Repli : la ville connue la plus proche, pour que l'adresse reste lisible même sans réponse du service
+    const near = [...BENIN_TOWNS, ...BENIN_DEFAULT_PLACES].map((p) => ({ p, d: distanceKm(latitude, longitude, p.latitude, p.longitude) })).sort((x, y) => x.d - y.d)[0];
+    const label = near && near.d < 40 ? `Près de ${near.p.title}` : "Position sur la carte";
     return {
-      address: "Position sur la carte",
+      address: label,
       fullAddress: `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`,
       latitude,
       longitude,
     };
   }
-
   async search(q: string, lat?: string, lng?: string) {
     const query = (q ?? "").trim();
     if (query.length < 2) return { results: [] };
@@ -113,15 +186,49 @@ export class PlacesService {
       }
     }
 
+    // Quartiers et villages peu référencés : on relance avec le pays dans la requête, puis avec le dernier mot seul
+    if (onlineResults.length < 3) {
+      const variants = [`${query}, Bénin`];
+      const words = query.split(/\s+/).filter(Boolean);
+      if (words.length > 1) variants.push(words[words.length - 1]);
+      for (const v of variants) {
+        try {
+          const more = await this.searchNominatim(v, lat, lng);
+          onlineResults = this.dedupe([...onlineResults, ...more]);
+          if (onlineResults.length >= 3) break;
+        } catch (e) {
+          // variante sans résultat : on passe à la suivante
+        }
+      }
+    }
+
     // Recherche locale de fallback (Bénin) si résultats en ligne faibles ou indisponibles
     const normalizedQ = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const localMatches = BENIN_DEFAULT_PLACES.filter((p) => {
+    const localMatches = [...BENIN_DEFAULT_PLACES, ...BENIN_TOWNS].filter((p) => {
       const titleNorm = p.title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const subNorm = p.subtitle.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       return titleNorm.includes(normalizedQ) || subNorm.includes(normalizedQ);
     });
 
-    const combined = this.dedupe([...onlineResults, ...localMatches]).slice(0, 10);
+    // Quartiers / villages connus : le nom, ou le nom de l'arrondissement (ex. « Togba » liste ses quartiers)
+    const words = normalizedQ.split(/[^a-z0-9]+/).filter(Boolean);
+    const known = GAZETTEER.map((g, i) => ({ g, i, t: norm(g.title), a: norm(g.arr) }))
+      .filter(({ t, a }) => words.length > 0 && words.every((w) => t.includes(w) || a.includes(w)))
+      .sort((x, y) => Number(y.t.startsWith(words[0] ?? "")) - Number(x.t.startsWith(words[0] ?? "")) || x.t.length - y.t.length)
+      .slice(0, 8)
+      .map(({ g, i }) => gazetteerPlace(g, i));
+
+    let combined = this.dedupe([...known, ...onlineResults, ...localMatches]);
+    // Les lieux les plus proches de la personne d'abord (deux villages peuvent porter le même nom)
+    const la0 = Number(lat);
+    const lo0 = Number(lng);
+    if (lat && lng && Number.isFinite(la0) && Number.isFinite(lo0)) {
+      combined = combined
+        .map((it) => ({ it, d: distanceKm(la0, lo0, Number(it.latitude), Number(it.longitude)) }))
+        .sort((x, y) => x.d - y.d)
+        .map((x) => x.it);
+    }
+    combined = combined.slice(0, 12);
 
     const data = { results: combined };
     if (combined.length > 0) {
@@ -143,12 +250,13 @@ export class PlacesService {
 
   private async searchNominatim(query: string, lat?: string, lng?: string) {
     let url =
-      `${this.base}/search?format=jsonv2&addressdetails=1&limit=6&accept-language=fr` +
+      `${this.base}/search?format=jsonv2&addressdetails=1&limit=10&dedupe=1&accept-language=fr` +
       `&countrycodes=${this.countries}&q=${encodeURIComponent(query)}`;
     const la = Number(lat),
       lo = Number(lng);
     if (lat && lng && Number.isFinite(la) && Number.isFinite(lo)) {
-      url += `&viewbox=${lo - 0.4},${la + 0.4},${lo + 0.4},${la - 0.4}&bounded=0`;
+      // fenêtre élargie (≈ 100 km) : les quartiers et villages éloignés de la personne restent trouvés
+      url += `&viewbox=${lo - 1},${la + 1},${lo + 1},${la - 1}&bounded=0`;
     }
 
     const items: any[] = await this.getJson(url);
@@ -169,7 +277,7 @@ export class PlacesService {
   private async searchPhoton(query: string, lat?: string, lng?: string) {
     const p = new URLSearchParams({
       q: query,
-      limit: "10",
+      limit: "15",
       lang: "fr",
       bbox: "0.77,6.23,3.85,12.42",
     });

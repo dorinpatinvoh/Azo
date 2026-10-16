@@ -29,6 +29,7 @@ type Props = {
 function AddressField({ label, place, onPick, active, onFocus }: { label: string; place: Place | null; onPick: (p: Place | null) => void; active: boolean; onFocus: () => void }) {
   const [text, setText] = useState(place?.title ?? "");
   const [results, setResults] = useState<Place[]>([]);
+  const [noResult, setNoResult] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // le lieu peut être posé depuis la carte ou par « ma position » : le champ suit
@@ -46,13 +47,16 @@ function AddressField({ label, place, onPick, active, onFocus }: { label: string
     setText(next);
     onPick(null);
     if (timer.current) clearTimeout(timer.current);
+    setNoResult(false);
     if (next.trim().length < 3) {
       setResults([]);
       return;
     }
     timer.current = setTimeout(async () => {
       try {
-        setResults((await placesApi.search(next.trim())).slice(0, 5));
+        const found = (await placesApi.search(next.trim())).slice(0, 6);
+        setResults(found);
+        setNoResult(found.length === 0);
       } catch {
         setResults([]);
       }
@@ -70,6 +74,7 @@ function AddressField({ label, place, onPick, active, onFocus }: { label: string
         placeholder="Rechercher une adresse ou toucher la carte"
         placeholderTextColor={colors.outline}
       />
+      {noResult && results.length === 0 ? <Text style={styles.resultSub}>Quartier introuvable ? Touche la carte pour poser le point exactement, même dans un village reculé.</Text> : null}
       {results.map((p, i) => (
         <Pressable
           key={`${p.title}-${i}`}
