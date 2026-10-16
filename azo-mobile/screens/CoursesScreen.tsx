@@ -4,7 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { errorMessage, ridesApi, Ride } from "../services/api";
+import { Delivery, deliveryApi, errorMessage, ridesApi, Ride } from "../services/api";
+import DeliveryTrackingCard from "../components/DeliveryTrackingCard";
 import { receiptText } from "../utils/receipt";
 import ClientTabBar, { ClientTab } from "../components/ClientTabBar";
 import BackButton from "../components/BackButton";
@@ -34,20 +35,32 @@ type Props = {
 export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, onTrackRide }: Props) {
   const { t, locale } = useI18n();
   const [rides, setRides] = useState<Ride[]>([]);
+  // Commandes de colis et de coursier personnel : elles se suivent ici, dans l'onglet Courses
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [offline, setOffline] = useState(false);
   const [filter, setFilter] = useState<Filter>("ALL");
 
   const load = useCallback(async () => {
-    try {
-      setRides(await ridesApi.history());
+    const [ridesRes, deliveriesRes] = await Promise.allSettled([ridesApi.history(), deliveryApi.mine()]);
+    if (ridesRes.status === "fulfilled") {
+      setRides(ridesRes.value);
       setOffline(false);
-    } catch {
+    } else {
       setRides(DEMO_RIDES);
       setOffline(true);
     }
+    if (deliveriesRes.status === "fulfilled") setDeliveries(deliveriesRes.value);
   }, []);
+
+  // Une commande de colis en cours : on actualise l'état toutes les 8 s (la carte du livreur se met à jour d'elle-même)
+  const hasActiveDelivery = deliveries.some((d) => ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status));
+  useEffect(() => {
+    if (!hasActiveDelivery) return;
+    const timer = setInterval(() => { load().catch(() => undefined); }, 8000);
+    return () => clearInterval(timer);
+  }, [hasActiveDelivery, load]);
 
   useEffect(() => {
     load().finally(() => setLoading(false));
@@ -78,9 +91,30 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
     }
   }, [rides, filter]);
 
+  const deliveryMatches = useCallback(
+    (d: Delivery) => {
+      if (filter === "ACTIVE") return ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status);
+      if (filter === "COMPLETED") return d.status === "COMPLETED";
+      if (filter === "CANCELLED") return d.status === "CANCELLED";
+      return true;
+    },
+    [filter]
+  );
+
+  // Courses et commandes de colis dans une seule liste, les plus récentes d'abord
+  const entries = useMemo(() => {
+    const list: ({ kind: "ride"; at: string; r: Ride } | { kind: "delivery"; at: string; d: Delivery })[] = [
+      ...filtered.map((r) => ({ kind: "ride" as const, at: r.createdAt, r })),
+      ...deliveries.filter(deliveryMatches).map((d) => ({ kind: "delivery" as const, at: d.createdAt, d })),
+    ];
+    return list.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  }, [filtered, deliveries, deliveryMatches]);
+
   const totalSpent = useMemo(
-    () => rides.filter((r) => r.status === "COMPLETED").reduce((s, r) => s + r.price, 0),
-    [rides]
+    () =>
+      rides.filter((r) => r.status === "COMPLETED").reduce((s, r) => s + r.price, 0) +
+      deliveries.filter((d) => d.status === "COMPLETED").reduce((s, d) => s + d.price, 0),
+    [rides, deliveries]
   );
 
   return (
@@ -94,7 +128,7 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
         <Text style={styles.title}>{t("courses.title")}</Text>
         <Text style={styles.subtitle}>
           {t("courses.summary", {
-            count: t(rides.length > 1 ? "courses.count.many" : "courses.count.one", { n: rides.length }),
+            count: t(rides.length + deliveries.length > 1 ? "courses.count.many" : "courses.count.one", { n: rides.length + deliveries.length }),
             spent: fcfa(totalSpent),
           })}
         </Text>
@@ -118,11 +152,11 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
       >
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{rides.filter((r) => r.status === "COMPLETED").length}</Text>
+            <Text style={styles.statValue}>{rides.filter((r) => r.status === "COMPLETED").length + deliveries.filter((d) => d.status === "COMPLETED").length}</Text>
             <Text style={styles.statLabel}>Terminées</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{rides.filter((r) => ACTIVE_STATUSES.includes(r.status)).length}</Text>
+            <Text style={styles.statValue}>{rides.filter((r) => ACTIVE_STATUSES.includes(r.status)).length + deliveries.filter((d) => ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status)).length}</Text>
             <Text style={styles.statLabel}>En cours</Text>
           </View>
           <View style={[styles.statCard, styles.statCardMain]}>
@@ -140,7 +174,7 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
 
         {loading && <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />}
 
-        {!loading && filtered.length === 0 && (
+        {!loading && entries.length === 0 && (
           <View style={styles.empty}>
             <MaterialIcons name="receipt-long" size={48} color={colors.outlineVariant} />
             <Text style={styles.emptyTitle}>{t("courses.empty.title")}</Text>
@@ -156,7 +190,9 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
         )}
 
         <View style={{ gap: spacing.sm }}>
-          {filtered.map((r) => {
+          {entries.map((e) => {
+            if (e.kind === "delivery") return <DeliveryTrackingCard key={`d-${e.d.id}`} delivery={e.d} onChanged={() => { load().catch(() => undefined); }} />;
+            const r = e.r;
             const st = STATUS_INFO[r.status];
             const isActive = ACTIVE_STATUSES.includes(r.status);
             return (

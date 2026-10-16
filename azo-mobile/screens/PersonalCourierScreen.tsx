@@ -119,7 +119,7 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked, in
       BrandAlert.alert(
         "Coursier personnel demandé ✅",
         `Montant réservé : ${fcfa(d.price)}. Le total final sera calculé à la fin, selon les kilomètres parcourus.\nCode de départ : ${d.pickupCode}\nCode de fin : ${d.deliveryCode}\n\nConserve ces codes : ton coursier te les demandera. Il reste réservé pour toi pendant toute la durée choisie.`,
-        [{ text: "OK", onPress: onBooked }]
+        [{ text: "OK" }, { text: "Suivre ma commande", onPress: onBooked }]
       );
     } catch (e) {
       BrandAlert.alert("Impossible de commander", errorMessage(e));

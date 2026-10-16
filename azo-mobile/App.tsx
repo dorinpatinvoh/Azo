@@ -738,14 +738,14 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
           <PersonalCourierScreen
             onBack={() => goBack()}
             onRecharge={() => goTo("wallet")}
-            onBooked={() => undefined}
+            onBooked={() => goTo("courses")}
             initialDrop={quickDest}
             initialVehicle={quickSpeeder}
           />
         )}
 
         {route === "delivery" && (
-          <DeliveryScreen onBack={() => goBack()} onConfirm={() => goTo("home")} initialDrop={quickDest} initialSpeeder={quickSpeeder} />
+          <DeliveryScreen onBack={() => goBack()} onConfirm={() => goTo("courses")} initialDrop={quickDest} initialSpeeder={quickSpeeder} />
         )}
 
         {route === "rental" && (

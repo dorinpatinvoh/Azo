@@ -690,25 +690,46 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
 
           {tab === "history" && (
           <>
+          {/* Mission en cours : elle se suit ici comme dans l'onglet Missions */}
+          {activeDelivery ? (
+            <View style={styles.ongoingCard}>
+              <View style={styles.ongoingTop}>
+                <MaterialIcons name={activeDelivery.mode === "PERSONAL" ? "directions-run" : "local-shipping"} size={20} color={colors.onPrimary} />
+                <Text style={styles.ongoingTitle}>{activeDelivery.mode === "PERSONAL" ? "Course personnelle en cours" : "Livraison en cours"}</Text>
+                <Text style={styles.ongoingState}>{activeDelivery.status === "MATCHED" ? "En route vers le ramassage" : "En livraison"}</Text>
+              </View>
+              <Text style={styles.ongoingRoute} numberOfLines={1}>De : {activeDelivery.pickupAddress}</Text>
+              <Text style={styles.ongoingRoute} numberOfLines={1}>Vers : {activeDelivery.dropAddress}</Text>
+              {typeof activeDelivery.traveledMeters === "number" && activeDelivery.mode === "PERSONAL" ? (
+                <Text style={styles.ongoingRoute}>{(activeDelivery.traveledMeters / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km parcourus</Text>
+              ) : null}
+              <Pressable style={styles.ongoingBtn} onPress={() => setTab("home")} accessibilityRole="button">
+                <Text style={styles.ongoingBtnText}>Ouvrir la mission</Text>
+                <MaterialIcons name="arrow-forward" size={16} color={colors.primary} />
+              </Pressable>
+            </View>
+          ) : null}
+
           <Text style={[styles.sectionTitle, { marginBottom: spacing.sm }]}>Livraisons effectuées</Text>
-          {history.filter((d) => d.status === "COMPLETED").length === 0 ? (
+          {history.filter((d) => d.status === "COMPLETED" || d.status === "CANCELLED").length === 0 ? (
             <Text style={styles.muted}>Tes livraisons terminées apparaîtront ici.</Text>
           ) : (
             <View style={{ gap: spacing.xs }}>
               {history
-                .filter((d) => d.status === "COMPLETED")
+                .filter((d) => d.status === "COMPLETED" || d.status === "CANCELLED")
                 .slice(0, 50)
                 .map((d) => {
                   const net = d.price - (d.commission ?? Math.round(d.price * 0.15));
+                  const cancelled = d.status === "CANCELLED";
                   return (
                     <View key={d.id} style={styles.historyRow}>
-                      <MaterialIcons name="check-circle" size={18} color="#146C2E" />
+                      <MaterialIcons name={cancelled ? "cancel" : "check-circle"} size={18} color={cancelled ? colors.error : "#146C2E"} />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.historyDest} numberOfLines={1}>{d.dropAddress}</Text>
                         <Text style={styles.historySub} numberOfLines={1}>Depuis {d.pickupAddress}</Text>
                         <Text style={styles.historySub}>{new Date(d.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}</Text>
                       </View>
-                      <Text style={styles.historyGain}>+{fcfa(net)}</Text>
+                      <Text style={[styles.historyGain, cancelled && { color: colors.outline }]}>{cancelled ? "Annulée" : `+${fcfa(net)}`}</Text>
                     </View>
                   );
                 })}
@@ -1052,6 +1073,13 @@ const styles = StyleSheet.create({
   },
   acceptBtnText: { ...typography.labelMd, color: "#fff", fontWeight: "800" },
 
+  ongoingCard: { backgroundColor: colors.primary, borderRadius: radius.xl, padding: spacing.md, gap: 6, marginBottom: spacing.md },
+  ongoingTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  ongoingTitle: { ...typography.labelLg, color: colors.onPrimary, fontWeight: "800", flex: 1 },
+  ongoingState: { ...typography.labelSm, color: colors.onPrimary, fontWeight: "700", backgroundColor: "rgba(255,255,255,0.2)", paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },
+  ongoingRoute: { ...typography.bodySm, color: "rgba(255,255,255,0.92)" },
+  ongoingBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#fff", borderRadius: radius.full, paddingVertical: 10, marginTop: 4 },
+  ongoingBtnText: { ...typography.labelMd, color: colors.primary, fontWeight: "800" },
   historyRow: {
     flexDirection: "row",
     alignItems: "center",

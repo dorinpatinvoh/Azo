@@ -25,11 +25,34 @@ describe("odometerStep", () => {
     expect(outbound!.meters + inbound!.meters).toBeCloseTo(3_000, -1);
   });
 
-  it("rejects GPS drift under max(5 m, accuracy / 2)", () => {
+  it("rejects GPS drift under max(5 m, accuracy)", () => {
     const result = odometerStep(pointAtMeters(0, 1_000), pointAtMeters(4, 10_000), 10);
 
     expect(result).toMatchObject({ accepted: false, meters: 0 });
     expect(result?.point).toEqual(pointAtMeters(0, 1_000));
+  });
+
+  it("ne compte pas le bruit du GPS à l'arrêt : 20 m de décalage avec 10 m de précision restent ignorés", () => {
+    let anchor = odometerStep(null, pointAtMeters(0, 1_000), 10)!.point;
+    let total = 0;
+    // 60 positions « immobiles » qui dansent de ±20 m autour du même endroit, une par seconde
+    for (let i = 1; i <= 60; i++) {
+      const wobble = i % 2 === 0 ? 20 : -15;
+      const step = odometerStep(anchor, pointAtMeters(wobble, 1_000 + i * 1_000), 10, 0.2);
+      if (step?.accepted) {
+        total += step.meters;
+        anchor = step.point;
+      }
+    }
+    expect(total).toBe(0);
+  });
+
+  it("exige un écart trois fois plus grand quand le téléphone mesure une vitesse nulle", () => {
+    const previous = odometerStep(null, pointAtMeters(0, 1_000), 10)!.point;
+    expect(odometerStep(previous, pointAtMeters(50, 11_000), 10, 0.1)?.accepted).toBe(false);
+    expect(odometerStep(previous, pointAtMeters(70, 11_000), 10, 0.1)?.accepted).toBe(true);
+    // en roulant (10 m/s), les mêmes 50 m sont comptés
+    expect(odometerStep(previous, pointAtMeters(50, 6_000), 10, 10)?.accepted).toBe(true);
   });
 
   it("rejects implausible speed, inaccurate fixes and non-increasing timestamps", () => {

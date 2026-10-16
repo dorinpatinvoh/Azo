@@ -485,6 +485,17 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     }
   }, []);
 
+  // Pendant une course, la position est renvoyée toutes les 3 s MÊME à l'arrêt : le client voit toujours où est son Speeder (sans cela,
+  // un Speeder immobile ne donnait plus aucune position, par exemple juste au départ de la course)
+  useEffect(() => {
+    if (!online || !activeRide || !["MATCHED", "ARRIVED", "IN_PROGRESS"].includes(activeRide.status)) return;
+    const timer = setInterval(() => {
+      const here = positionRef.current;
+      if (here) emitPosition(here);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [online, activeRide?.id, activeRide?.status, emitPosition]);
+
   /* ---------- GPS réel (expo-location) ---------- */
   // Deux profils : course en cours = suivi live du curseur côté client (comme
   // Google Maps) ; sans course = position grossière pour économiser la batterie.
@@ -1396,6 +1407,26 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
 
         {tab === "activity" && (
         <>
+        {/* Course en cours : elle se suit ici comme dans l'onglet Accueil */}
+        {activeRide ? (
+          <View style={styles.ongoingCard}>
+            <View style={styles.ongoingTop}>
+              <MaterialIcons name="two-wheeler" size={20} color={colors.onPrimary} />
+              <Text style={styles.ongoingTitle}>Course en cours</Text>
+              <Text style={styles.ongoingState}>{activeRide.status === "MATCHED" ? "En route vers le client" : activeRide.status === "ARRIVED" ? "Arrivé chez le client" : "Course démarrée"}</Text>
+            </View>
+            <Text style={styles.ongoingRoute} numberOfLines={1}>De : {activeRide.originLabel ?? "point de départ"}</Text>
+            <Text style={styles.ongoingRoute} numberOfLines={1}>Vers : {activeRide.destLabel ?? "destination"}</Text>
+            {activeRide.status === "IN_PROGRESS" && typeof tripRemainingKm === "number" ? (
+              <Text style={styles.ongoingRoute}>{fmtKm(tripRemainingKm)} à parcourir</Text>
+            ) : null}
+            <Pressable style={styles.ongoingBtn} onPress={() => setTab("home")} accessibilityRole="button">
+              <Text style={styles.ongoingBtnText}>Ouvrir la course</Text>
+              <MaterialIcons name="arrow-forward" size={16} color={colors.primary} />
+            </Pressable>
+          </View>
+        ) : null}
+
         {/* --- Activité récente --- */}
         <Text style={styles.sectionTitle}>Activité récente</Text>
         {recent.length === 0 ? (
@@ -1634,6 +1665,13 @@ const styles = StyleSheet.create({
   radarFilterText: { ...typography.bodySm, color: colors.primary, fontWeight: "700", flex: 1 },
   emptyText: { ...typography.bodySm, color: colors.onSurfaceVariant, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, padding: spacing.md },
   requestCard: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  ongoingCard: { backgroundColor: colors.primary, borderRadius: radius.xl, padding: spacing.md, gap: 6, marginBottom: spacing.md },
+  ongoingTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  ongoingTitle: { ...typography.labelLg, color: colors.onPrimary, fontWeight: "800", flex: 1 },
+  ongoingState: { ...typography.labelSm, color: colors.onPrimary, fontWeight: "700", backgroundColor: "rgba(255,255,255,0.2)", paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },
+  ongoingRoute: { ...typography.bodySm, color: "rgba(255,255,255,0.92)" },
+  ongoingBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#fff", borderRadius: radius.full, paddingVertical: 10, marginTop: 4 },
+  ongoingBtnText: { ...typography.labelMd, color: colors.primary, fontWeight: "800" },
   requestIcon: { width: 44, height: 44, borderRadius: radius.full, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
   requestTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
   requestClient: { ...typography.bodySm, color: colors.onSurface, fontWeight: "600" },

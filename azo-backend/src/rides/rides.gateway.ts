@@ -227,7 +227,8 @@ export class RidesGateway implements OnGatewayConnection {
           const result = odometerStep(
             ride.odometer,
             { lat: data.lat, lng: data.lng, at },
-            accuracy
+            accuracy,
+            speed
           );
           if (result?.accepted) {
             ride.odometer = result.point;

@@ -51,7 +51,7 @@ const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
 
 type Props = { onBack: () => void; onConfirm: () => void; initialDrop?: Place | null; initialSpeeder?: VehicleType | null };
 
-export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: Props) {
+export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initialSpeeder }: Props) {
   const [selectedType, setSelectedType] = useState("small");
   const [speeder, setSpeeder] = useState<VehicleType>(initialSpeeder && initialSpeeder !== "GAZELLE" && initialSpeeder !== "KOALA" && initialSpeeder !== "LEOPARD" ? initialSpeeder : "ZEM_ESSENCE");
   const [routeKm, setRouteKm] = useState<number | null>(null);
@@ -134,7 +134,8 @@ export default function DeliveryScreen({ onBack, initialDrop, initialSpeeder }: 
       await loadMine();
       BrandAlert.alert(
         "Livreur en recherche 📦",
-        `Code de ramassage (expéditeur) : ${d.pickupCode}\nCode de remise (destinataire) : ${d.deliveryCode}\n\nConserve ces codes : le livreur en aura besoin pour valider chaque étape.`
+        `Code de ramassage (expéditeur) : ${d.pickupCode}\nCode de remise (destinataire) : ${d.deliveryCode}\n\nConserve ces codes : le livreur en aura besoin pour valider chaque étape.`,
+        [{ text: "OK" }, { text: "Suivre ma commande", onPress: onConfirm }]
       );
     } catch (e) {
       BrandAlert.alert("Impossible de commander", errorMessage(e));
