@@ -1,9 +1,9 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 3 commits poussés sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>) · mise à jour de 10 h 48</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 4 commits poussés sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>) · mise à jour de 10 h 48</span></div>
 
 <h2>1. En résumé</h2>
 <p>Aujourd'hui, le mobile a gagné <b>un prix des colis exact calculé par le serveur</b>, <b>le « Gros colis » réservé au Speeder tricycle</b>, <b>une fenêtre de choix sur les lieux en un clic</b> de l'accueil (course simple, livraison ou coursier personnel, puis le Speeder), <b>une photo de fond</b> sur l'écran du numéro, et deux corrections de l'accueil (Boutique, Mes trajets). Tout compile (<code>tsc</code> sans erreur).</p>
-<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>11:50</b>) contient tout. <b>Le backend doit être déployé avant</b> (nouvelle route de devis <code>GET /deliveries/quote</code>), sinon l'écran des colis n'affichera pas de prix. <b>Priorités de test :</b> le prix d'un colis (ex. 1 km en Speeder à essence = 280 F), le Gros colis en tricycle, la fenêtre des lieux en un clic.</div>
+<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>13:04</b>) contient tout. <b>Le backend doit être déployé avant</b> (nouvelle route de devis <code>GET /deliveries/quote</code>), sinon l'écran des colis n'affichera pas de prix. <b>Priorités de test :</b> le prix d'un colis (ex. 1 km en Speeder à essence = 280 F), le Gros colis en tricycle, la fenêtre des lieux en un clic.</div>
 
 <h2>2. Colis : prix, gros colis et nouvelle mise en page (« Envoyer un colis »)</h2>
 <ul>
@@ -24,7 +24,7 @@
 <li><b>Recherche d'adresse</b> (toutes les cartes : course, colis, coursier personnel, client et Speeder) : elle trouve désormais les <b>quartiers et villages de Cotonou et d'Abomey-Calavi</b> (236 lieux, avec leur arrondissement), même sans accent. Taper le nom d'un arrondissement liste ses quartiers. Les lieux les plus proches de la personne passent en premier. Détail côté backend.</li>
 <li><b>Aucun résultat</b> : le champ d'adresse du colis et du coursier personnel invite à <b>toucher la carte</b> pour poser le point exactement, même dans un village reculé.</li>
 <li><b>Adresse d'un point touché sur la carte</b> : le quartier ou village connu à moins de 700 m, avec son arrondissement (ex. « Houèto-Centre, Togba, Abomey-Calavi »).</li>
-<li><b>Serveur de tuiles de secours</b> : si le serveur principal de la carte échoue plus de 5 fois, la carte bascule sur un second serveur (<code>components/OSMMapView.tsx</code>) ; concerne tous les profils.</li>
+<li><b>Carte standard conservée</b> (<code>components/OSMMapView.tsx</code>) : la carte OpenStreetMap d'origine (pharmacies, commerces, écoles…) reste <b>toujours</b> la couche affichée. Une première version basculait sur un autre style après 6 tuiles en échec, ce qui pouvait faire disparaître des pharmacies et commerces ; corrigé : le serveur de secours est maintenant ajouté <b>en dessous</b> et ne comble que les tuiles manquantes. Concerne tous les profils.</li>
 <li><b>Rayon des Speeders élargi</b> (valeurs de <code>tarification.json</code> synchronisées) : recherche autour du Speeder 15 km, carte 20 km, maximum 30 km (avant 8, 10 et 15 km).</li>
 <li><b>PDF</b> : <code>QUARTIERS_VILLAGES_ELOIGNES_COTONOU_CALAVI_2026-10-16.pdf</code> (distances de chaque quartier à son arrondissement et à Cotonou ; limites : données OpenStreetMap, rattachement par proximité à Abomey-Calavi).</li>
 </ul>
@@ -48,11 +48,11 @@
 </ul>
 
 <h2>5. Ce qui n'est pas encore commité</h2>
-<p>Rien côté mobile : tout est sur <code>main</code> (dernier commit <code>94eaecee</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
+<p>Rien côté mobile : tout est sur <code>main</code> (dernier commit <code>38c4f4e3</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
 
 <h2>6. APK et environnement</h2>
 <ul>
-<li>Build local (Gradle hors ligne), signé avec la clé de debug : dernier APK à <b>11:50</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code>. Désinstaller l'ancienne version si l'installation est refusée.</li>
+<li>Build local (Gradle hors ligne), signé avec la clé de debug : dernier APK à <b>13:04</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code>. Désinstaller l'ancienne version si l'installation est refusée.</li>
 <li>Pour tester un colis, il faut un livreur express avec un véhicule : <code>node --env-file=.env scripts/create-provider.js &lt;numéro&gt; --profile livreur-express --vehicle ZEM_TRICYCLE</code> (avec l'URL externe et <code>--allow-remote</code> pour la base Render).</li>
 <li><b>Sécurité :</b> pense à changer le mot de passe de la base Render après les tests.</li>
 </ul>
@@ -77,6 +77,7 @@
 <tr><td><code>52419639</code></td><td>Devis serveur des colis, Gros colis en tricycle, fenêtre des lieux en un clic, photo de fond de l'écran du numéro, Boutique « bientôt disponible », Mes trajets vers l'historique</td></tr>
 <tr><td><code>fc6f3fb5</code></td><td>Colis en haut et Speeders en cartes responsives, gros colis, base des colis moto selon le type, carte plein écran comme la course simple, Louer Auto « bientôt disponible »</td></tr>
 <tr><td><code>94eaecee</code></td><td>Quartiers et villages dans la recherche, rayon des Speeders élargi, pages Mes courses et Dossier prestataire, serveur de tuiles de secours</td></tr>
+<tr><td><code>38c4f4e3</code></td><td>Correctif : carte standard toujours affichée (pharmacies, commerces), résultats en ligne conservés dans la recherche</td></tr>
 </table>
 <div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>

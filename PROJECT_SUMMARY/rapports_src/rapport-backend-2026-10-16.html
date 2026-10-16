@@ -1,8 +1,8 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 3 commits sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>) · 29 suites / 321 tests · mise à jour de 10 h 48</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 4 commits sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>) · 29 suites / 322 tests · mise à jour de 10 h 48</span></div>
 
 <h2>1. En résumé</h2>
-<p>Deux changements côté serveur, tous dans <code>delivery/</code> : un <b>devis de colis</b> (<code>GET /deliveries/quote</code>) qui donne au client exactement le prix que le serveur facturera, et la règle <b>« gros colis = Speeder tricycle uniquement »</b>. Aucune migration aujourd'hui. Je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>94eaecee</code>).</p>
+<p>Deux changements côté serveur, tous dans <code>delivery/</code> : un <b>devis de colis</b> (<code>GET /deliveries/quote</code>) qui donne au client exactement le prix que le serveur facturera, et la règle <b>« gros colis = Speeder tricycle uniquement »</b>. Aucune migration aujourd'hui. Je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>38c4f4e3</code>).</p>
 <div class="box warn"><b>À vérifier :</b> (1) le devis utilise OSRM, et <b>à défaut</b> la distance à vol d'oiseau × 1,3 : si OSRM est indisponible depuis Render, le prix peut être plus élevé que la distance réelle (§2) ; (2) le prix affiché au client et le prix facturé viennent du même calcul, mais sont <b>deux appels OSRM</b> distincts : un écart de quelques dizaines de mètres est possible.</div>
 
 <h2>2. Devis de colis (<code>GET /deliveries/quote</code>)</h2>
@@ -22,15 +22,15 @@
 <h2>3bis. Quartiers et villages reculés (<code>places/</code>) et rayon du radar</h2>
 <ul>
 <li><b>Base de lieux</b> <code>places/benin-gazetteer.json</code> : <b>236 quartiers, villages et hameaux</b> de Cotonou (13 arrondissements, rattachement exact par les limites OpenStreetMap) et d'Abomey-Calavi (9 arrondissements : Abomey-Calavi, Godomey, Togba, Ouèdo, Hêvié, Akassato, Glo-Djigbé, Zinvié, Kpanroun ; rattachement par proximité du chef-lieu, car OSM n'a pas leurs limites). Données OpenStreetMap du 16/10/2026 ; le PDF <code>QUARTIERS_VILLAGES_ELOIGNES_COTONOU_CALAVI_2026-10-16.pdf</code> en détaille les distances.</li>
-<li><b>Recherche</b> (<code>GET /places/search</code>) : les lieux de cette base arrivent <b>en tête</b>, insensibles aux accents et à la ponctuation ; le nom d'un arrondissement liste ses quartiers (8 au plus). Puis les résultats Photon / Nominatim et la liste de secours (villes du Bénin). Quand la position de la personne est transmise, tri par distance. Limite de la liste portée à 12. Si la recherche en ligne trouve moins de 3 résultats, elle réessaie avec « , Bénin » puis avec le dernier mot ; fenêtre de recherche élargie (≈ 100 km) et 10 résultats demandés à Nominatim, 15 à Photon.</li>
+<li><b>Recherche</b> (<code>GET /places/search</code>) : ordre des résultats : (1) les quartiers / villages de cette base dont le nom <b>commence par la saisie</b> (4 au plus), insensibles aux accents et à la ponctuation ; (2) <b>tous les résultats en ligne</b> (Photon / Nominatim : pharmacies, commerces, écoles…) dans leur ordre de pertinence ; (3) le reste des quartiers connus (le nom d'un arrondissement liste ses quartiers, 8 au plus) ; (4) la liste de secours (villes du Bénin). La position de la personne, si elle est transmise, trie les quartiers connus par distance, pas les résultats en ligne. Limite de la liste : 16. <i>La première version triait tout par distance et pouvait repousser des pharmacies et commerces hors de la liste : corrigé dans le commit <code>38c4f4e3</code>.</i> Si la recherche en ligne trouve moins de 3 résultats, elle réessaie avec « , Bénin » puis avec le dernier mot ; fenêtre de recherche élargie (≈ 100 km) et 10 résultats demandés à Nominatim, 15 à Photon.</li>
 <li><b>Adresse d'un point</b> (<code>POST /places/reverse-geocode</code>) : le lieu connu le plus proche à moins de 700 m donne « lieu, arrondissement, commune » ; sinon Nominatim essaie les niveaux 18, 14 puis 10 (rue, village, arrondissement, commune) ; sinon « Près de [ville la plus proche] ».</li>
 <li><b>Rayon du radar</b> (<code>tarification.json</code>) : <code>searchRadiusKm</code> 8 → <b>15</b>, <code>nearbyRadiusKm</code> 10 → <b>20</b>, <code>maxRadiusKm</code> 15 → <b>30</b>. Le lieu connu le plus éloigné de Cotonou, Kpanroun, est à 33,9 km à vol d'oiseau (≈ 44 km par la route) : il reste hors de portée d'un Speeder situé à Cotonou. Les commentaires de <code>rides.controller.ts</code> et <code>rides.service.ts</code> ont été mis à jour (20 km).</li>
-<li>Tests : <code>places-gazetteer.spec.ts</code> (5 tests : village reculé sans accent, quartiers d'un arrondissement, tri par proximité, adresse du quartier connu, repli sur la ville proche).</li>
+<li>Tests : <code>places-gazetteer.spec.ts</code> (6 tests : village reculé sans accent, quartiers d'un arrondissement, tri par proximité, adresse du quartier connu, repli sur la ville proche, résultats en ligne conservés).</li>
 </ul>
 
 <h2>4. Qualité et limites</h2>
 <ul>
-<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>29 suites / 321 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis à 1 km par type de colis (170 / 190 / 270 F en essence, 305 F en tricycle) ; prix à la création (petit colis 10 km = 820 F) ; gros colis refusé en moto et accepté en tricycle.</li>
+<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>29 suites / 322 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis à 1 km par type de colis (170 / 190 / 270 F en essence, 305 F en tricycle) ; prix à la création (petit colis 10 km = 820 F) ; gros colis refusé en moto et accepté en tricycle.</li>
 <li><b>Non vérifié :</b> l'appel OSRM depuis Render ; la route de devis avec un vrai compte ; l'écart entre devis et prix facturé sur de vrais trajets.</li>
 <li><b>Pas de test dédié</b> pour la validation des paramètres du devis dans le contrôleur.</li>
 </ul>
@@ -51,6 +51,7 @@
 <tr><td><code>52419639</code></td><td><code>GET /deliveries/quote</code> ; gros colis réservé au tricycle ; tests</td></tr>
 <tr><td><code>fc6f3fb5</code></td><td>Base des colis moto selon le type (document 100, petit 120, moyen 200 ; 70 F/km), devis avec <code>packageType</code>, tests mis à jour</td></tr>
 <tr><td><code>94eaecee</code></td><td>Base de 236 quartiers et villages, recherche et géocodage améliorés, rayon du radar élargi (15 / 20 / 30 km), test</td></tr>
+<tr><td><code>38c4f4e3</code></td><td>Recherche : résultats en ligne conservés (nouvel ordre, 16 résultats), test</td></tr>
 </table>
 <div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>
