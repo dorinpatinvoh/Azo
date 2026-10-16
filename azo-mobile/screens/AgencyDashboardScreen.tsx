@@ -59,8 +59,8 @@ type Props = {
 };
 
 // Barre du bas de l'espace agence : « AZƆ̀ Pay » ouvre le portefeuille, les autres onglets restent dans cet écran.
-type AgencyTab = "home" | "fleet" | "wallet" | "profile";
-const AGENCY_TABS: PillTabItem<AgencyTab>[] = [
+export type AgencyTab = "home" | "fleet" | "wallet" | "profile";
+export const AGENCY_TABS: PillTabItem<AgencyTab>[] = [
   { id: "home", label: "Accueil", icon: "business-outline", iconActive: "business" },
   { id: "fleet", label: "Flotte", icon: "people-outline", iconActive: "people" },
   { id: "wallet", label: "AZƆ̀ Pay", icon: "wallet-outline", iconActive: "wallet" },
@@ -69,6 +69,10 @@ const AGENCY_TABS: PillTabItem<AgencyTab>[] = [
 
 // Garde l'onglet quand on ouvre une autre page (portefeuille, informations…)
 const rememberedAgencyTab: { tab: AgencyTab } = { tab: "home" };
+/** Retient l'onglet choisi depuis la barre du bas de l'écran AZƆ̀ Pay. */
+export function rememberAgencyTab(tab: string) {
+  if (tab === "home" || tab === "fleet" || tab === "profile") rememberedAgencyTab.tab = tab;
+}
 
 type RosterFilter = "ALL" | "EN_COURSE" | "DISPONIBLE";
 

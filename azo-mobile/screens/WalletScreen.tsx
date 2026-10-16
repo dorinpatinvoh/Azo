@@ -8,6 +8,11 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { errorMessage, walletApi, WalletTransaction } from "../services/api";
 import PaymentWebView from "../components/PaymentWebView";
+import ClientTabBar from "../components/ClientTabBar";
+import PillTabBar from "../components/PillTabBar";
+import { ZEM_TABS } from "./DriverHomeScreen";
+import { COURIER_TABS } from "./CourierHomeScreen";
+import { AGENCY_TABS } from "./AgencyDashboardScreen";
 import { MIN_RECHARGE, RECHARGE_POLL_MAX_MS, RECHARGE_POLL_MS, RECHARGE_PRESETS } from "../config/wallet";
 import { useI18n, type MessageKey } from "../i18n";
 import { BrandAlert } from "../components/BrandAlert";
@@ -26,15 +31,30 @@ const PAYMENT_METHODS: { id: string; label: string; metaKey: MessageKey; icon: s
   { id: "visa", label: "Visa", metaKey: "wallet.pm.card", icon: "VISA" },
   { id: "mastercard", label: "Mastercard", metaKey: "wallet.pm.card", icon: "MC" },
 ];
-type Props = { onBack: () => void };
+type Props = {
+  onBack: () => void;
+  /** Un onglet de la barre du bas a été touché (l'application ouvre l'écran correspondant du profil de l'utilisateur). */
+  onNavigateTab?: (tab: string) => void;
+};
 
-export default function WalletScreen({ onBack }: Props) {
+type BarKind = "client" | "zem" | "courier" | "agency" | null;
+
+export default function WalletScreen({ onBack, onNavigateTab }: Props) {
   const { t, locale } = useI18n();
   // Speeder, conducteurs et coursiers ne rechargent pas AZƆ̀ Pay : leur solde vient des courses (et de leur agence)
   const [canRecharge, setCanRecharge] = useState(true);
+  // Barre du bas de CE profil (client, Speeder, coursier, agence) : elle ne doit jamais disparaître en ouvrant AZƆ̀ Pay
+  const [barKind, setBarKind] = useState<BarKind>(null);
   useEffect(() => {
-    SecureStore.getItemAsync("userRole")
-      .then((role) => setCanRecharge((role ?? "").toUpperCase().trim() !== "DRIVER"))
+    Promise.all([SecureStore.getItemAsync("userRole"), SecureStore.getItemAsync("providerType")])
+      .then(([roleRaw, typeRaw]) => {
+        const role = (roleRaw ?? "").toUpperCase().trim();
+        const type = (typeRaw ?? "").toUpperCase().trim();
+        setCanRecharge(role !== "DRIVER");
+        setBarKind(
+          role === "CLIENT" ? "client" : role === "AGENCY" || type === "AGENCY" ? "agency" : role === "DRIVER" || role === "COURIER" ? (type === "COURIER" || role === "COURIER" ? "courier" : "zem") : null
+        );
+      })
       .catch(() => undefined);
   }, []);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -253,6 +273,11 @@ export default function WalletScreen({ onBack }: Props) {
           ))}
         </View>
       </ScrollView>
+
+      {barKind === "client" && <ClientTabBar active="wallet" onNavigate={(tab) => onNavigateTab?.(tab)} />}
+      {barKind === "zem" && <PillTabBar items={ZEM_TABS} active="wallet" onNavigate={(tab) => tab !== "wallet" && onNavigateTab?.(tab)} />}
+      {barKind === "courier" && <PillTabBar items={COURIER_TABS} active="wallet" onNavigate={(tab) => tab !== "wallet" && onNavigateTab?.(tab)} />}
+      {barKind === "agency" && <PillTabBar items={AGENCY_TABS} active="wallet" onNavigate={(tab) => tab !== "wallet" && onNavigateTab?.(tab)} />}
 
       {/* Page de paiement FedaPay intégrée : se ferme à la fin du paiement, le solde est ensuite suivi automatiquement */}
       <PaymentWebView

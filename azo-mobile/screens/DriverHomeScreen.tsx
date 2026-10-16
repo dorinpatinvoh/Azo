@@ -52,11 +52,15 @@ type Props = {
 };
 
 // Mémorise l'état de l'espace Speeder quand on ouvre une autre page (portefeuille, informations…) : au retour il reste en ligne, sur le même onglet.
+/** L'écran AZƆ̀ Pay s'ouvre à part : on retient l'onglet choisi dans sa barre du bas pour le retrouver en revenant à l'espace Speeder. */
+export function rememberZemTab(tab: string) {
+  if (tab === "home" || tab === "gains" || tab === "activity" || tab === "profile") rememberedZem.tab = tab;
+}
 const rememberedZem: { online: boolean; tab: "home" | "gains" | "activity" | "wallet" | "profile" } = { online: false, tab: "home" };
 
 // Barre du bas de l'espace Speeder : « Portefeuille » ouvre l'écran AZƆ̀ Pay, les autres onglets restent dans cet écran.
-type ZemTab = "home" | "gains" | "activity" | "wallet" | "profile";
-const ZEM_TABS: PillTabItem<ZemTab>[] = [
+export type ZemTab = "home" | "gains" | "activity" | "wallet" | "profile";
+export const ZEM_TABS: PillTabItem<ZemTab>[] = [
   { id: "home", label: "Accueil", icon: "radio-outline", iconActive: "radio" },
   { id: "gains", label: "Gains", icon: "stats-chart-outline", iconActive: "stats-chart" },
   { id: "activity", label: "Activité", icon: "receipt-outline", iconActive: "receipt" },

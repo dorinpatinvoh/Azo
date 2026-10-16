@@ -105,12 +105,17 @@ describe("agence : le propriétaire n'est pas un chauffeur", () => {
 });
 
 describe("agence : recharger / retirer de l'argent sur le compte d'un chauffeur", () => {
-  function makeWalletService(balances: Record<string, number>) {
+  function makeWalletService(balances: Record<string, number>, protectedBalances: Record<string, number> = {}) {
     const base = makeService();
+    const originalUserFindUnique = base.prisma.user.findUnique;
+    const protectedLookup = (args: any) =>
+      args?.select?.agencyProtectedBalance ? Promise.resolve({ agencyProtectedBalance: protectedBalances[args.where.id] ?? 0 }) : originalUserFindUnique(args);
+    base.prisma.user.findUnique = jest.fn().mockImplementation(protectedLookup);
     const wallets: Record<string, { id: string; userId: string; balance: number }> = {};
     const wallet = (userId: string) => (wallets[userId] ??= { id: "w-" + userId, userId, balance: balances[userId] ?? 0 });
     const transactions: any[] = [];
     const tx: any = {
+      user: { findUnique: jest.fn().mockImplementation(protectedLookup) },
       wallet: {
         upsert: jest.fn().mockImplementation(({ where }) => Promise.resolve(wallet(where.userId))),
         updateMany: jest.fn().mockImplementation(({ where, data }) => {
@@ -162,6 +167,22 @@ describe("agence : recharger / retirer de l'argent sur le compte d'un chauffeur"
     expect(wallets["driver-1"].balance).toBe(5000);
     expect(wallets[ownerId].balance).toBe(3000);
     expect(res).toMatchObject({ direction: "withdraw", agencyBalance: 3000, driver: { balance: 5000 } });
+  });
+
+  it("l'argent d'avant le rattachement reste au chauffeur : l'agence ne retire que la part gagnée ou rechargée depuis", async () => {
+    // 8 000 F sur le compte, dont 5 000 F que le chauffeur avait avant d'entrer dans l'agence : 3 000 F seulement sont accessibles
+    const { service, wallets } = makeWalletService({ "driver-1": 8000 }, { "driver-1": 5000 });
+    const ok: any = await service.withdrawFromDriver(ownerId, "driver-1", 3000);
+    expect(wallets["driver-1"].balance).toBe(5000);
+    expect(wallets[ownerId].balance).toBe(3000);
+    expect(ok.driver.balance).toBe(0); // l'agence ne voit plus rien de disponible : le reste est le solde personnel du chauffeur
+  });
+
+  it("retrait refusé dès qu'il toucherait au solde d'avant le rattachement", async () => {
+    const { service, wallets } = makeWalletService({ "driver-1": 8000 }, { "driver-1": 5000 });
+    await expect(service.withdrawFromDriver(ownerId, "driver-1", 3001)).rejects.toMatchObject({ response: { code: "AGENCY_PROTECTED_BALANCE" } });
+    expect(wallets["driver-1"].balance).toBe(8000);
+    expect(wallets[ownerId]?.balance ?? 0).toBe(0);
   });
 
   it("retrait refusé au-delà du solde du chauffeur", async () => {

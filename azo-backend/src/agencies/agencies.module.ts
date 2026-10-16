@@ -114,8 +114,10 @@ export class AgenciesService {
     if (driver.agencyId)
       throw new BadRequestException("Ce chauffeur est déjà rattaché à une autre agence");
 
+    // Son solde d'aujourd'hui lui appartient : l'agence n'aura accès qu'à ce qu'il gagne ou reçoit à partir de maintenant
+    const wallet = await this.prisma.wallet.findUnique({ where: { userId: driver.id }, select: { balance: true } });
     const [updated] = await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: driver.id }, data: { agencyId: agency.id } }),
+      this.prisma.user.update({ where: { id: driver.id }, data: { agencyId: agency.id, agencyJoinedAt: new Date(), agencyProtectedBalance: wallet?.balance ?? 0 } }),
       this.prisma.providerProfile.update({ where: { id: driver.provider.id }, data: { agencyId: agency.id } }),
       this.prisma.providerEvent.create({
         data: {
@@ -149,7 +151,7 @@ export class AgenciesService {
       throw new NotFoundException("Ce chauffeur ne fait pas partie de ton agence");
 
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: driverId }, data: { agencyId: null } }),
+      this.prisma.user.update({ where: { id: driverId }, data: { agencyId: null, agencyJoinedAt: null, agencyProtectedBalance: 0 } }),
       ...(driver.provider
         ? [
             this.prisma.providerProfile.update({ where: { id: driver.provider.id }, data: { agencyId: null } }),
@@ -286,16 +288,23 @@ export class AgenciesService {
         const known = await tx.transaction.findFirst({ where: { walletId: fromWallet.id, meta: metaKey } });
         if (known) return { replay: true as const, fromWallet, toWallet };
       }
+      // Retrait : l'argent que le chauffeur avait avant son rattachement lui appartient, l'agence n'y touche pas
+      const protectedBalance =
+        direction === "withdraw"
+          ? (await tx.user.findUnique({ where: { id: driverId }, select: { agencyProtectedBalance: true } }))?.agencyProtectedBalance ?? 0
+          : 0;
       const debit = await tx.wallet.updateMany({
-        where: { id: fromWallet.id, balance: { gte: value } },
+        where: { id: fromWallet.id, balance: { gte: value + protectedBalance } },
         data: { balance: { decrement: value } },
       });
-      if (debit.count !== 1)
-        throw new BadRequestException(
-          direction === "fund"
-            ? "Solde de l'agence insuffisant : recharge d'abord ton portefeuille."
-            : "Le solde du chauffeur est insuffisant pour ce retrait."
-        );
+      if (debit.count !== 1) {
+        if (direction === "fund") throw new BadRequestException("Solde de l'agence insuffisant : recharge d'abord ton portefeuille.");
+        const available = Math.max(0, fromWallet.balance - protectedBalance);
+        throw new BadRequestException({
+          code: "AGENCY_PROTECTED_BALANCE",
+          message: `Tu peux retirer au plus ${available.toLocaleString("fr-FR")} FCFA : l'argent gagné par le chauffeur avant son rattachement à l'agence lui appartient.`,
+        });
+      }
       await tx.wallet.update({ where: { id: toWallet.id }, data: { balance: { increment: value } } });
       await tx.transaction.createMany({
         data: [
@@ -316,9 +325,10 @@ export class AgenciesService {
       return { replay: false as const, fromWallet, toWallet };
     });
 
-    const [ownerWallet, driverWallet] = await Promise.all([
+    const [ownerWallet, driverWallet, driverUser] = await Promise.all([
       this.prisma.wallet.findUnique({ where: { userId: ownerId } }),
       this.prisma.wallet.findUnique({ where: { userId: driverId } }),
+      this.prisma.user.findUnique({ where: { id: driverId }, select: { agencyProtectedBalance: true } }),
     ]);
 
     if (!result.replay) {
@@ -345,7 +355,7 @@ export class AgenciesService {
       amount: value,
       replayed: result.replay,
       agencyBalance: ownerWallet?.balance ?? 0,
-      driver: { id: driverId, balance: driverWallet?.balance ?? 0 },
+      driver: { id: driverId, balance: Math.max(0, (driverWallet?.balance ?? 0) - (driverUser?.agencyProtectedBalance ?? 0)) },
     };
   }
 
@@ -430,7 +440,8 @@ export class AgenciesService {
           state: active > 0 ? "EN_COURSE" : "DISPONIBLE",
           rating: profile?.rating ?? 0,
           jobsCompleted: profile?.jobsCompleted ?? 0,
-          balance: wallets.find((w) => w.userId === d.id)?.balance ?? 0,
+          // Part que l'agence peut gérer (recharges + gains depuis le rattachement) : le solde d'avant lui reste privé
+          balance: Math.max(0, (wallets.find((w) => w.userId === d.id)?.balance ?? 0) - (d.agencyProtectedBalance ?? 0)),
         };
       }),
     };

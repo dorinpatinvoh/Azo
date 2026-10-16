@@ -173,6 +173,10 @@ model User {
 
   agencyId String?
   agency   Agency? @relation(fields: [agencyId], references: [id])
+  /// Date du rattachement à l'agence actuelle
+  agencyJoinedAt DateTime?
+  /// Solde du chauffeur au moment du rattachement : cet argent gagné AVANT l'agence lui appartient, l'agence ne peut pas le retirer
+  agencyProtectedBalance Int @default(0)
 
   // Dossier prestataire (null pour un simple client)
   provider ProviderProfile?

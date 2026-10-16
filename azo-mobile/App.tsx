@@ -70,6 +70,9 @@ import {
 import { colors, radius, spacing } from "./theme/colors";
 import { FONT } from "./theme/fontNormalize";
 import { BrandAlert, BrandAlertHost } from "./components/BrandAlert";
+import { rememberZemTab } from "./screens/DriverHomeScreen";
+import { rememberCourierTab } from "./screens/CourierHomeScreen";
+import { rememberAgencyTab } from "./screens/AgencyDashboardScreen";
 
 // Initialisation sûre (ne s'exécute pas sur Expo Go Android)
 setupNotificationHandler();
@@ -443,6 +446,25 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
     goTo("ride-tracking");
   }, [sessionToken, goTo]);
 
+  /** Onglet touché dans la barre du bas de l'écran AZƆ̀ Pay : le client va à l'écran demandé, un prestataire retrouve son espace sur cet onglet. */
+  const handleWalletTab = useCallback(
+    async (tab: string) => {
+      const role = ((await SecureStore.getItemAsync("userRole")) ?? "").toUpperCase().trim();
+      const providerStatus = await SecureStore.getItemAsync("providerStatus");
+      const providerType = ((await SecureStore.getItemAsync("providerType")) ?? "").toUpperCase().trim();
+      if (role === "CLIENT") {
+        goTo(tab as Route);
+        return;
+      }
+      const workspace = routeFor(role, providerStatus, providerType);
+      if (workspace === "agency-dashboard") rememberAgencyTab(tab);
+      else if (workspace === "courier-home") rememberCourierTab(tab);
+      else if (workspace === "driver-home") rememberZemTab(tab);
+      goTo(workspace);
+    },
+    [goTo]
+  );
+
   const handleSelectService = useCallback(
     (service: string) => {
       setQuickDest(null);
@@ -731,7 +753,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
         )}
 
         {route === "wallet" && (
-          <WalletScreen onBack={() => goBack()} />
+          <WalletScreen onBack={() => goBack()} onNavigateTab={handleWalletTab} />
         )}
 
         {route === "courses" && (

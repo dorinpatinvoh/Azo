@@ -65,8 +65,8 @@ const isToday = (iso: string) => {
 };
 
 // Barre du bas : « AZƆ̀ Pay » ouvre le portefeuille, les autres onglets restent dans cet écran.
-type CourierTab = "home" | "gains" | "history" | "wallet" | "profile";
-const COURIER_TABS: PillTabItem<CourierTab>[] = [
+export type CourierTab = "home" | "gains" | "history" | "wallet" | "profile";
+export const COURIER_TABS: PillTabItem<CourierTab>[] = [
   { id: "home", label: "Missions", icon: "bicycle-outline", iconActive: "bicycle" },
   { id: "gains", label: "Gains", icon: "stats-chart-outline", iconActive: "stats-chart" },
   { id: "history", label: "Historique", icon: "receipt-outline", iconActive: "receipt" },
@@ -76,6 +76,10 @@ const COURIER_TABS: PillTabItem<CourierTab>[] = [
 const COURIER_TITLES: Record<CourierTab, string> = { home: "Mes missions", gains: "Mes gains", history: "Historique", wallet: "AZƆ̀ Pay", profile: "Mon profil" };
 
 // Garde l'onglet et l'état en ligne quand on ouvre une autre page (portefeuille, informations…)
+/** Retient l'onglet choisi depuis la barre du bas de l'écran AZƆ̀ Pay. */
+export function rememberCourierTab(tab: string) {
+  if (tab === "home" || tab === "gains" || tab === "history" || tab === "profile") rememberedCourier.tab = tab;
+}
 const rememberedCourier: { tab: CourierTab; online: boolean } = { tab: "home", online: true };
 export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSupport, onOpenWallet, onOpenInfo, onOpenNotifications }: Props) {
   const { lang } = useI18n();

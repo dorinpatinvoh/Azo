@@ -503,6 +503,12 @@ export class WalletService {
         },
       }),
     ]);
+    // Chauffeur rattaché à une agence : la part protégée ne dépasse jamais son solde
+    try {
+      await this.prisma.$executeRaw`UPDATE "User" SET "agencyProtectedBalance" = LEAST("agencyProtectedBalance", ${updated.balance}) WHERE "id" = ${userId} AND "agencyId" IS NOT NULL`;
+    } catch {
+      // sans effet sur le retrait déjà effectué
+    }
     return {...quote, balance: updated.balance };
   }
 }
