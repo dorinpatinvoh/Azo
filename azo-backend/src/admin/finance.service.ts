@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { normalizeBeninPhone } from "../common/phone";
+import { PricingService } from "../pricing/pricing.module";
 
 /** Retrait minimal de l'entreprise (FCFA). */
 export const MIN_COMPANY_WITHDRAWAL = 1000;
@@ -27,7 +28,7 @@ const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 
  */
 @Injectable()
 export class FinanceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, @Optional() private pricing?: PricingService) {}
 
   private async monthly(rows: Promise<MonthlyRow[]>): Promise<Map<string, number>> {
     const map = new Map<string, number>();
@@ -36,6 +37,36 @@ export class FinanceService {
       map.set(monthKey(new Date(row.m)), (map.get(monthKey(new Date(row.m))) ?? 0) + Number(row.total ?? 0));
     }
     return map;
+  }
+
+  /**
+   * Commission de l'entreprise sur chaque course et chaque livraison terminées (les plus récentes d'abord) :
+   * montant de la course, pourcentage appliqué et somme prélevée.
+   */
+  async commissions(limit = 50) {
+    const n = Math.min(Math.max(Math.floor(limit) || 50, 1), 200);
+    const rides = await this.prisma.$queryRaw<{ id: string; at: Date; amount: number; commission: number; who: string | null; vehicle: string | null }[]>`
+      SELECT r."id", r."createdAt" AS at, COALESCE(r."finalPrice", r."price") AS amount, r."commission", COALESCE(u."fullName", u."phone") AS who, r."vehicleType"::text AS vehicle
+      FROM "Ride" r LEFT JOIN "User" u ON u."id" = r."driverId"
+      WHERE r."status" = 'COMPLETED' ORDER BY r."createdAt" DESC LIMIT ${n}`;
+    const deliveries = await this.prisma.$queryRaw<{ id: string; at: Date; amount: number; who: string | null; mode: string | null }[]>`
+      SELECT d."id", d."createdAt" AS at, d."price" AS amount, COALESCE(u."fullName", u."phone") AS who, d."mode"
+      FROM "Delivery" d LEFT JOIN "User" u ON u."id" = d."courierId"
+      WHERE d."status" = 'COMPLETED' ORDER BY d."createdAt" DESC LIMIT ${n}`;
+    const pct = (amount: number, commission: number) => (amount > 0 ? Math.round((commission / amount) * 1000) / 10 : 0);
+    const rows = [
+      ...rides.map((r) => {
+        const amount = Number(r.amount);
+        const commission = Number(r.commission);
+        return { kind: "RIDE" as const, id: r.id, ref: `Course #${r.id.slice(0, 6)}`, date: r.at, who: r.who, vehicle: r.vehicle, amount, commission, pct: pct(amount, commission) };
+      }),
+      ...deliveries.map((d) => {
+        const amount = Number(d.amount);
+        const commission = this.pricing ? this.pricing.platformCommission(amount) : Math.round(amount * 0.15);
+        return { kind: d.mode === "PERSONAL" ? ("PERSONAL" as const) : ("DELIVERY" as const), id: d.id, ref: `${d.mode === "PERSONAL" ? "Coursier personnel" : "Livraison"} #${d.id.slice(0, 6)}`, date: d.at, who: d.who, vehicle: null, amount, commission, pct: pct(amount, commission) };
+      }),
+    ];
+    return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, n);
   }
 
   /** Gains par source et par mois. */

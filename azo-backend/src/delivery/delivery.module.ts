@@ -461,6 +461,19 @@ export class DeliveryService {
       });
     }
 
+    // Le livreur est informé : montant de la mission, pourcentage de commission débité, ce qu'il reçoit
+    if (courierId !== d.clientId && finalPrice > 0) {
+      const pct = Math.round((commission / finalPrice) * 1000) / 10;
+      await this.notifications
+        .push(courierId, "Paiement reçu", `Livraison ${finalPrice} FCFA · commission AZƆ̀ ${pct} % débitée (−${commission} F) · tu reçois +${net} FCFA.`, "payment", {
+          titleKey: "NOTIFICATION_DELIVERY_PAID_COURIER",
+          bodyKey: "NOTIFICATION_DELIVERY_PAID_COURIER",
+          params: { amount: finalPrice, pct, commission, net },
+          data: { event: "delivery-paid", deliveryId: d.id },
+        })
+        .catch(() => null);
+    }
+
     const updated = await this.prisma.delivery.update({
       where: { id },
       data: { status: "COMPLETED", courierId, ...(finalKm !== null ? { price: finalPrice, distanceKm: finalKm } : {}) },

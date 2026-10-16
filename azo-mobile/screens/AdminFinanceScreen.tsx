@@ -16,7 +16,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { AdminCompanyWithdrawal, AdminFinanceSummary, adminApi, errorMessage } from "../services/api";
+import { AdminCommissionRow, AdminCompanyWithdrawal, AdminFinanceSummary, adminApi, errorMessage } from "../services/api";
 import { cleanBeninDigits, formatBeninPhoneDisplay, formatBeninPhoneInput, isValidBeninPhone } from "../utils/phone";
 import AdminTabBar, { type AdminTab } from "../components/AdminTabBar";
 
@@ -51,6 +51,7 @@ const monthLabel = (key: string) => {
 export default function AdminFinanceScreen({ onNavigateTab }: Props) {
   const [summary, setSummary] = useState<AdminFinanceSummary | null>(null);
   const [withdrawals, setWithdrawals] = useState<AdminCompanyWithdrawal[]>([]);
+  const [commissions, setCommissions] = useState<AdminCommissionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,9 +70,10 @@ export default function AdminFinanceScreen({ onNavigateTab }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const [s, w] = await Promise.all([adminApi.financeSummary(), adminApi.withdrawals()]);
+      const [s, w, c] = await Promise.all([adminApi.financeSummary(), adminApi.withdrawals(), adminApi.commissions(40).catch(() => [] as AdminCommissionRow[])]);
       setSummary(s);
       setWithdrawals(w);
+      setCommissions(c);
       setError(null);
     } catch (e) {
       setError(errorMessage(e));
@@ -234,6 +236,32 @@ export default function AdminFinanceScreen({ onNavigateTab }: Props) {
                     <Text style={styles.sourceTotal}>{fcfa(s.total)}</Text>
                   </View>
                 ))}
+              </View>
+
+              {/* Commission de chaque course */}
+              <Text style={styles.sectionTitle}>Commission sur chaque course</Text>
+              <View style={styles.card}>
+                {commissions.length === 0 ? (
+                  <Text style={styles.sourceSub}>Aucune course terminée pour le moment.</Text>
+                ) : (
+                  commissions.map((c, i) => (
+                    <View key={`${c.kind}-${c.id}`} style={[styles.sourceRow, i < commissions.length - 1 && styles.divider]}>
+                      <View style={styles.sourceIcon}>
+                        <MaterialIcons name={c.kind === "RIDE" ? "two-wheeler" : c.kind === "PERSONAL" ? "directions-run" : "local-shipping"} size={20} color={colors.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.sourceLabel} numberOfLines={1}>{c.ref}</Text>
+                        <Text style={styles.sourceSub} numberOfLines={1}>
+                          {new Date(c.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} · {c.who ?? "—"} · course {fcfa(c.amount)}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={styles.sourceTotal}>{fcfa(c.commission)}</Text>
+                        <Text style={styles.sourceSub}>{c.pct.toLocaleString("fr-FR")} %</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
               </View>
 
               {/* 6 derniers mois */}

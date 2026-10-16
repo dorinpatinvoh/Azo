@@ -895,8 +895,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
               setRateTarget({ rideId: done.id ?? activeRide.id, name: finishedName });
               setDropCodeInput("");
               await loadAccount();
-              const net = paidAmount(done) - (done.commission ?? 0);
-              Alert.alert("Course terminée 🎉", `+${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`);
+              const gross = paidAmount(done);
+              const commission = done.commission ?? 0;
+              const net = gross - commission;
+              const pct = gross > 0 ? Math.round((commission / gross) * 1000) / 10 : 0;
+              Alert.alert("Course terminée 🎉", `Course : ${fcfa(gross)}\nCommission AZƆ̀ ${pct.toLocaleString("fr-FR")} % débitée : −${fcfa(commission)}\nTu reçois : +${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`);
             } catch (e) {
               Alert.alert("Impossible de terminer", errorMessage(e));
             } finally {

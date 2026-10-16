@@ -152,6 +152,10 @@ describe("accord bilatéral d'arrêt anticipé", () => {
     await service.complete(rideId, driverId, "4821");
     expect(pricing.rideCommission).toHaveBeenCalledWith(expect.anything(), 220);
     expect(tx.wallet.update).toHaveBeenCalledWith({ where: { id: "wallet" }, data: { balance: { increment: 198 } } });
+    // Le prestataire voit la course entière (+220), puis la commission débitée (−22 = 10 %) : 220 − 22 = 198 reçus
+    const lines = tx.transaction.createMany.mock.calls[0][0].data;
+    expect(lines.find((l: any) => l.type === "CREDIT")).toEqual(expect.objectContaining({ amount: 220 }));
+    expect(lines.find((l: any) => l.labelKey === "TRANSACTION_PLATFORM_COMMISSION")).toEqual(expect.objectContaining({ type: "DEBIT", amount: 22, label: "Commission AZƆ̀ (10 %)" }));
     expect(tx.ride.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ status: "IN_PROGRESS", stopRequestedAt: requestedAt, stopRequestedPrice: 220 }),

@@ -474,6 +474,7 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
             ))}
           </ScrollView>
         )}
+        <AdminTabBar active="providers" onNavigate={onNavigateTab} />
       </SafeAreaView>
     );
   }
@@ -803,7 +804,6 @@ export default function AdminProvidersScreen({ onBack, onOpenDashboard, onOpenSu
         onCancel={() => setReason(null)}
         onConfirm={confirmReason}
       />
-      <AdminTabBar active="providers" onNavigate={onNavigateTab} />
     </SafeAreaView>
   );
 }

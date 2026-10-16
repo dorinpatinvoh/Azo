@@ -1630,6 +1630,8 @@ export class RidesService {
       amount
     );
     const driverGain = amount - commission;
+    // Pourcentage réellement appliqué à cette course (15 % pour la plupart, taux du niveau pour un employé d'agence)
+    const commissionPct = amount > 0 ? Math.round((commission / amount) * 1000) / 10 : 0;
     const ref = `Course #${ride.id.slice(0, 6)}`;
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -1656,7 +1658,11 @@ export class RidesService {
       await tx.transaction.createMany({
         data: [
           { walletId: clientWallet.id, type: "DEBIT", amount, label: "Course AZƆ̀", labelKey: "TRANSACTION_RIDE_PAYMENT", labelParams: { ref }, meta: ref },
-          { walletId: driverWallet.id, type: "CREDIT", amount: driverGain, label: "Gain de course", labelKey: "TRANSACTION_RIDE_EARNING", labelParams: { ref, commission }, meta: ref },
+          // Le prestataire voit la course entière, puis la commission de l'entreprise débitée : crédit − débit = ce qu'il reçoit
+          { walletId: driverWallet.id, type: "CREDIT", amount, label: "Gain de course", labelKey: "TRANSACTION_RIDE_EARNING", labelParams: { ref, commission, pct: commissionPct }, meta: ref },
+          ...(commission > 0
+            ? [{ walletId: driverWallet.id, type: "DEBIT" as const, amount: commission, label: `Commission AZƆ̀ (${commissionPct} %)`, labelKey: "TRANSACTION_PLATFORM_COMMISSION", labelParams: { ref, pct: commissionPct, amount }, meta: ref }]
+            : []),
         ],
       });
       // 15 % pour l'entreprise : versés au portefeuille administrateur dans la même transaction
@@ -1707,11 +1713,11 @@ export class RidesService {
       })
       .catch(() => null);
     await this.notifications
-      .push(driverId, "Paiement reçu", `+${driverGain} FCFA (commission AZƆ̀ : ${commission} F).`, "payment", {
+      .push(driverId, "Paiement reçu", `Course ${amount} FCFA · commission AZƆ̀ ${commissionPct} % débitée (−${commission} F) · tu reçois +${driverGain} FCFA.`, "payment", {
         data: { event: "ride-completed", rideId },
         titleKey: "NOTIFICATION_RIDE_COMPLETED_DRIVER",
         bodyKey: "NOTIFICATION_RIDE_COMPLETED_DRIVER_BODY",
-        params: { driverGain, commission },
+        params: { driverGain, commission, amount, pct: commissionPct },
       })
       .catch(() => null);
     this.gateway.emitStatus(rideId, "COMPLETED");

@@ -277,15 +277,32 @@ export class WalletService {
         await tx.transaction.create({ data: { walletId: clientWallet.id, type: TransactionType.DEBIT, amount: p.price, label: `Livraison colis (${p.dropAddress})`, meta: p.ref } });
       }
       await tx.wallet.update({ where: { id: courierWallet.id }, data: { balance: { increment: p.net } } });
+      const pct = p.price > 0 ? Math.round((p.commission / p.price) * 1000) / 10 : 0;
+      // Le livreur voit la livraison entière, puis la commission de l'entreprise débitée
       await tx.transaction.create({
         data: {
           walletId: courierWallet.id,
           type: TransactionType.CREDIT,
-          amount: p.net,
+          amount: p.price,
           label: p.clientId ? `Gain livraison (${p.dropAddress})` : `Gain livraison destinataire (${p.dropAddress})`,
+          labelKey: "TRANSACTION_DELIVERY_EARNING",
+          labelParams: { commission: p.commission, pct },
           meta: p.ref,
         },
       });
+      if (p.commission > 0) {
+        await tx.transaction.create({
+          data: {
+            walletId: courierWallet.id,
+            type: TransactionType.DEBIT,
+            amount: p.commission,
+            label: `Commission AZƆ̀ (${pct} %)`,
+            labelKey: "TRANSACTION_PLATFORM_COMMISSION",
+            labelParams: { pct, amount: p.price },
+            meta: p.ref,
+          },
+        });
+      }
       await this.creditPlatformInTx(tx, p.commission, p.ref);
     });
   }

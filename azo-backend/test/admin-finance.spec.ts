@@ -124,3 +124,24 @@ describe("FinanceService : gains de l'entreprise et retraits", () => {
     });
   });
 });
+
+describe("commission de chaque course (admin)", () => {
+  it("donne, pour chaque course et livraison, le montant, le pourcentage et la commission, les plus récentes d'abord", async () => {
+    const at = (h: number) => new Date(Date.UTC(2026, 9, 16, h));
+    const queryRaw = jest
+      .fn()
+      .mockResolvedValueOnce([{ id: "abcdef123", at: at(10), amount: 1000, commission: 150, who: "Koffi", vehicle: "ZEM_ESSENCE" }])
+      .mockResolvedValueOnce([{ id: "zzzzzz999", at: at(12), amount: 2000, who: "Awa", mode: "PERSONAL" }]);
+    const service = new FinanceService({ $queryRaw: queryRaw } as any, { platformCommission: (n: number) => Math.round(n * 0.15) } as any);
+    const rows = await service.commissions(10);
+    expect(rows.map((r) => r.id)).toEqual(["zzzzzz999", "abcdef123"]);
+    expect(rows[0]).toEqual(expect.objectContaining({ kind: "PERSONAL", amount: 2000, commission: 300, pct: 15 }));
+    expect(rows[1]).toEqual(expect.objectContaining({ kind: "RIDE", ref: "Course #abcdef", amount: 1000, commission: 150, pct: 15 }));
+  });
+
+  it("n'invente pas de pourcentage pour une course sans commission (employé d'agence au taux 0)", async () => {
+    const queryRaw = jest.fn().mockResolvedValueOnce([{ id: "r1xxxxxxx", at: new Date(), amount: 800, commission: 0, who: null, vehicle: null }]).mockResolvedValueOnce([]);
+    const rows = await new FinanceService({ $queryRaw: queryRaw } as any).commissions();
+    expect(rows[0]).toEqual(expect.objectContaining({ commission: 0, pct: 0 }));
+  });
+});

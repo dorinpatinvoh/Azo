@@ -133,10 +133,16 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     de: t("Fahrt beendet", "{amount} FCFA wurden von deinem Wallet abgebucht."),
   },
   NOTIFICATION_RIDE_COMPLETED_DRIVER: {
-    fr: t("Paiement reçu", "+{driverGain} FCFA (commission AZƆ̀ : {commission} F)."),
-    en: t("Payment received", "+{driverGain} FCFA (AZƆ̀ commission: {commission} F)."),
-    es: t("Pago recibido", "+{driverGain} FCFA (comisión AZƆ̀: {commission} F)."),
-    de: t("Zahlung erhalten", "+{driverGain} FCFA (AZƆ̀-Provision: {commission} F)."),
+    fr: t("Paiement reçu", "Course {amount} FCFA · commission AZƆ̀ {pct} % débitée (−{commission} F) · tu reçois +{driverGain} FCFA."),
+    en: t("Payment received", "Ride {amount} FCFA · AZƆ̀ commission {pct}% debited (−{commission} F) · you receive +{driverGain} FCFA."),
+    es: t("Pago recibido", "Carrera {amount} FCFA · comisión AZƆ̀ {pct} % descontada (−{commission} F) · recibes +{driverGain} FCFA."),
+    de: t("Zahlung erhalten", "Fahrt {amount} FCFA · AZƆ̀-Provision {pct} % abgezogen (−{commission} F) · du erhältst +{driverGain} FCFA."),
+  },
+  NOTIFICATION_DELIVERY_PAID_COURIER: {
+    fr: t("Paiement reçu", "Livraison {amount} FCFA · commission AZƆ̀ {pct} % débitée (−{commission} F) · tu reçois +{net} FCFA."),
+    en: t("Payment received", "Delivery {amount} FCFA · AZƆ̀ commission {pct}% debited (−{commission} F) · you receive +{net} FCFA."),
+    es: t("Pago recibido", "Entrega {amount} FCFA · comisión AZƆ̀ {pct} % descontada (−{commission} F) · recibes +{net} FCFA."),
+    de: t("Zahlung erhalten", "Lieferung {amount} FCFA · AZƆ̀-Provision {pct} % abgezogen (−{commission} F) · du erhältst +{net} FCFA."),
   },
   NOTIFICATION_RIDE_CANCELLED: {
     fr: t("Course annulée"),

@@ -244,13 +244,16 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
           "Colis pris en charge ! Dirige-toi vers l'adresse de livraison et demande le code de remise à 4 chiffres au destinataire."
         );
       } else {
-        await deliveryApi.confirmDelivery(activeDelivery.id, clean);
+        // Le prix final (coursier personnel : kilomètres réellement parcourus) vient de la réponse du serveur
+        const done = await deliveryApi.confirmDelivery(activeDelivery.id, clean);
         setOtpInput("");
         await loadAccount();
-        const net = activeDelivery.price - (activeDelivery.commission ?? Math.round(activeDelivery.price * 0.15));
+        const gross = done.price ?? activeDelivery.price;
+        const commission = done.commission ?? Math.round(gross * 0.15);
+        const pct = gross > 0 ? Math.round((commission / gross) * 1000) / 10 : 0;
         Alert.alert(
           "Livraison terminée 🎉",
-          `Code de remise validé. Ton gain net de ${fcfa(net)} a été crédité sur ton portefeuille AZƆ̀ Pay.`
+          `Mission : ${fcfa(gross)}\nCommission AZƆ̀ ${pct.toLocaleString("fr-FR")} % débitée : −${fcfa(commission)}\nTu reçois : +${fcfa(gross - commission)} sur ton portefeuille AZƆ̀ Pay.`
         );
       }
     } catch (e) {

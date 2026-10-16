@@ -125,8 +125,8 @@ const COURIER_CATEGORY_LABELS: Record<string, string> = {
   COURSIER_EXPRESS: "Livreur express",
   LIVREUR_COLIS: "Livreur express", // ancien libellé des dossiers déjà créés
 };
-function typeLabelOf(provider: { type: ProviderType; categoryId?: string | null }): string {
-  return provider.type === "COURIER" ? (COURIER_CATEGORY_LABELS[provider.categoryId ?? ""] ?? TYPE_LABELS.COURIER) : typeLabelOf(provider);
+export function typeLabelOf(provider: { type: ProviderType; categoryId?: string | null }): string {
+  return provider.type === "COURIER" ? (COURIER_CATEGORY_LABELS[provider.categoryId ?? ""] ?? TYPE_LABELS.COURIER) : TYPE_LABELS[provider.type];
 }
 
 const DOCUMENT_LABELS: Record<DocumentKind, string> = {

@@ -1197,6 +1197,19 @@ export type AdminFinanceSummary = {
   minWithdrawal: number;
 };
 
+/** Commission de l'entreprise sur une course ou une livraison terminée. */
+export type AdminCommissionRow = {
+  kind: "RIDE" | "DELIVERY" | "PERSONAL";
+  id: string;
+  ref: string;
+  date: string;
+  who: string | null;
+  vehicle: string | null;
+  amount: number;
+  commission: number;
+  pct: number;
+};
+
 export type AdminCompanyWithdrawal = {
   id: string;
   amount: number;
@@ -1253,6 +1266,8 @@ export const adminApi = {
   /** Finances de l'entreprise : gains par source et par mois, retraits, disponible. */
   financeSummary: () => api.get<AdminFinanceSummary>(`${P}/admin/finance`),
   withdrawals: () => api.get<AdminCompanyWithdrawal[]>(`${P}/admin/finance/withdrawals`),
+  /** Commission prélevée sur chaque course et livraison (montant, pourcentage, somme). */
+  commissions: (limit = 50) => api.get<AdminCommissionRow[]>(`${P}/admin/finance/commissions?limit=${limit}`),
   requestWithdrawal: (body: { amount: number; phone: string; method?: string; note?: string }) =>
     api.post<AdminCompanyWithdrawal>(`${P}/admin/finance/withdrawals`, body),
   markWithdrawalPaid: (id: string, reference?: string) =>

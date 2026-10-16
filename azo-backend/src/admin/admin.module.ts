@@ -268,6 +268,12 @@ export class AdminController {
     return this.finance.summary();
   }
 
+  // GET /admin/finance/commissions?limit=50 — commission prélevée sur chaque course et livraison (montant, pourcentage, somme)
+  @Get("finance/commissions")
+  commissions(@Query("limit") limit?: string) {
+    return this.finance.commissions(limit ? Number(limit) : 50);
+  }
+
   @Get("finance/withdrawals")
   withdrawals() {
     return this.finance.listWithdrawals();
