@@ -1,15 +1,15 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 1 commit sur main (<code>52419639</code>) · 28 suites / 316 tests · mise à jour de 10 h 11</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 2 commits sur main (<code>52419639</code>, <code>fc6f3fb5</code>) · 28 suites / 316 tests · mise à jour de 10 h 48</span></div>
 
 <h2>1. En résumé</h2>
-<p>Deux changements côté serveur, tous dans <code>delivery/</code> : un <b>devis de colis</b> (<code>GET /deliveries/quote</code>) qui donne au client exactement le prix que le serveur facturera, et la règle <b>« gros colis = Speeder tricycle uniquement »</b>. Aucune migration aujourd'hui. Je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>52419639</code>).</p>
+<p>Deux changements côté serveur, tous dans <code>delivery/</code> : un <b>devis de colis</b> (<code>GET /deliveries/quote</code>) qui donne au client exactement le prix que le serveur facturera, et la règle <b>« gros colis = Speeder tricycle uniquement »</b>. Aucune migration aujourd'hui. Je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>fc6f3fb5</code>).</p>
 <div class="box warn"><b>À vérifier :</b> (1) le devis utilise OSRM, et <b>à défaut</b> la distance à vol d'oiseau × 1,3 : si OSRM est indisponible depuis Render, le prix peut être plus élevé que la distance réelle (§2) ; (2) le prix affiché au client et le prix facturé viennent du même calcul, mais sont <b>deux appels OSRM</b> distincts : un écart de quelques dizaines de mètres est possible.</div>
 
 <h2>2. Devis de colis (<code>GET /deliveries/quote</code>)</h2>
 <ul>
-<li>Paramètres : <code>vehicleType</code>, <code>pickupLat</code>, <code>pickupLng</code>, <code>dropLat</code>, <code>dropLng</code>. Réponse : <code>{ km, price }</code> (distance de l'itinéraire arrondie à 0,1 km ; prix = base + km × tarif au km du Speeder).</li>
-<li>Tarifs (<code>delivery.vehicles</code> dans <code>tarification.json</code>) : <b>Speeder moto (essence et électrique) 200 F + 80 F/km, tricycle 225 F + 80 F/km</b>. Exemple : 1 km en essence = 280 F ; en tricycle = 305 F.</li>
-<li>Refus (400) : véhicule sans tarif de livraison (voitures), coordonnées invalides.</li>
+<li>Paramètres : <code>vehicleType</code>, <code>packageType</code>, <code>pickupLat</code>, <code>pickupLng</code>, <code>dropLat</code>, <code>dropLng</code>. Réponse : <code>{ km, price }</code> (distance de l'itinéraire arrondie à 0,1 km ; prix = base du colis + km × tarif au km du Speeder).</li>
+<li>Tarifs (<code>delivery.vehicles</code> dans <code>tarification.json</code>, <b>mis à jour dans le 2<sup>e</sup> commit du jour</b>) : <b>Speeder moto (essence et électrique) 70 F/km</b> avec une base selon le type de colis (<code>baseByPackage</code> : <code>doc</code> 100 F, <code>small</code> 120 F, <code>medium</code> 200 F) ; <b>tricycle 225 F + 80 F/km</b> pour tous les types (dont <code>large</code>). Exemple à 1 km : document 170 F, petit colis 190 F, colis moyen 270 F en essence ; 305 F en tricycle. <code>PricingService.deliveryRule(vehicule, typeDeColis)</code> et <code>deliveryPrice</code> portent le type de colis ; le matin, le tarif était 200 + 80 pour toutes les motos.</li>
+<li>Refus (400) : véhicule sans tarif de livraison (voitures), type de colis non proposé pour ce véhicule (ex. gros colis en moto), coordonnées invalides.</li>
 <li>La création d'un colis (<code>POST /deliveries</code>) recalcule le prix de la même façon : le prix envoyé par le client reste ignoré.</li>
 <li>La route est déclarée avant les routes à paramètre d'identifiant ; elle exige l'authentification comme le reste du contrôleur.</li>
 </ul>
@@ -21,7 +21,7 @@
 
 <h2>4. Qualité et limites</h2>
 <ul>
-<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>28 suites / 316 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis 1 km en essence = 280 F et en tricycle = 305 F ; gros colis refusé en moto et accepté en tricycle.</li>
+<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>28 suites / 316 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis à 1 km par type de colis (170 / 190 / 270 F en essence, 305 F en tricycle) ; prix à la création (petit colis 10 km = 820 F) ; gros colis refusé en moto et accepté en tricycle.</li>
 <li><b>Non vérifié :</b> l'appel OSRM depuis Render ; la route de devis avec un vrai compte ; l'écart entre devis et prix facturé sur de vrais trajets.</li>
 <li><b>Pas de test dédié</b> pour la validation des paramètres du devis dans le contrôleur.</li>
 </ul>
@@ -31,7 +31,7 @@
 <tr><th>Sujet</th><th>Question</th></tr>
 <tr><td>Repli de distance</td><td>Si OSRM échoue, vaut-il mieux refuser le devis plutôt que d'appliquer vol d'oiseau × 1,3 ?</td></tr>
 <tr><td>Devis et facturation</td><td>Faut-il figer le prix du devis (jeton signé) pour que le client paie exactement le prix affiché ?</td></tr>
-<tr><td>Gros colis</td><td>Faut-il un supplément ou un tarif spécifique pour les gros colis ? Aujourd'hui, même tarif que le tricycle.</td></tr>
+<tr><td>Tricycle</td><td>Le tarif 225 F + 80 F/km s'applique à tous les types de colis en tricycle (document, petit, moyen, gros). À confirmer : base différente selon le type ?</td></tr>
 <tr><td>Questions du 15 octobre</td><td>Toujours ouvertes : unification portefeuille admin / Finances, commission sur les livraisons payées par le destinataire, renommage « Spider » en « Speeder » dans les textes du serveur.</td></tr>
 </table>
 
@@ -39,6 +39,7 @@
 <table>
 <tr><th>Commit</th><th>Contenu côté backend</th></tr>
 <tr><td><code>52419639</code></td><td><code>GET /deliveries/quote</code> ; gros colis réservé au tricycle ; tests</td></tr>
+<tr><td><code>fc6f3fb5</code></td><td>Base des colis moto selon le type (document 100, petit 120, moyen 200 ; 70 F/km), devis avec <code>packageType</code>, tests mis à jour</td></tr>
 </table>
-<div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 11. Le travail du 15 octobre est dans le rapport du 15.</div>
+<div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>

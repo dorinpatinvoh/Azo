@@ -1,15 +1,21 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 1 commit poussé sur main (<code>52419639</code>) · mise à jour de 10 h 11</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 2 commits poussés sur main (<code>52419639</code>, <code>fc6f3fb5</code>) · mise à jour de 10 h 48</span></div>
 
 <h2>1. En résumé</h2>
 <p>Aujourd'hui, le mobile a gagné <b>un prix des colis exact calculé par le serveur</b>, <b>le « Gros colis » réservé au Speeder tricycle</b>, <b>une fenêtre de choix sur les lieux en un clic</b> de l'accueil (course simple, livraison ou coursier personnel, puis le Speeder), <b>une photo de fond</b> sur l'écran du numéro, et deux corrections de l'accueil (Boutique, Mes trajets). Tout compile (<code>tsc</code> sans erreur).</p>
-<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>10:11</b>) contient tout. <b>Le backend doit être déployé avant</b> (nouvelle route de devis <code>GET /deliveries/quote</code>), sinon l'écran des colis n'affichera pas de prix. <b>Priorités de test :</b> le prix d'un colis (ex. 1 km en Speeder à essence = 280 F), le Gros colis en tricycle, la fenêtre des lieux en un clic.</div>
+<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone par moi. Le dernier APK (<b>10:47</b>) contient tout. <b>Le backend doit être déployé avant</b> (nouvelle route de devis <code>GET /deliveries/quote</code>), sinon l'écran des colis n'affichera pas de prix. <b>Priorités de test :</b> le prix d'un colis (ex. 1 km en Speeder à essence = 280 F), le Gros colis en tricycle, la fenêtre des lieux en un clic.</div>
 
-<h2>2. Colis : prix exact et gros colis (« Envoyer un colis »)</h2>
+<h2>2. Colis : prix, gros colis et nouvelle mise en page (« Envoyer un colis »)</h2>
+<ul>
+<li><b>Mise en page</b> : les <b>types de colis sont en haut</b> (Document, Petit colis, Colis moyen, <b>Gros colis</b>), les <b>Speeders en bas</b>, sous forme de <b>cartes pleine largeur</b> (icône, nom qui passe à la ligne, prix au km) : plus de texte ni d'icône coupés.</li>
+<li><b>Gros colis</b> : toujours dans la liste. Quand il est choisi, <b>seul le Speeder tricycle</b> reste visible (et se sélectionne) ; les autres Speeders se cachent.</li>
+<li><b>Tarifs (mis à jour le 16)</b> : Speeder moto (essence et électrique) <b>70 F/km</b> avec une base selon le colis — document 100 F, petit colis 120 F, colis moyen 200 F ; tricycle (gros colis compris) <b>225 F + 80 F/km</b> pour tous les types de colis. La base n'est jamais affichée. Exemple à 1 km en essence : document 170 F, petit colis 190 F, colis moyen 270 F ; en tricycle 305 F. Le devis serveur tient compte du type de colis.</li>
+<li><b>Carte plein écran</b> (départ et destination, colis <b>et</b> coursier personnel) : l'écran affiche un aperçu avec l'itinéraire et un résumé départ / destination ; un appui ouvre la carte <b>plein écran comme pour la course simple</b> (bouton retour, message « Touche la carte pour poser… », bouton « Ma position », feuille du bas « Où allons-nous ? » avec les champs, les lieux populaires et « Valider les lieux »). C'est une adaptation de l'écran de course, pas une copie exacte.</li>
+</ul>
+<h3>2.1 Prix exact (premier commit du jour)</h3>
 <ul>
 <li><b>Prix = celui du serveur</b> : l'écran demande un devis au serveur (<code>deliveryApi.quote</code>) dès que le départ, la destination et le Speeder sont connus, et le refait à chaque changement. Le prix affiché (bouton « Commander un livreur », « Règlement de la course ») est donc celui qui sera facturé. L'écran montre aussi la <b>distance de l'itinéraire</b>. La base n'est jamais affichée ; chaque Speeder montre son prix au km.</li>
-<li><b>Exemple</b> : A → B à 1 km en Speeder à essence : 200 F de base + 80 F/km = <b>280 F</b> ; en tricycle : 225 + 80 = <b>305 F</b>.</li>
-<li><b>Gros colis</b> : un quatrième type de colis qui <b>n'apparaît que lorsque le Speeder tricycle est choisi</b> ; si le client repasse à une moto, il disparaît et le type revient à « Petit Colis ». Le choix du Speeder est désormais placé <b>avant</b> le choix du type de colis.</li>
+<li><b>Exemple (tarif du matin, remplacé ensuite par celui ci-dessus)</b> : 1 km en essence = 280 F ; en tricycle = 305 F.</li>
 <li>Après une réservation de coursier personnel, l'écran restait renvoyé vers « Envoyer un colis » : il reste maintenant sur l'écran du coursier personnel.</li>
 </ul>
 
@@ -17,7 +23,7 @@
 <ul>
 <li><b>Barre « Chercher une destination… » supprimée.</b></li>
 <li><b>Lieux en un clic</b> (Étoile Rouge, Marché Dantokpa, aéroport…) : un appui ouvre une <b>fenêtre</b> qui demande « Course simple », « Livraison » ou « Coursier personnel », puis propose les Speeders adaptés : course simple — Speeder moto, tricycle ou voiture ; livraison — Speeder à essence, électrique ou tricycle ; coursier personnel — les six véhicules. La commande s'ouvre avec <b>la destination déjà remplie</b> (et le Speeder déjà choisi pour la livraison et le coursier personnel). Les lieux sont dans <code>config/quickPlaces.ts</code>, partagés avec la commande de course.</li>
-<li><b>Boutique AZƆ̀</b> : affiche « Bientôt disponible » (au lieu d'ouvrir la boutique).</li>
+<li><b>Boutique AZƆ̀</b> et <b>Louer Auto</b> : affichent « Bientôt disponible » (au lieu d'ouvrir l'écran).</li>
 <li><b>Mes Trajets</b> : ouvre l'onglet Courses, c'est-à-dire l'historique des trajets.</li>
 </ul>
 
@@ -27,11 +33,11 @@
 </ul>
 
 <h2>5. Ce qui n'est pas encore commité</h2>
-<p>Rien côté mobile : tout est sur <code>main</code> (commit <code>52419639</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
+<p>Rien côté mobile : tout est sur <code>main</code> (dernier commit <code>fc6f3fb5</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
 
 <h2>6. APK et environnement</h2>
 <ul>
-<li>Build local (Gradle hors ligne), signé avec la clé de debug : dernier APK à <b>10:11</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code>. Désinstaller l'ancienne version si l'installation est refusée.</li>
+<li>Build local (Gradle hors ligne), signé avec la clé de debug : dernier APK à <b>10:47</b>, <code>android/app/build/outputs/apk/release/app-release.apk</code>. Désinstaller l'ancienne version si l'installation est refusée.</li>
 <li>Pour tester un colis, il faut un livreur express avec un véhicule : <code>node --env-file=.env scripts/create-provider.js &lt;numéro&gt; --profile livreur-express --vehicle ZEM_TRICYCLE</code> (avec l'URL externe et <code>--allow-remote</code> pour la base Render).</li>
 <li><b>Sécurité :</b> pense à changer le mot de passe de la base Render après les tests.</li>
 </ul>
@@ -42,7 +48,9 @@
 <tr><td>Test réel</td><td>Prix des colis, Gros colis, fenêtre des lieux en un clic, photo de fond, coursier personnel de bout en bout (GPS, fin de course)</td></tr>
 <tr><td>Notifications poussées</td><td>Fichier <code>google-services.json</code> (Firebase) à placer à la racine de <code>azo-mobile</code> + clé FCM dans le projet Expo</td></tr>
 <tr><td>Suivi GPS en arrière-plan</td><td>Non fait : l'application du coursier doit rester ouverte</td></tr>
-<tr><td>Boutique AZƆ̀</td><td>Pas encore ouverte (message « Bientôt disponible »)</td></tr>
+<tr><td>Boutique AZƆ̀, Louer Auto</td><td>Pas encore ouvertes (message « Bientôt disponible »)</td></tr>
+<tr><td>Carte plein écran</td><td>Adaptation de l'écran de course simple ; à valider visuellement, ajustements possibles</td></tr>
+<tr><td>Tricycle et petits colis</td><td>Le tricycle applique 225 F + 80 F/km à tous les types de colis (pas seulement le gros colis) : à confirmer</td></tr>
 <tr><td>Textes de la fenêtre des lieux</td><td>En français seulement (pas de traduction en, es, de)</td></tr>
 <tr><td>Plan de tests internes</td><td>Pas mis à jour</td></tr>
 </table>
@@ -51,6 +59,7 @@
 <table>
 <tr><th>Commit</th><th>Contenu</th></tr>
 <tr><td><code>52419639</code></td><td>Devis serveur des colis, Gros colis en tricycle, fenêtre des lieux en un clic, photo de fond de l'écran du numéro, Boutique « bientôt disponible », Mes trajets vers l'historique</td></tr>
+<tr><td><code>fc6f3fb5</code></td><td>Colis en haut et Speeders en cartes responsives, gros colis, base des colis moto selon le type, carte plein écran comme la course simple, Louer Auto « bientôt disponible »</td></tr>
 </table>
-<div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 11. Le travail du 15 octobre est dans le rapport du 15.</div>
+<div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>
