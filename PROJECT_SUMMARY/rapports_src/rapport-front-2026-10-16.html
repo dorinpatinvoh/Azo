@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 8 commits poussés sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>, <code>9b06eef5</code>, <code>e5b16227</code>, <code>fd83e17d</code>) · mise à jour de 10 h 48</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">16 octobre 2026 · 8 commits poussés sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>, <code>9b06eef5</code>, <code>e5b16227</code>, <code>fd83e17d</code>) · mise à jour de 21 h 13</span></div>
 
 <h2>1. En résumé</h2>
 <p>Aujourd'hui, le mobile a gagné <b>un prix des colis exact calculé par le serveur</b>, <b>le « Gros colis » réservé au Speeder tricycle</b>, <b>une fenêtre de choix sur les lieux en un clic</b> de l'accueil (course simple, livraison ou coursier personnel, puis le Speeder), <b>une photo de fond</b> sur l'écran du numéro, et deux corrections de l'accueil (Boutique, Mes trajets). Tout compile (<code>tsc</code> sans erreur).</p>
@@ -81,6 +81,13 @@
 <li><b>À confirmer</b> : plaque du Speeder (affichée masquée aujourd'hui, ex. « ••-••-AZ ») — doit-elle être complète ou cachée ? Question posée, rien modifié.</li>
 </ul>
 
+<h2>2decies. Colis : le tricycle seulement pour les gros colis <i>(non commité)</i></h2>
+<ul>
+<li>Écran « Envoyer un colis » : un document, un petit colis ou un colis moyen ne proposent que le <b>Speeder à essence</b> et le <b>Speeder électrique</b> ; « Gros colis » ne propose que le <b>Speeder tricycle</b> ; le Speeder se réajuste tout seul si le client change de type de colis.</li>
+<li>Depuis l'accueil (lieux en un clic), choisir « Speeder tricycle » pour une livraison ouvre la commande avec « Gros colis » déjà sélectionné ; le texte du choix devient « Pour les gros colis uniquement ».</li>
+<li>La course simple et le coursier personnel en tricycle ne changent pas. Cette règle n'est <b>pas encore dans l'APK</b> (dernier APK à 18:48).</li>
+</ul>
+
 <h2>3. Accueil client</h2>
 <ul>
 <li><b>Barre « Chercher une destination… » supprimée.</b></li>
@@ -95,7 +102,7 @@
 </ul>
 
 <h2>5. Ce qui n'est pas encore commité</h2>
-<p>Rien côté mobile : tout est sur <code>main</code> (dernier commit <code>fd83e17d</code>). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
+<p>Sur <code>main</code> : tout jusqu'au commit <code>6f90549e</code> (code <code>fd83e17d</code>). <b>Non commité</b> : la règle « le tricycle ne livre que les gros colis » (<code>DeliveryScreen.tsx</code>, <code>HomeScreen.tsx</code>, barème, tests). Ce rapport et ses sources sont non commités. Exclus volontairement : <code>RAPPORT_BACKEND_DORIN.pdf</code> et <code>SECURELEDGER_PLAN_V1.pdf</code> (documents externes).</p>
 
 <h2>6. APK et environnement</h2>
 <ul>
@@ -133,5 +140,5 @@
 <tr><td><code>e5b16227</code></td><td>Barre du bas sur AZƆ̀ Pay pour tous les profils ; solde d'avant recrutement caché à l'agence</td></tr>
 <tr><td><code>fd83e17d</code></td><td>Distance sans bruit GPS ; position du client plus précise et du Speeder en continu ; suivi des colis dans l'onglet Courses ; mission en cours dans les onglets des prestataires</td></tr>
 </table>
-<div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
+<div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 21 h 13. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>

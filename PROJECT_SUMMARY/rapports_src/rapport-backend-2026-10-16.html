@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 16 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 8 commits sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>, <code>9b06eef5</code>, <code>e5b16227</code>, <code>fd83e17d</code>) · 31 suites / 337 tests · mise à jour de 10 h 48</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a changé aujourd'hui dans <code>azo-backend</code> — pour Dorin</p><span class="tag">16 octobre 2026 · 8 commits sur main (<code>52419639</code>, <code>fc6f3fb5</code>, <code>94eaecee</code>, <code>38c4f4e3</code>, <code>0ad4ace4</code>, <code>13e14dec</code>, <code>9b06eef5</code>, <code>e5b16227</code>, <code>fd83e17d</code>) · 31 suites / 337 tests · mise à jour de 21 h 13</span></div>
 
 <h2>1. En résumé</h2>
 <p>Deux changements côté serveur, tous dans <code>delivery/</code> : un <b>devis de colis</b> (<code>GET /deliveries/quote</code>) qui donne au client exactement le prix que le serveur facturera, et la règle <b>« gros colis = Speeder tricycle uniquement »</b>. Aucune migration aujourd'hui. Je n'ai pas vérifié le déploiement Render (<code>/health</code> doit afficher <code>fd83e17d</code>).</p>
@@ -86,9 +86,17 @@
 <li><b>À observer</b> : le prix d'une course complète reste le prix estimé au départ ; seuls le compteur de km et le prix d'un arrêt anticipé dépendaient de cette distance.</li>
 </ul>
 
+<h2>3nonies. Le tricycle ne livre que les gros colis <i>(non commité)</i></h2>
+<ul>
+<li><code>tarification.json</code> : <code>delivery.vehicles.ZEM_TRICYCLE</code> gagne <code>onlyPackages: ["large"]</code> ; <code>PricingService.deliveryRule</code> renvoie <code>null</code> pour tout autre type de colis. Conséquences : le devis (<code>GET /deliveries/quote</code>) et la création d'un colis sont <b>refusés</b> (400) pour un tricycle avec un document, un petit colis ou un colis moyen (« Le Speeder tricycle est réservé aux gros colis… ») ; un gros colis reste réservé au tricycle ; les livreurs à moto ne voient jamais de gros colis et un tricycle ne voit que les gros colis (chaque colis porte le véhicule demandé).</li>
+<li>La course simple et le coursier personnel en tricycle ne sont pas touchés.</li>
+<li>Test : <code>personal-courier.spec.ts</code> (338 tests au total, tous verts) : devis refusé pour doc / petit / moyen, création refusée, devis du gros colis à 1 km = 305 F.</li>
+<li><b>À déployer</b> : le commit n'est pas encore poussé.</li>
+</ul>
+
 <h2>4. Qualité et limites</h2>
 <ul>
-<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>31 suites / 337 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis à 1 km par type de colis (170 / 190 / 270 F en essence, 305 F en tricycle) ; prix à la création (petit colis 10 km = 820 F) ; gros colis refusé en moto et accepté en tricycle.</li>
+<li><b>Vérifié :</b> <code>tsc</code> sans erreur ; <b>31 suites / 338 tests</b> verts (314 la veille). Tests ajoutés (<code>personal-courier.spec.ts</code>, 20 tests au total) : devis à 1 km par type de colis (170 / 190 / 270 F en essence, 305 F en tricycle) ; prix à la création (petit colis 10 km = 820 F) ; gros colis refusé en moto et accepté en tricycle.</li>
 <li><b>Non vérifié :</b> l'appel OSRM depuis Render ; la route de devis avec un vrai compte ; l'écart entre devis et prix facturé sur de vrais trajets.</li>
 <li><b>Pas de test dédié</b> pour la validation des paramètres du devis dans le contrôleur.</li>
 </ul>
@@ -117,5 +125,5 @@
 <tr><td><code>e5b16227</code></td><td>Argent d'avant le recrutement protégé contre l'agence (migration, retrait plafonné, solde masqué) ; tests</td></tr>
 <tr><td><code>fd83e17d</code></td><td>Distance parcourue sans bruit GPS (<code>odometerStep</code> : zone d'incertitude, vitesse, précision 30 m) ; tests</td></tr>
 </table>
-<div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 10 h 48. Le travail du 15 octobre est dans le rapport du 15.</div>
+<div class="foot">Rapport rédigé le 16 octobre 2026 à partir de l'historique Git et du travail de la journée, mis à jour à 21 h 13. Le travail du 15 octobre est dans le rapport du 15.</div>
 </body></html>
