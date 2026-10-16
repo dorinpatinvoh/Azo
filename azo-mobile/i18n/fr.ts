@@ -405,6 +405,8 @@ export const fr = {
   "live.drop.title": "Code d'arrivée",
   "live.drop.sub": "Garde ce code et donne-le au Speeder à destination.",
   "live.drop.wait": "Le code d'arrivée sera affiché dès que le serveur le fournira.",
+  "live.km.title": "Distance à parcourir",
+  "live.km.sub": "sur {total} au total · {done} déjà parcourus",
   "live.paid.title": "Paiement AZƆ̀ Pay confirmé",
   "live.paid.amount": "Montant payé : {amount} FCFA",
   "live.paid.partial": " (course arrêtée en chemin)",

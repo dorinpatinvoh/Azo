@@ -14,6 +14,8 @@ import RideStopPanel from "../components/RideStopPanel";
 import DriverOfferCard from "../components/DriverOfferCard";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 import { getDrivingRoute, getRideRoute, type DrivingRoute } from "../services/routing";
+import TripDistanceBanner from "../components/TripDistanceBanner";
+import { fmtKm } from "../utils/geo";
 import { useI18n, type MessageKey } from "../i18n";
 import { EMERGENCY_NUMBERS } from "../config/emergency";
 
@@ -53,7 +55,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
   const [driverPos, setDriverPos] = useState<(LatLng & { heading?: number }) | null>(null);
   // Ma propre position (le client), affichée sur ma carte et envoyée au Speeder avant la prise en charge.
   const [myPos, setMyPos] = useState<LatLng | null>(null);
-  const [driverRoute, setDriverRoute] = useState<{ coordinates: LatLng[]; durationMinutes: number; start: LatLng; target: LatLng } | null>(null);
+  const [driverRoute, setDriverRoute] = useState<{ coordinates: LatLng[]; durationMinutes: number; distanceKm: number; start: LatLng; target: LatLng } | null>(null);
   const [pendingRoute, setPendingRoute] = useState<DrivingRoute | null>(null);
   const [pendingRouteLoading, setPendingRouteLoading] = useState(false);
   const [pendingRouteError, setPendingRouteError] = useState(false);
@@ -341,6 +343,18 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
     ? null
     : routeStillRelevant ? driverRoute?.durationMinutes ?? null : null;
 
+  // Distance qu'il reste à parcourir une fois la course démarrée : itinéraire en direct du Speeder vers l'arrivée ;
+  // à défaut, distance à vol d'oiseau × 1,3. Le total = ce qui reste + ce qui est déjà parcouru (GPS du Speeder).
+  const tripDoneKm = (ride?.traveledMeters ?? 0) / 1000;
+  const tripRemainingKm =
+    ride?.status === "IN_PROGRESS"
+      ? routeStillRelevant && driverRoute
+        ? driverRoute.distanceKm
+        : driverPos && destination
+          ? distanceKm(driverPos, destination) * 1.3
+          : null
+      : null;
+
   const trackingPolyline = useMemo(() => {
     if (ride?.status === "PENDING" || ride?.status === "OFFERED") return pendingRoute?.coordinates ?? [];
     if (ride?.status === "MATCHED" || ride?.status === "IN_PROGRESS") {
@@ -569,6 +583,13 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
         )}
 
         {ride.status === "ARRIVED" && <View style={styles.pinBanner}><MaterialIcons name="shield" size={20} color={colors.primary} /><View style={{ flex: 1 }}><Text style={styles.pinBannerTitle}>{ride.vehicleType.startsWith("ZEM_") ? t("live.arrived.zem") : t("live.arrived.car")}</Text><Text style={styles.pinBannerSub}>{ride.pickupCode ? t("live.pickup.sub") : t("live.pickup.wait")}</Text></View>{ride.pickupCode ? <View style={styles.pinCodePill}><Text style={styles.pinCodeText}>{ride.pickupCode}</Text></View> : <ActivityIndicator size="small" color={colors.primary} />}</View>}
+        {tripRemainingKm !== null && (
+          <TripDistanceBanner
+            title={t("live.km.title")}
+            remaining={fmtKm(tripRemainingKm)}
+            sub={t("live.km.sub", { total: fmtKm(tripRemainingKm + tripDoneKm), done: fmtKm(tripDoneKm) })}
+          />
+        )}
         <RideStopPanel ride={ride} role="CLIENT" onChanged={setRide} />
         {ride.status === "IN_PROGRESS" && <View style={styles.pinBanner}><MaterialIcons name="verified-user" size={20} color={colors.primary} /><View style={{ flex: 1 }}><Text style={styles.pinBannerTitle}>{t("live.drop.title")}</Text><Text style={styles.pinBannerSub}>{ride.dropCode ? t("live.drop.sub") : t("live.drop.wait")}</Text></View>{ride.dropCode ? <View style={styles.pinCodePill}><Text style={styles.pinCodeText}>{ride.dropCode}</Text></View> : <ActivityIndicator size="small" color={colors.primary} />}</View>}
         <View style={{ gap: 2 }}>{!!destinationLabel && <Text style={styles.muted} numberOfLines={1}>→ {destinationLabel}</Text>}<Text style={styles.price}>{money(paidAmount(ride))} FCFA · {paymentLabel}</Text></View>

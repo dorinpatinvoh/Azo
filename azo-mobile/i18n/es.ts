@@ -403,6 +403,8 @@ export const es: Record<MessageKey, string> = {
   "live.drop.title": "Código de llegada",
   "live.drop.sub": "Guarda este código y dáselo al Speeder en el destino.",
   "live.drop.wait": "El código de llegada se mostrará en cuanto el servidor lo proporcione.",
+  "live.km.title": "Distancia por recorrer",
+  "live.km.sub": "de {total} en total · {done} recorridos",
   "live.paid.title": "Pago con AZƆ̀ Pay confirmado",
   "live.paid.amount": "Importe pagado: {amount} FCFA",
   "live.paid.partial": " (viaje detenido en el camino)",

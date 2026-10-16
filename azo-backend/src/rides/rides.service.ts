@@ -298,6 +298,34 @@ export class RidesService {
     const { scheduledAt: scheduledRaw, ...rideDto } = dto;
     // Course programmée : l'heure est vérifiée (30 min à 7 jours d'avance) avant tout calcul
     const scheduledAt = scheduledRaw ? parseSchedule(scheduledRaw) : null;
+    // Une seule course active à la fois : un double appui ou un renvoi après une coupure créait une COPIE de la course.
+    // La copie restait « en recherche », puis proposait au client (ou au Speeder) d'accepter une course déjà faite.
+    if (!scheduledAt) {
+      const now = Date.now();
+      const active = await this.prisma.ride.findFirst({
+        where: {
+          clientId,
+          scheduledAt: null,
+          OR: [
+            { status: "PENDING", createdAt: { gte: new Date(now - this.pricing.radarSettings().pendingExpiryMinutes * 60_000) } },
+            { status: { in: ["OFFERED", "MATCHED", "ARRIVED", "IN_PROGRESS"] }, createdAt: { gte: new Date(now - 6 * 3600_000) } },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (active) {
+        const sameTrip =
+          active.vehicleType === rideDto.vehicleType &&
+          haversineMeters({ lat: active.originLat, lng: active.originLng }, { lat: rideDto.originLat, lng: rideDto.originLng }) < 150 &&
+          haversineMeters({ lat: active.destLat, lng: active.destLng }, { lat: rideDto.destLat, lng: rideDto.destLng }) < 150;
+        // Même demande renvoyée : on rend la course existante (idempotent), sans en créer une seconde
+        if (sameTrip) return this.withoutPickupCode(active);
+        throw new ConflictException({
+          code: "RIDE_ALREADY_ACTIVE",
+          message: "Tu as déjà une course en cours. Termine-la ou annule-la avant d'en commander une autre.",
+        });
+      }
+    }
     const { price } = await this.estimate(rideDto as CreateRideDto);
     const ride = await this.prisma.ride.create({
       data: {
@@ -1669,6 +1697,7 @@ export class RidesService {
       return tx.ride.findUniqueOrThrow({ where: { id: rideId } });
     });
     this.gateway.clearRideLocations(rideId);
+    await this.cancelStaleDuplicates(rideId, ride.clientId).catch((e) => this.logger.warn(`cancelStaleDuplicates ${rideId} : ${e?.message ?? e}`));
     await this.notifications
       .push(ride.clientId, "Course terminée", `${amount} FCFA débités de ton portefeuille.`, "payment", {
         data: { event: "ride-completed", rideId },
@@ -1692,6 +1721,33 @@ export class RidesService {
       priceMode: options.priceMode,
     });
     return this.withoutPickupCode(updated);
+  }
+
+  /**
+   * Une course vient d'être payée : toute autre demande immédiate du même client restée « en recherche » ou « proposée »
+   * (copie créée par un double envoi) est annulée, sans débit, pour ne plus apparaître aux Speeders ni au client.
+   */
+  private async cancelStaleDuplicates(rideId: string, clientId: string) {
+    const stale = await this.prisma.ride.findMany({
+      where: {
+        clientId,
+        id: { not: rideId },
+        status: { in: ["PENDING", "OFFERED"] },
+        scheduledAt: null,
+        createdAt: { gte: new Date(Date.now() - 6 * 3600_000) },
+      },
+      select: { id: true, status: true, driverId: true, clientId: true },
+    });
+    for (const r of stale) {
+      const { count } = await this.prisma.ride.updateMany({ where: { id: r.id, status: { in: ["PENDING", "OFFERED"] } }, data: { status: "CANCELLED" } });
+      if (count === 0) continue;
+      this.gateway.emitRideRemoved(r.id, "cancelled");
+      if (r.status === "OFFERED") {
+        this.gateway.emitOfferEnded(r.clientId, r.id, "cancelled");
+        await this.closeOffer(r.id, r.driverId, "CANCELLED");
+      }
+      this.gateway.emitStatus(r.id, "CANCELLED");
+    }
   }
 
   // Annulation par le client ou le chauffeur avant le démarrage de la course

@@ -187,3 +187,31 @@ describe("visibilité du code d'arrivée", () => {
     expect(row).not.toHaveProperty("pickupCode");
   });
 });
+
+describe("une course démarrée ne repart jamais en recherche", () => {
+  it("ni le Speeder ni le client ne peuvent l'annuler pendant le trajet", async () => {
+    for (const userId of [driverId, clientId]) {
+      const { service, prisma } = makeService();
+      await expect(service.cancel("ride-1", userId)).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.ride.update).not.toHaveBeenCalled();
+    }
+  });
+
+  it("à la fin de la course, seule la transaction de paiement écrit le statut, et c'est COMPLETED", async () => {
+    const { service, prisma, tx } = makeService({ dropCode: "4829" });
+    await service.complete("ride-1", driverId, "4829");
+    expect(tx.ride.updateMany.mock.calls[0][0].data.status).toBe("COMPLETED");
+    expect(prisma.ride.update).not.toHaveBeenCalled();
+    expect(JSON.stringify(prisma.ride.updateMany.mock.calls)).not.toContain("PENDING");
+  });
+
+  it("à la fin de la course, une copie restée en recherche est annulée (plus de popup pour une course déjà faite)", async () => {
+    const { service, prisma, gateway } = makeService({ dropCode: "4829" });
+    (prisma.ride as any).findMany = jest.fn().mockResolvedValue([{ id: "copie", status: "PENDING", driverId: null, clientId }]);
+    (gateway as any).emitRideRemoved = jest.fn();
+    await service.complete("ride-1", driverId, "4829");
+    const cancel = prisma.ride.updateMany.mock.calls.find((c: any[]) => c[0].where.id === "copie");
+    expect(cancel?.[0].data).toEqual({ status: "CANCELLED" });
+    expect((gateway as any).emitRideRemoved).toHaveBeenCalledWith("copie", "cancelled");
+  });
+});

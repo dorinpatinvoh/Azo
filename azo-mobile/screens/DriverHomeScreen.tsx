@@ -32,6 +32,7 @@ import { displayName, initials } from "./ProfileScreen";
 import RateClientModal from "../components/RateClientModal";
 import { tr, languageInfo, useI18n } from "../i18n";
 import { getRideRoute, getTripRoute } from "../services/routing";
+import TripDistanceBanner from "../components/TripDistanceBanner";
 import NearbyClientsMap, { clientLabel } from "../components/NearbyClientsMap";
 import DriverOfferWaiting from "../components/DriverOfferWaiting";
 import { nearbyRadiusKm } from "../config/radar";
@@ -160,7 +161,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     [applyClientLocation]
   );
   // Itinéraire routier vers l'étape en cours (client, puis destination).
-  const [driveRoute, setDriveRoute] = useState<{ rideId: string; status: string; coordinates: LatLng[] } | null>(null);
+  const [driveRoute, setDriveRoute] = useState<{ rideId: string; status: string; coordinates: LatLng[]; distanceKm?: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>("idle");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -591,7 +592,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     const timeout = setTimeout(() => controller.abort(), 10000);
     const timer = setTimeout(() => {
       getRideRoute(ride.id, from, routeTarget, controller.signal)
-        .then((route) => { if (active) setDriveRoute({ rideId: ride.id, status: ride.status, coordinates: route.coordinates }); })
+        .then((route) => { if (active) setDriveRoute({ rideId: ride.id, status: ride.status, coordinates: route.coordinates, distanceKm: route.distanceKm }); })
         .catch(() => { /* on garde le tracé précédent : OSRM public peut être indisponible */ })
         .finally(() => clearTimeout(timeout));
     }, 500);
@@ -635,6 +636,17 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         : [],
     [driveRoute, activeRide?.id, activeRide?.status] // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  // Distance qu'il reste à parcourir une fois la course démarrée (itinéraire en direct vers l'arrivée, sinon vol d'oiseau × 1,3).
+  const tripDoneKm = (activeRide?.traveledMeters ?? 0) / 1000;
+  const tripRemainingKm =
+    activeRide?.status === "IN_PROGRESS"
+      ? driveRoute && driveRoute.rideId === activeRide.id && driveRoute.status === activeRide.status && typeof driveRoute.distanceKm === "number"
+        ? driveRoute.distanceKm
+        : position
+          ? distanceKm(position, { latitude: activeRide.destLat, longitude: activeRide.destLng }) * 1.3
+          : null
+      : null;
 
   // Suite du trajet (client -> destination) en pointillés, tant que le client n'est pas monté.
   useEffect(() => {
@@ -1201,6 +1213,14 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
                 </Pressable>
               </View>
             ) : activeRide.status === "IN_PROGRESS" ? (
+              <View style={{ gap: spacing.sm }}>
+              {tripRemainingKm !== null && (
+                <TripDistanceBanner
+                  title="Distance à parcourir"
+                  remaining={fmtKm(tripRemainingKm)}
+                  sub={`sur ${fmtKm(tripRemainingKm + tripDoneKm)} au total · ${fmtKm(tripDoneKm)} déjà parcourus`}
+                />
+              )}
               <Pressable
                 style={styles.primaryBtn}
                 onPress={() => dropCodeEntryOpen ? handleComplete() : handleRequestDropCode()}
@@ -1210,6 +1230,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
                   {dropCodeEntryOpen ? "Valider le code et terminer" : "Arrivé à destination"}
                 </Text>
               </Pressable>
+              </View>
             ) : null}
           </View>
         )}

@@ -403,6 +403,8 @@ export const en: Record<MessageKey, string> = {
   "live.drop.title": "Arrival code",
   "live.drop.sub": "Keep this code and give it to the Speeder at your destination.",
   "live.drop.wait": "The arrival code will be shown as soon as the server provides it.",
+  "live.km.title": "Distance left",
+  "live.km.sub": "of {total} in total · {done} travelled",
   "live.paid.title": "AZƆ̀ Pay payment confirmed",
   "live.paid.amount": "Amount paid: {amount} FCFA",
   "live.paid.partial": " (ride stopped on the way)",
