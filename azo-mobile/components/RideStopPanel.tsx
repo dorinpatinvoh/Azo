@@ -15,8 +15,12 @@ type Props = {
   onChanged: (ride: Ride) => void;
 };
 
-const km = (meters: number) =>
-  `${(meters / 1000).toLocaleString(languageInfo(getLanguage()).locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km`;
+const km = (meters: number) => {
+  const locale = languageInfo(getLanguage()).locale;
+  return meters < 1000
+    ? `${meters.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m`
+    : `${(meters / 1000).toLocaleString(locale, { minimumFractionDigits: 3, maximumFractionDigits: 3 })} km`;
+};
 
 /**
  * Course partielle : le prix est « base (prise en charge) + kilomètres parcourus », avec l'accord du

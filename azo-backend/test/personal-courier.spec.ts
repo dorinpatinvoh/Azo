@@ -32,7 +32,7 @@ describe("Tarification coursier personnel et commission de 15 %", () => {
 describe("Réservation d'un coursier personnel", () => {
   const make = (over: Record<string, unknown> = {}) => {
     const prisma: any = {
-      providerProfile: { findUnique: jest.fn().mockResolvedValue({ type: "COURIER", categoryId: "COURSIER_PERSONNEL", vehicleType: "ZEM_ESSENCE" }) },
+      providerProfile: { findUnique: jest.fn().mockResolvedValue({ type: "COURIER", status: "APPROVED", categoryId: "COURSIER_PERSONNEL", vehicleType: "ZEM_ESSENCE" }) },
       delivery: {
         findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn().mockResolvedValue({ id: "d1", clientId: "c1", mode: "PERSONAL", vehicleType: "ZEM_ESSENCE", bookingHours: 5 }),
@@ -158,7 +158,7 @@ describe("Réservation d'un coursier personnel", () => {
 
   it("colis express : le livreur ne voit que les colis demandant son Speeder (ou sans préférence)", async () => {
     const { service, prisma } = make();
-    prisma.providerProfile.findUnique.mockResolvedValue({ type: "COURIER", categoryId: "COURSIER_EXPRESS", vehicleType: "ZEM_TRICYCLE" });
+    prisma.providerProfile.findUnique.mockResolvedValue({ type: "COURIER", status: "APPROVED", categoryId: "COURSIER_EXPRESS", vehicleType: "ZEM_TRICYCLE" });
     await service.pending("k1");
     const where = prisma.delivery.findMany.mock.calls[0][0].where;
     expect(where.mode).toBe("EXPRESS");
@@ -167,7 +167,7 @@ describe("Réservation d'un coursier personnel", () => {
 
   it("refuse d'accepter un colis demandant un autre Speeder", async () => {
     const { service, prisma } = make();
-    prisma.providerProfile.findUnique.mockResolvedValue({ type: "COURIER", categoryId: "COURSIER_EXPRESS", vehicleType: "ZEM_ESSENCE" });
+    prisma.providerProfile.findUnique.mockResolvedValue({ type: "COURIER", status: "APPROVED", categoryId: "COURSIER_EXPRESS", vehicleType: "ZEM_ESSENCE" });
     prisma.delivery.findUnique.mockResolvedValue({ id: "d1", clientId: "c1", mode: "EXPRESS", vehicleType: "GAZELLE" });
     await expect(service.accept("k1", "d1")).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -227,5 +227,24 @@ describe("Réservation d'un coursier personnel", () => {
     prisma.delivery.findFirst.mockResolvedValueOnce({ id: "d-en-cours" });
     await expect(service.pending("k1")).resolves.toEqual([]);
     expect(prisma.delivery.findMany).not.toHaveBeenCalled();
+  });
+
+  it("un client ou un Speeder de courses ne peut pas prendre une mission de colis", async () => {
+    const { service, prisma } = make();
+    for (const profile of [null, { type: "DRIVER", status: "APPROVED", vehicleType: "ZEM_ESSENCE" }, { type: "COURIER", status: "DRAFT", vehicleType: "ZEM_ESSENCE" }]) {
+      prisma.providerProfile.findUnique.mockResolvedValue(profile);
+      await expect(service.accept("u1", "d1")).rejects.toThrow(/validés/);
+      await expect(service.pending("u1")).resolves.toEqual([]);
+    }
+  });
+
+  it("un coursier voit les missions dans un rayon de 20 km autour de lui (ni 25 km, ni sans limite)", async () => {
+    const { service, prisma } = make();
+    prisma.delivery.findFirst.mockResolvedValue(null);
+    const row = (id: string, lat: number) => ({ id, clientId: "c1", mode: "PERSONAL", status: "PENDING", pickupLat: lat, pickupLng: 2.39, dropLat: null, dropLng: null, price: 1000, client: { fullName: "C", phone: "0197000001" } });
+    // 1° de latitude ≈ 111 km : 0,135° ≈ 15 km, 0,225° ≈ 25 km
+    prisma.delivery.findMany.mockResolvedValue([row("proche", 6.37 + 0.135), row("loin", 6.37 + 0.225), row("sans-lieu", 0)].map((r, i) => (i === 2 ? { ...r, pickupLat: null, pickupLng: null } : r)));
+    const list: any[] = await service.pending("k1", { lat: 6.37, lng: 2.39 });
+    expect(list.map((d) => d.id).sort()).toEqual(["proche", "sans-lieu"]);
   });
 });

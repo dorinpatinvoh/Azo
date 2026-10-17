@@ -240,6 +240,13 @@ export type AgencyDetails = {
   fleetSize?: number;
 };
 
+/** « Jean Marie Dossou » → prénom « Jean Marie », nom « Dossou » (un seul mot : prénom seul). */
+export function splitFullName(fullName: string): { firstName: string; lastName: string | null } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { firstName: parts[0] ?? "", lastName: null };
+  return { firstName: parts.slice(0, -1).join(" "), lastName: parts[parts.length - 1] };
+}
+
 function parseAgencyDetails(provider: {
   type: ProviderType;
   bio?: string | null;
@@ -747,6 +754,11 @@ export class ProvidersService {
       data,
       include: { documents: true },
     });
+    // Un prestataire inscrit par son seul numéro n'a pas de fiche d'identité : le nom du dossier devient son nom dans l'application
+    if (updated.fullName && !user.profileCompletedAt) {
+      const { firstName, lastName } = splitFullName(updated.fullName);
+      await this.prisma.user.update({ where: { id: userId }, data: { fullName: updated.fullName, firstName, lastName } });
+    }
     await this.log(updated.id, null, "UPDATED", "Dossier mis à jour");
     return this.serialize(updated);
   }
@@ -1173,6 +1185,7 @@ export class ProvidersService {
           role,
           status: "ACTIVE",
           ...(provider.fullName ? { fullName: provider.fullName } : {}),
+          ...(provider.fullName && !(await tx.user.findUnique({ where: { id: provider.userId }, select: { profileCompletedAt: true } }))?.profileCompletedAt ? splitFullName(provider.fullName) : {}),
           ...(agencyId ? { agencyId } : {}),
         },
       });

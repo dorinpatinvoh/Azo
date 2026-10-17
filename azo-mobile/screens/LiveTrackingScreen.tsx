@@ -15,7 +15,7 @@ import DriverOfferCard from "../components/DriverOfferCard";
 import { maskBeninPhone, maskPersonName } from "../utils/phone";
 import { getDrivingRoute, getRideRoute, type DrivingRoute } from "../services/routing";
 import TripDistanceBanner from "../components/TripDistanceBanner";
-import { fmtKm } from "../utils/geo";
+import { fmtKm, fmtTraveled } from "../utils/geo";
 import { useI18n, type MessageKey } from "../i18n";
 import { EMERGENCY_NUMBERS } from "../config/emergency";
 import { BrandAlert } from "../components/BrandAlert";
@@ -588,7 +588,7 @@ export default function LiveTrackingScreen({ rideId, destinationLabel, onClose, 
           <TripDistanceBanner
             title={t("live.km.title")}
             remaining={fmtKm(tripRemainingKm)}
-            sub={t("live.km.sub", { total: fmtKm(tripRemainingKm + tripDoneKm), done: fmtKm(tripDoneKm) })}
+            sub={t("live.km.sub", { total: fmtKm(tripRemainingKm + tripDoneKm), done: fmtTraveled(tripDoneKm) })}
           />
         )}
         <RideStopPanel ride={ride} role="CLIENT" onChanged={setRide} />

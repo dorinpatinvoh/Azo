@@ -1268,7 +1268,7 @@ export class RidesService {
     if (ride.stopRequestedAt) throw new BadRequestException("Une demande d'arrêt est déjà en attente.");
 
     const progress = await this.gateway.freezeRideProgress(rideId);
-    const distanceMeters = progress?.traveledMeters ?? ride.traveledMeters;
+    const distanceMeters = Math.round(progress?.traveledMeters ?? ride.traveledMeters);
     const price = progress?.currentPrice ?? this.currentRidePrice(ride);
     const requestedAt = new Date();
     const count = await this.prisma.$transaction(async (tx) => {
@@ -1281,7 +1281,7 @@ export class RidesService {
           stopRequestedDistanceMeters: distanceMeters,
           ...(progress?.dirtyOdometer && progress.odometer
             ? {
-                traveledMeters: { increment: progress.pendingMeters },
+                traveledMeters: { increment: Math.round(progress.pendingMeters) },
                 odoLat: progress.odometer.lat,
                 odoLng: progress.odometer.lng,
                 odoAt: new Date(progress.odometer.at),
@@ -1716,7 +1716,7 @@ export class RidesService {
       })
       .catch(() => null);
     await this.notifications
-      .push(driverId, "Paiement reçu", `Course ${amount} FCFA · commission AZƆ̀ ${commissionPct} % débitée (−${commission} F) · tu reçois +${driverGain} FCFA.`, "payment", {
+      .push(driverId, "Paiement reçu", `Course ${amount} FCFA · ${commissionPct} % de la course (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${driverGain} FCFA.`, "payment", {
         data: { event: "ride-completed", rideId },
         titleKey: "NOTIFICATION_RIDE_COMPLETED_DRIVER",
         bodyKey: "NOTIFICATION_RIDE_COMPLETED_DRIVER_BODY",

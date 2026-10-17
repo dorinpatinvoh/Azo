@@ -135,8 +135,9 @@ describe("RidesGateway real-time ride events", () => {
           currentPrice: expect.any(Number),
         }));
         expect(emit.mock.calls.filter(([event]) => event === "driver:location")).toHaveLength(2);
-        expect(emit).toHaveBeenLastCalledWith(
-          "driver:location",
+        // le compteur de distance est envoyé à chaque déplacement (ride:progress) : on vérifie la dernière position diffusée
+        const lastLocation = [...emit.mock.calls].reverse().find(([event]) => event === "driver:location");
+        expect(lastLocation?.[1]).toEqual(
           expect.objectContaining({
             lat: 6.3701,
             lng: 2.3901,

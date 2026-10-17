@@ -18,7 +18,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { FONT } from "../theme/fontNormalize";
-import { Delivery, deliveryApi, errorMessage, userApi, walletApi, type UserProfile } from "../services/api";
+import { Delivery, deliveryApi, errorMessage, providersApi, userApi, walletApi, type UserProfile } from "../services/api";
 import { formatBeninPhoneDisplay, maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
 import { useCourierTracking } from "../hooks/useCourierTracking";
@@ -29,6 +29,7 @@ import Avatar from "../components/Avatar";
 import AvatarSheet from "../components/AvatarSheet";
 import LanguageSheet from "../components/LanguageSheet";
 import { useAvatar } from "../utils/avatar";
+import { commissionNotice, VEHICLE_LABEL } from "../utils/rideDisplay";
 import { languageInfo, useI18n } from "../i18n";
 import { displayName, initials } from "./ProfileScreen";
 import { BrandAlert } from "../components/BrandAlert";
@@ -112,7 +113,21 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
     rememberedCourier.online = online;
   }, [online]);
   const [pending, setPending] = useState<Delivery[]>([]);
-  // Position du coursier : sert à ne montrer que les missions dans un rayon de 10 km
+  // Spécialité et véhicule du dossier : on voit ainsi quelles missions sont attendues (coursier personnel ou colis express)
+  const [activityLine, setActivityLine] = useState<string | null>(null);
+  useEffect(() => {
+    providersApi
+      .me()
+      .then((me) => {
+        const a = me.provider?.activity;
+        if (!a) return;
+        const kind = a.categoryId === "COURSIER_PERSONNEL" ? "Coursier personnel" : "Livreur express";
+        const veh = a.vehicleType ? VEHICLE_LABEL[a.vehicleType] : null;
+        setActivityLine(veh ? `${kind} · ${veh}` : kind);
+      })
+      .catch(() => undefined);
+  }, []);
+  // Position du coursier : sert à ne montrer que les missions dans un rayon de 20 km
   const [myPos, setMyPos] = useState<{ latitude: number; longitude: number } | null>(null);
   const [history, setHistory] = useState<Delivery[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
@@ -256,10 +271,9 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
         await loadAccount();
         const gross = done.price ?? activeDelivery.price;
         const commission = done.commission ?? Math.round(gross * 0.15);
-        const pct = gross > 0 ? Math.round((commission / gross) * 1000) / 10 : 0;
         BrandAlert.alert(
           "Livraison terminée 🎉",
-          `Mission : ${fcfa(gross)}\nCommission AZƆ̀ ${pct.toLocaleString("fr-FR")} % débitée : −${fcfa(commission)}\nTu reçois : +${fcfa(gross - commission)} sur ton portefeuille AZƆ̀ Pay.`
+          commissionNotice(gross, commission)
         );
       }
     } catch (e) {
@@ -556,7 +570,10 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
 
           {/* Missions disponibles */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Missions à moins de 10 km ({pending.length})</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionTitle}>Missions à moins de 20 km ({pending.length})</Text>
+              {activityLine ? <Text style={styles.activityLine}>{activityLine}</Text> : null}
+            </View>
             <Pressable onPress={onRefresh}>
               <Text style={styles.refreshLink}>Actualiser</Text>
             </Pressable>
@@ -1021,6 +1038,7 @@ const styles = StyleSheet.create({
   profileRowTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "700" },
   profileRowSub: { ...typography.bodySm, color: colors.onSurfaceVariant },
   sectionTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
+  activityLine: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 2 },
   refreshLink: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
 
   emptyCard: {

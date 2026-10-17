@@ -38,6 +38,7 @@ const ACTIVE_DRIVER_LOCATION_STATUSES = ["MATCHED", "ARRIVED", "IN_PROGRESS"] as
 const ACTIVE_CLIENT_LOCATION_STATUSES = ["MATCHED", "ARRIVED"] as const;
 const LOCATION_PERSIST_INTERVAL_MS = 5_000;
 const LOCATION_RATE_LIMIT_MS = 400;
+const PROGRESS_EMIT_INTERVAL_MS = 500;
 const MAX_PLAUSIBLE_LOCATION_SPEED_MPS = 100;
 const TRACK_RETENTION_DAYS = 30;
 
@@ -382,7 +383,8 @@ export class RidesGateway implements OnGatewayConnection {
 
   private emitRideProgress(rideId: string, context: RideLocationContext) {
     const now = Date.now();
-    if (now - (this.lastProgressEmitAt.get(rideId) ?? 0) < LOCATION_PERSIST_INTERVAL_MS) return;
+    // Le compteur suit chaque déplacement : une mise à jour par demi-seconde au plus (avant : toutes les 5 s)
+    if (now - (this.lastProgressEmitAt.get(rideId) ?? 0) < PROGRESS_EMIT_INTERVAL_MS) return;
     this.lastProgressEmitAt.set(rideId, now);
     const price = Math.min(
       this.pricing.breakdown(context.traveledMeters / 1000, context.vehicleType).price,
@@ -647,7 +649,8 @@ export class RidesGateway implements OnGatewayConnection {
             driverLocatedAt: locatedAt,
             ...(context.status === "IN_PROGRESS" && context.dirtyOdometer && context.odometer
               ? {
-                  traveledMeters: { increment: context.pendingMeters },
+                  // La base compte en mètres entiers ; le reste (moins d'un mètre) est gardé en mémoire pour le prochain envoi
+                  traveledMeters: { increment: Math.floor(context.pendingMeters) },
                   odoLat: context.odometer.lat,
                   odoLng: context.odometer.lng,
                   odoAt: new Date(context.odometer.at),
@@ -676,7 +679,7 @@ export class RidesGateway implements OnGatewayConnection {
       }
       this.lastDriverPersistAt.set(rideId, now);
       if (context.status === "IN_PROGRESS" && context.dirtyOdometer) {
-        context.pendingMeters = 0;
+        context.pendingMeters -= Math.floor(context.pendingMeters);
         context.dirtyOdometer = false;
       }
       if (Date.now() - this.lastTrackCleanupAt > 60 * 60_000) {

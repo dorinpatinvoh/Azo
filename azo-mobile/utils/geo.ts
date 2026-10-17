@@ -15,6 +15,12 @@ export function distanceKm(a: LatLng, b: LatLng): number {
   return 6371 * 2 * Math.asin(Math.sqrt(h));
 }
 
+/** Distance parcourue, au plus près : « 742,3 m » sous 1 km, « 1,254 km » au-delà (le compteur suit chaque déplacement). */
+export const fmtTraveled = (km: number) =>
+  km < 1
+    ? `${(km * 1000).toLocaleString("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m`
+    : `${km.toLocaleString("fr-FR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} km`;
+
 export const fmtKm = (km: number) =>
   `${km.toLocaleString("fr-FR", { maximumFractionDigits: km < 10 ? 1 : 0 })} km`;
 

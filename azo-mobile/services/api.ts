@@ -1208,6 +1208,16 @@ export type AdminCommissionRow = {
   amount: number;
   commission: number;
   pct: number;
+  /** Détail de la course (renvoyé par le serveur depuis le 17/10/2026) */
+  driverName?: string | null;
+  driverPhone?: string | null;
+  agencyName?: string | null;
+  independent?: boolean;
+  clientName?: string | null;
+  clientPhone?: string | null;
+  origin?: string | null;
+  dest?: string | null;
+  distanceKm?: number | null;
 };
 
 export type AdminCompanyWithdrawal = {

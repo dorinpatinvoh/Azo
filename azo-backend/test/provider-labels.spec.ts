@@ -14,7 +14,7 @@ jest.mock("../src/notifications/notifications.module", () => ({
   NotificationsService: class NotificationsService {},
 }));
 
-import { typeLabelOf } from "../src/providers/providers.module";
+import { typeLabelOf, splitFullName } from "../src/providers/providers.module";
 
 describe("libellé du type de dossier prestataire", () => {
   // Régression : le libellé d'un Speeder ou d'une agence s'appelait lui-même sans fin (« Internal server error » dans la file admin)
@@ -28,5 +28,15 @@ describe("libellé du type de dossier prestataire", () => {
     expect(typeLabelOf({ type: "COURIER" as any, categoryId: "COURSIER_PERSONNEL" })).toBe("Coursier personnel");
     expect(typeLabelOf({ type: "COURIER" as any, categoryId: "COURSIER_EXPRESS" })).toBe("Livreur express");
     expect(typeLabelOf({ type: "COURIER" as any, categoryId: null })).toBe("Coursier");
+  });
+});
+
+describe("splitFullName (nom du dossier → prénom et nom)", () => {
+  it("sépare le dernier mot comme nom", () => {
+    expect(splitFullName("Jean Marie Dossou")).toEqual({ firstName: "Jean Marie", lastName: "Dossou" });
+    expect(splitFullName("  Rodrigue   Ahouandjinou ")).toEqual({ firstName: "Rodrigue", lastName: "Ahouandjinou" });
+  });
+  it("un seul mot : prénom seul", () => {
+    expect(splitFullName("Sergio")).toEqual({ firstName: "Sergio", lastName: null });
   });
 });

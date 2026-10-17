@@ -57,7 +57,7 @@ class ConfirmCodeDto {
 }
 
 /** Rayon dans lequel un coursier voit les missions autour de lui. */
-const PICKUP_RADIUS_KM = 10;
+const PICKUP_RADIUS_KM = 20;
 
 const code4 = () => Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -219,6 +219,12 @@ export class DeliveryService {
     return { mode: "EXPRESS", OR: [{ vehicleType: null }, { vehicleType: scope.vehicleType }] };
   }
 
+  /** Seul un coursier ou livreur dont le dossier est validé peut prendre des missions (ni un client, ni un Speeder de courses). */
+  private async isApprovedCourier(userId: string): Promise<boolean> {
+    const profile = await this.prisma.providerProfile.findUnique({ where: { userId }, select: { type: true, status: true } });
+    return profile?.type === "COURIER" && profile.status === "APPROVED";
+  }
+
   private async isCourierBusy(courierId: string): Promise<boolean> {
     const now = new Date();
     const busy = await this.prisma.delivery.findFirst({
@@ -236,6 +242,7 @@ export class DeliveryService {
 
   async pending(courierId?: string, near?: { lat: number; lng: number }) {
     // Un coursier occupé (mission en cours, ou réservé par un client pour la durée choisie) ne se voit proposer aucune autre mission
+    if (courierId && !(await this.isApprovedCourier(courierId))) return [];
     if (courierId && (await this.isCourierBusy(courierId))) return [];
     const scope = await this.courierScope(courierId);
     const items = await this.prisma.delivery.findMany({
@@ -245,7 +252,7 @@ export class DeliveryService {
       take: 40,
     });
     const enriched = await this.enrich(items);
-    // Rayon de 10 km autour du coursier : les missions dont le départ est connu et plus loin sont masquées
+    // Rayon de 20 km autour du coursier : les missions dont le départ est connu et plus loin sont masquées
     const withDistance = enriched
       .map((d) => ({
         ...d,
@@ -282,6 +289,7 @@ export class DeliveryService {
 
   // Acceptation atomique d'une mission par un coursier / livreur
   async accept(courierId: string, id: string) {
+    if (!(await this.isApprovedCourier(courierId))) throw new ForbiddenException("Seuls les coursiers et livreurs validés par AZƆ̀ peuvent prendre une mission.");
     const active = await this.prisma.delivery.findFirst({
       // une réservation programmée plus tard n'empêche pas d'accepter une course maintenant
       where: { courierId, status: { in: ["MATCHED", "IN_PROGRESS"] }, NOT: { mode: "PERSONAL", bookedFrom: { gt: new Date() } } },
@@ -488,7 +496,7 @@ export class DeliveryService {
     if (courierId !== d.clientId && finalPrice > 0) {
       const pct = Math.round((commission / finalPrice) * 1000) / 10;
       await this.notifications
-        .push(courierId, "Paiement reçu", `Livraison ${finalPrice} FCFA · commission AZƆ̀ ${pct} % débitée (−${commission} F) · tu reçois +${net} FCFA.`, "payment", {
+        .push(courierId, "Paiement reçu", `Livraison ${finalPrice} FCFA · ${pct} % de la livraison (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${net} FCFA.`, "payment", {
           titleKey: "NOTIFICATION_DELIVERY_PAID_COURIER",
           bodyKey: "NOTIFICATION_DELIVERY_PAID_COURIER",
           params: { amount: finalPrice, pct, commission, net },

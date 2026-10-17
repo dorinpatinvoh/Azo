@@ -92,6 +92,14 @@ export default function DeliveryTrackingCard({ delivery: d, onChanged }: Props) 
         </Text>
       ) : null}
 
+      {d.status === "PENDING" ? (
+        <Text style={styles.meta}>
+          {personal
+            ? "Recherche d'un coursier personnel en ligne à moins de 20 km de ton point de départ. Dès qu'il accepte, tu suis sa position ici."
+            : "Recherche d'un livreur en ligne à moins de 20 km de ton point de départ. Dès qu'il accepte, tu suis sa position ici."}
+        </Text>
+      ) : null}
+
       {["MATCHED", "IN_PROGRESS"].includes(d.status) ? <CourierTrackMap deliveryId={d.id} perKm={perKm} /> : null}
 
       {active ? (

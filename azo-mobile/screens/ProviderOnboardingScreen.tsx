@@ -313,7 +313,8 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
           setForm({
             type: existing.type === "ARTISAN" ? "DRIVER" : existing.type,
             vehicleType: existing.activity.vehicleType,
-            categoryId: !existing.activity.categoryId || existing.activity.categoryId === "LIVREUR_COLIS" ? "COURSIER_EXPRESS" : existing.activity.categoryId,
+            // Le brouillon créé à l'inscription n'a pas encore de spécialité : on retient celle choisie à l'inscription (coursier personnel ou livreur express)
+            categoryId: existing.activity.categoryId === "LIVREUR_COLIS" ? "COURSIER_EXPRESS" : existing.activity.categoryId || signupCategory || "COURSIER_EXPRESS",
             fullName: existing.identity.fullName ?? "",
             city: existing.identity.city ?? "",
             zones: existing.identity.zones.join(", "),

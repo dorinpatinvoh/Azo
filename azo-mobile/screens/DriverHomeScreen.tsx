@@ -13,9 +13,9 @@ import { typography } from "../theme/typography";
 import {
   API_URL, Ride, VehicleType, errorMessage, getToken, paidAmount, placesApi, providersApi, ridesApi, walletApi,
 } from "../services/api";
-import { fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
+import { commissionNotice, fcfa, relativeDay, VEHICLE_ICON, VEHICLE_LABEL } from "../utils/rideDisplay";
 import { tarification } from "../services/tarification";
-import { distanceKm, fmtKm } from "../utils/geo";
+import { distanceKm, fmtKm, fmtTraveled } from "../utils/geo";
 import { filterFix, snapToPolyline, type FilterState } from "../utils/gpsFilter";
 import RideChatModal from "../components/RideChatModal";
 import OSMMapView, { type OSMMarker } from "../components/OSMMapView";
@@ -410,7 +410,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
           BrandAlert.alert(
             fresh.status === "COMPLETED" ? "Course terminée" : "Course annulée",
             fresh.status === "COMPLETED"
-              ? "Le paiement a été effectué sur ton portefeuille AZƆ̀ Pay."
+              ? commissionNotice(paidAmount(fresh), fresh.commission ?? 0)
               : "Le client a annulé la course. Tu peux accepter une autre demande."
           );
           return;
@@ -918,9 +918,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
               await loadAccount();
               const gross = paidAmount(done);
               const commission = done.commission ?? 0;
-              const net = gross - commission;
-              const pct = gross > 0 ? Math.round((commission / gross) * 1000) / 10 : 0;
-              BrandAlert.alert("Course terminée 🎉", `Course : ${fcfa(gross)}\nCommission AZƆ̀ ${pct.toLocaleString("fr-FR")} % débitée : −${fcfa(commission)}\nTu reçois : +${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`);
+              BrandAlert.alert("Course terminée 🎉", commissionNotice(gross, commission));
             } catch (e) {
               BrandAlert.alert("Impossible de terminer", errorMessage(e));
             } finally {
@@ -1242,7 +1240,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
                 <TripDistanceBanner
                   title="Distance à parcourir"
                   remaining={fmtKm(tripRemainingKm)}
-                  sub={`sur ${fmtKm(tripRemainingKm + tripDoneKm)} au total · ${fmtKm(tripDoneKm)} déjà parcourus`}
+                  sub={`sur ${fmtKm(tripRemainingKm + tripDoneKm)} au total · ${fmtTraveled(tripDoneKm)} déjà parcourus`}
                 />
               )}
               <Pressable

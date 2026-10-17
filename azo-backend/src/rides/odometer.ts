@@ -4,6 +4,8 @@ export type OdometerPoint = {
   at: number;
   /** Précision GPS (m) annoncée avec ce point : sert à ne pas confondre le bruit du GPS avec un déplacement. */
   acc?: number;
+  /** Mètres déjà comptés grâce à la vitesse du téléphone depuis ce point d'ancrage (évite de les compter deux fois). */
+  cred?: number;
 };
 
 export type OdometerResult = {
@@ -29,7 +31,12 @@ export const MAX_ACCURACY_METERS = 30;
 /** Un déplacement plus petit que cela n'est jamais compté (bruit du GPS à l'arrêt). */
 export const MIN_STEP_METERS = 12;
 /** En dessous de cette vitesse (m/s), le téléphone est considéré à l'arrêt. */
-const STATIONARY_SPEED_MPS = 0.8;
+const STATIONARY_SPEED_MPS = 0.5;
+/** Durée maximale (s) d'un intervalle compté à partir de la vitesse : au-delà, les données sont trop anciennes. */
+const MAX_SPEED_INTERVAL_S = 5;
+
+/** Arrondi au millimètre. */
+const mm = (meters: number) => Math.round(meters * 1000) / 1000;
 
 /**
  * Cumule la distance réellement parcourue, en ignorant le bruit du GPS.
@@ -71,7 +78,19 @@ export function odometerStep(
   // Zone d'incertitude : les deux points peuvent être décalés de leur précision chacun
   const noise = Math.max(MIN_STEP_METERS, (previous.acc ?? accuracy) + accuracy);
   const stationary = typeof speed === "number" && Number.isFinite(speed) && speed < STATIONARY_SPEED_MPS;
-  if (distance < noise || (stationary && distance < noise * 3)) return { point: previous, meters: 0, accepted: false };
+  if (distance < noise || (stationary && distance < noise * 3)) {
+    // La position ne suffit pas à mesurer ce petit déplacement (le GPS bouge de 10 à 30 m à l'arrêt), mais la vitesse mesurée
+    // par le téléphone (effet Doppler) est précise au dixième de m/s : si elle indique un vrai mouvement, on compte vitesse × temps,
+    // sans jamais dépasser ce que la position permet. À l'arrêt (vitesse nulle ou inférieure à 0,5 m/s), rien n'est compté.
+    if (!stationary && typeof speed === "number" && Number.isFinite(speed) && speed > 0) {
+      const counted = mm(Math.min(speed * Math.min(elapsedMs / 1000, MAX_SPEED_INTERVAL_S), distance + noise));
+      if (counted > 0) {
+        return { point: { ...previous, at: current.at, cred: mm((previous.cred ?? 0) + counted) }, meters: counted, accepted: true };
+      }
+    }
+    return { point: previous, meters: 0, accepted: false };
+  }
 
-  return { point, meters: Math.round(distance), accepted: true };
+  // Déplacement mesuré par la position : on retire ce qui a déjà été compté par la vitesse depuis l'ancrage
+  return { point, meters: mm(Math.max(0, distance - (previous.cred ?? 0))), accepted: true };
 }

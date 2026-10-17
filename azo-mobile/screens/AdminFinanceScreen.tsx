@@ -52,6 +52,7 @@ export default function AdminFinanceScreen({ onNavigateTab }: Props) {
   const [summary, setSummary] = useState<AdminFinanceSummary | null>(null);
   const [withdrawals, setWithdrawals] = useState<AdminCompanyWithdrawal[]>([]);
   const [commissions, setCommissions] = useState<AdminCommissionRow[]>([]);
+  const [commissionsError, setCommissionsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +71,7 @@ export default function AdminFinanceScreen({ onNavigateTab }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const [s, w, c] = await Promise.all([adminApi.financeSummary(), adminApi.withdrawals(), adminApi.commissions(40).catch(() => [] as AdminCommissionRow[])]);
+      const [s, w, c] = await Promise.all([adminApi.financeSummary(), adminApi.withdrawals(), adminApi.commissions(40).then((rows) => { setCommissionsError(null); return rows; }).catch((e) => { setCommissionsError("Commissions indisponibles : " + errorMessage(e)); return [] as AdminCommissionRow[]; })]);
       setSummary(s);
       setWithdrawals(w);
       setCommissions(c);
@@ -221,6 +222,46 @@ export default function AdminFinanceScreen({ onNavigateTab }: Props) {
                 </Pressable>
               </View>
 
+              {/* Commissions reçues : une ligne par course, avec le Speeder et le détail de la course */}
+              <View style={styles.sectionHeadRow}>
+                <Text style={styles.sectionTitle}>Commissions reçues</Text>
+                <Text style={styles.sectionCount}>{commissions.length} dernières · {fcfa(commissions.reduce((sum, c) => sum + c.commission, 0))}</Text>
+              </View>
+              {commissionsError ? <Text style={styles.commissionError}>{commissionsError}</Text> : null}
+              <View style={styles.card}>
+                {commissions.length === 0 ? (
+                  <Text style={styles.sourceSub}>Aucune course terminée pour le moment : chaque course terminée apparaîtra ici avec sa commission.</Text>
+                ) : (
+                  commissions.map((c, i) => (
+                    <View key={`${c.kind}-${c.id}`} style={[styles.commissionRow, i < commissions.length - 1 && styles.divider]}>
+                      <View style={styles.sourceIcon}>
+                        <MaterialIcons name={c.kind === "RIDE" ? "two-wheeler" : c.kind === "PERSONAL" ? "directions-run" : "local-shipping"} size={20} color={colors.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.sourceLabel} numberOfLines={1}>{c.driverName ?? c.who ?? "Prestataire inconnu"}</Text>
+                        <Text style={styles.sourceSub} numberOfLines={1}>
+                          {c.ref} · {c.independent === false ? `Agence ${c.agencyName ?? ""}`.trim() : "Indépendant"}{c.driverPhone ? ` · ${c.driverPhone}` : ""}
+                        </Text>
+                        {c.origin || c.dest ? (
+                          <Text style={styles.sourceSub} numberOfLines={2}>
+                            {c.origin ?? "Départ ?"} → {c.dest ?? "Arrivée ?"}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.sourceSub} numberOfLines={2}>
+                          {new Date(c.date).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          {c.clientName ? ` · Client : ${c.clientName}` : ""}
+                          {typeof c.distanceKm === "number" ? ` · ${c.distanceKm.toLocaleString("fr-FR", { maximumFractionDigits: 3 })} km` : ""}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={styles.commissionValue}>+{fcfa(c.commission)}</Text>
+                        <Text style={styles.sourceSub}>{c.pct.toLocaleString("fr-FR")} % de {fcfa(c.amount)}</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+
               {/* D'où viennent les gains */}
               <Text style={styles.sectionTitle}>D'où viennent les gains</Text>
               <View style={styles.card}>
@@ -236,32 +277,6 @@ export default function AdminFinanceScreen({ onNavigateTab }: Props) {
                     <Text style={styles.sourceTotal}>{fcfa(s.total)}</Text>
                   </View>
                 ))}
-              </View>
-
-              {/* Commission de chaque course */}
-              <Text style={styles.sectionTitle}>Commission sur chaque course</Text>
-              <View style={styles.card}>
-                {commissions.length === 0 ? (
-                  <Text style={styles.sourceSub}>Aucune course terminée pour le moment.</Text>
-                ) : (
-                  commissions.map((c, i) => (
-                    <View key={`${c.kind}-${c.id}`} style={[styles.sourceRow, i < commissions.length - 1 && styles.divider]}>
-                      <View style={styles.sourceIcon}>
-                        <MaterialIcons name={c.kind === "RIDE" ? "two-wheeler" : c.kind === "PERSONAL" ? "directions-run" : "local-shipping"} size={20} color={colors.primary} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.sourceLabel} numberOfLines={1}>{c.ref}</Text>
-                        <Text style={styles.sourceSub} numberOfLines={1}>
-                          {new Date(c.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} · {c.who ?? "—"} · course {fcfa(c.amount)}
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: "flex-end" }}>
-                        <Text style={styles.sourceTotal}>{fcfa(c.commission)}</Text>
-                        <Text style={styles.sourceSub}>{c.pct.toLocaleString("fr-FR")} %</Text>
-                      </View>
-                    </View>
-                  ))
-                )}
               </View>
 
               {/* 6 derniers mois */}
@@ -450,6 +465,11 @@ const styles = StyleSheet.create({
   withdrawText: { ...typography.labelMd, color: colors.onPrimary, fontWeight: "800" },
   sectionTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800", marginTop: spacing.md },
   card: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, padding: spacing.md, borderWidth: 1, borderColor: colors.surfaceContainer },
+  sectionHeadRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: spacing.sm },
+  sectionCount: { ...typography.bodySm, flexShrink: 1, color: colors.onSurfaceVariant },
+  commissionError: { ...typography.bodySm, color: colors.error, marginBottom: spacing.xs },
+  commissionRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, paddingVertical: spacing.sm },
+  commissionValue: { ...typography.labelLg, color: "#146C2E", fontWeight: "800" },
   sourceRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm + 2, paddingVertical: spacing.sm },
   divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.surfaceContainer },
   sourceIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },

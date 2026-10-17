@@ -77,3 +77,56 @@ describe("metered ride pricing", () => {
     expect(pricing.breakdown(Number(distance), String(vehicle)).price).toBe(expected);
   });
 });
+
+describe("odometerStep : petits déplacements réels (vitesse du téléphone)", () => {
+  it("compte un déplacement lent mais réel (1 m/s) que la position seule ne verrait pas", () => {
+    let anchor = odometerStep(null, pointAtMeters(0, 1_000), 8)!.point;
+    let total = 0;
+    // 10 s à 1 m/s : le GPS « danse » de quelques mètres, la vitesse mesurée dit 1 m/s
+    for (let i = 1; i <= 10; i++) {
+      const wobble = i % 2 ? 3 : -2;
+      const r = odometerStep(anchor, pointAtMeters(i * 0.2 + wobble, 1_000 + i * 1_000), 8, 1);
+      if (r?.accepted) {
+        anchor = r.point;
+        total += r.meters;
+      }
+    }
+    expect(total).toBeGreaterThan(8);
+    expect(total).toBeLessThan(11);
+  });
+
+  it("compte au millimètre : 0,3 m/s pendant 1 s = 0,3 m", () => {
+    const start = odometerStep(null, pointAtMeters(0, 1_000), 5)!.point;
+    const r = odometerStep(start, pointAtMeters(1, 2_000), 5, 0.6);
+    expect(r?.accepted).toBe(true);
+    expect(r?.meters).toBeCloseTo(0.6, 3);
+  });
+
+  it("à l'arrêt (vitesse nulle ou sous 0,5 m/s) rien n'est compté, même si la position danse", () => {
+    let anchor = odometerStep(null, pointAtMeters(0, 1_000), 8)!.point;
+    let total = 0;
+    for (let i = 1; i <= 120; i++) {
+      const r = odometerStep(anchor, pointAtMeters(i % 2 ? 9 : -9, 1_000 + i * 1_000), 8, i % 3 === 0 ? 0.3 : 0);
+      if (r?.accepted) {
+        anchor = r.point;
+        total += r.meters;
+      }
+    }
+    expect(total).toBe(0);
+  });
+
+  it("ne compte pas deux fois : la vitesse puis la position donnent la distance réelle", () => {
+    let anchor = odometerStep(null, pointAtMeters(0, 1_000), 5)!.point;
+    let total = 0;
+    // 20 s à 3 m/s = 60 m, avec position mesurée correctement
+    for (let i = 1; i <= 20; i++) {
+      const r = odometerStep(anchor, pointAtMeters(i * 3, 1_000 + i * 1_000), 5, 3);
+      if (r?.accepted) {
+        anchor = r.point;
+        total += r.meters;
+      }
+    }
+    expect(total).toBeGreaterThan(55);
+    expect(total).toBeLessThan(65);
+  });
+});

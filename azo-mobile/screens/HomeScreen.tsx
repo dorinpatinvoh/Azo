@@ -198,28 +198,42 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
         {/* Carte Portefeuille AZƆ̀ Pay (Point focal financier) */}
         <StandingBanner />
 
-        <View style={styles.walletCard}>
+        <LinearGradient colors={[colors.primary, colors.primaryContainer]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.walletCard}>
           <View style={styles.walletInfo}>
             <View style={styles.walletIconBox}>
-              <MaterialIcons name="account-balance-wallet" size={22} color={colors.primary} />
+              <MaterialIcons name="account-balance-wallet" size={22} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.walletLabel}>{t("home.wallet.label")}</Text>
               {loadingWallet ? (
-                <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 4 }} />
+                <ActivityIndicator size="small" color="#fff" style={{ marginTop: 4, alignSelf: "flex-start" }} />
               ) : (
-                <Text style={styles.walletBalance} numberOfLines={1}>
-                  {balance !== null ? balance.toLocaleString(locale) : "---"}{" "}
+                <View style={styles.walletBalanceRow}>
+                  <Text style={styles.walletBalance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                    {balance !== null ? balance.toLocaleString(locale) : "---"}
+                  </Text>
                   <Text style={styles.currency}>FCFA</Text>
-                </Text>
+                </View>
               )}
             </View>
           </View>
-          <Pressable style={styles.rechargeBtn} onPress={() => onNavigateTab?.("wallet")}>
-            <MaterialIcons name="add" size={18} color="#fff" />
+          <Pressable style={styles.rechargeBtn} onPress={() => onNavigateTab?.("wallet")} accessibilityRole="button">
+            <MaterialIcons name="add" size={18} color={colors.primary} />
             <Text style={styles.rechargeBtnText}>{t("home.wallet.recharge")}</Text>
           </Pressable>
-        </View>
+        </LinearGradient>
+
+        {/* Barre de recherche : point d'entrée principal (course simple) */}
+        <Pressable style={styles.quickSearchBox} onPress={() => onSelectService("zem")} accessibilityRole="button" accessibilityLabel={t("home.search.title")}>
+          <View style={styles.quickSearchIcon}>
+            <MaterialIcons name="search" size={22} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.quickSearchTitle} numberOfLines={1}>{t("home.search.title")}</Text>
+            <Text style={styles.quickSearchSub} numberOfLines={1}>{t("home.search.sub")}</Text>
+          </View>
+          <MaterialIcons name="arrow-forward-ios" size={14} color={colors.onSurfaceVariant} />
+        </Pressable>
 
         {/* Destinations en 1 clic : une fenêtre demande ensuite course, livraison ou coursier personnel */}
         <ScrollView
@@ -281,7 +295,7 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
         {/* Section 1 : Déplacement immédiat (2 grandes cartes côte à côte) */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{t("home.section.order")}</Text>
-          <Text style={styles.sectionHint}>{t("home.section.orderHint")}</Text>
+          <Text style={styles.sectionHint} numberOfLines={1}>{t("home.section.orderHint")}</Text>
         </View>
         <View style={styles.mainServicesRow}>
           {MAIN_SERVICES.map((s) => (
@@ -290,7 +304,14 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
               style={[styles.mainServiceCard, { backgroundColor: s.bg }]}
               onPress={() => onSelectService(s.id)}
             >
-              <MaterialIcons name={s.icon} size={34} color={s.fg} style={{ marginVertical: 6 }} />
+              <View style={styles.mainServiceTop}>
+                <View style={styles.mainServiceIcon}>
+                  <MaterialIcons name={s.icon} size={26} color={s.fg} />
+                </View>
+                <View style={styles.mainServiceBadge}>
+                  <Text style={[styles.mainServiceBadgeText, { color: s.fg }]} numberOfLines={1}>{t(s.badgeKey)}</Text>
+                </View>
+              </View>
               <Text style={styles.mainServiceText} numberOfLines={2}>{t(s.labelKey)}</Text>
               <Text style={styles.mainServiceSub} numberOfLines={2}>{t(s.subKey)}</Text>
             </Pressable>
@@ -300,19 +321,20 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
         {/* Section 2 : Tous les services AZƆ̀ (Grille symétrique 3 × 2) */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{t("home.section.services")}</Text>
-          <Text style={styles.sectionHint}>{t("home.section.servicesHint")}</Text>
+          <Text style={styles.sectionHint} numberOfLines={1}>{t("home.section.servicesHint")}</Text>
         </View>
         <View style={styles.otherServicesGrid}>
-          {OTHER_SERVICES.map((s) => (
+          {OTHER_SERVICES.map((s, i) => (
             <Pressable
               key={s.id}
-              style={styles.smallTile}
+              style={[styles.smallTile, i >= 3 && styles.wideTile]}
               onPress={() => onSelectService(s.id)}
+              accessibilityRole="button"
             >
               <View style={[styles.smallTileIcon, { backgroundColor: s.bg }]}>
                 <MaterialIcons name={s.icon} size={24} color={s.fg} />
               </View>
-              <Text style={styles.smallTileLabel} numberOfLines={2}>
+              <Text style={[styles.smallTileLabel, i >= 3 && styles.wideTileLabel]} numberOfLines={2}>
                 {t(s.labelKey)}
               </Text>
             </Pressable>
@@ -413,33 +435,33 @@ const styles = StyleSheet.create({
 
   // Wallet
   walletCard: {
-    backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.xl,
     padding: spacing.md,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.surfaceContainer,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    elevation: 4,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
+  walletBalanceRow: { flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 },
   walletInfo: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   walletIconBox: {
     width: 44,
     height: 44,
     borderRadius: radius.lg,
-    backgroundColor: colors.primaryFixed,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
   },
   walletTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   walletLabel: {
     ...typography.labelSm,
-    color: colors.onSurfaceVariant,
+    color: "rgba(255,255,255,0.85)",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -457,13 +479,13 @@ const styles = StyleSheet.create({
   },
   walletBalance: {
     ...typography.headlineMd,
-    color: colors.onSurface,
+    flexShrink: 1,
+    color: "#fff",
     fontWeight: "800",
-    marginTop: 2,
   },
-  currency: { ...typography.labelMd, color: colors.onSurfaceVariant, fontWeight: "600" },
+  currency: { ...typography.labelMd, color: "rgba(255,255,255,0.85)", fontWeight: "700" },
   rechargeBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: "#fff",
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 14,
@@ -471,7 +493,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     gap: 4,
   },
-  rechargeBtnText: { ...typography.labelMd, color: "#fff", fontWeight: "700" },
+  rechargeBtnText: { ...typography.labelMd, color: colors.primary, fontWeight: "800" },
 
   // Quick Search + Chips
   quickSearchBox: {
@@ -485,6 +507,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.primaryFixed,
     marginBottom: spacing.sm,
+    elevation: 1,
   },
   quickSearchIcon: {
     width: 38,
@@ -536,11 +559,15 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...typography.labelLg,
+    fontSize: 17,
+    flexShrink: 0,
     color: colors.onSurface,
     fontWeight: "800",
   },
   sectionHint: {
     ...typography.bodySm,
+    flexShrink: 1,
+    marginLeft: spacing.sm,
     color: colors.onSurfaceVariant,
     fontSize: 12,
   },
@@ -561,13 +588,23 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: spacing.sm + 2,
     justifyContent: "flex-start",
-    alignItems: "flex-start",
-    minHeight: 130,
+    alignItems: "stretch",
+    minHeight: 150,
+    elevation: 1,
   },
   mainServiceTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  mainServiceIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.full,
+    backgroundColor: "rgba(255,255,255,0.8)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   mainServiceBadge: {
     backgroundColor: "rgba(255,255,255,0.75)",
@@ -578,7 +615,7 @@ const styles = StyleSheet.create({
   mainServiceBadgeText: {
     ...typography.labelSm,
     fontWeight: "800",
-    fontSize: 10,
+    fontSize: 8,
   },
   mainServiceText: { ...typography.labelLg, color: colors.onSurface, fontWeight: "800" },
   mainServiceSub: { ...typography.bodySm, color: colors.onSurfaceVariant, fontWeight: "600", marginTop: 2 },
@@ -616,6 +653,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
+  // Les deux dernières tuiles : plus larges, icône à gauche
+  wideTile: { width: "46.8%", flexDirection: "row", gap: 10, paddingVertical: 10 },
+  wideTileLabel: { flex: 1, textAlign: "left" },
 
   // Promo Banner
   promoBanner: {

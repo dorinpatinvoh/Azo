@@ -45,28 +45,64 @@ export class FinanceService {
    */
   async commissions(limit = 50) {
     const n = Math.min(Math.max(Math.floor(limit) || 50, 1), 200);
-    const rides = await this.prisma.$queryRaw<{ id: string; at: Date; amount: number; commission: number; who: string | null; vehicle: string | null }[]>`
-      SELECT r."id", r."createdAt" AS at, COALESCE(r."finalPrice", r."price") AS amount, r."commission", COALESCE(u."fullName", u."phone") AS who, r."vehicleType"::text AS vehicle
-      FROM "Ride" r LEFT JOIN "User" u ON u."id" = r."driverId"
-      WHERE r."status" = 'COMPLETED' ORDER BY r."createdAt" DESC LIMIT ${n}`;
-    const deliveries = await this.prisma.$queryRaw<{ id: string; at: Date; amount: number; who: string | null; mode: string | null }[]>`
-      SELECT d."id", d."createdAt" AS at, d."price" AS amount, COALESCE(u."fullName", u."phone") AS who, d."mode"
-      FROM "Delivery" d LEFT JOIN "User" u ON u."id" = d."courierId"
+    type RideRow = {
+      id: string; at: Date; amount: number; commission: number; vehicle: string | null;
+      driverId: string | null; driverName: string | null; driverPhone: string | null; agencyName: string | null;
+      clientName: string | null; clientPhone: string | null; origin: string | null; dest: string | null; meters: number | null;
+    };
+    const rides = await this.prisma.$queryRaw<RideRow[]>`
+      SELECT r."id", COALESCE(r."completedAt", r."createdAt") AS at, COALESCE(r."finalPrice", r."price") AS amount, r."commission",
+             r."vehicleType"::text AS vehicle, r."driverId",
+             COALESCE(p."fullName", u."fullName", u."phone") AS "driverName", u."phone" AS "driverPhone", ag."name" AS "agencyName",
+             COALESCE(c."fullName", c."phone") AS "clientName", c."phone" AS "clientPhone",
+             r."originLabel" AS origin, r."destLabel" AS dest, COALESCE(r."settledDistanceMeters", r."traveledMeters") AS meters
+      FROM "Ride" r
+      LEFT JOIN "User" u ON u."id" = r."driverId"
+      LEFT JOIN "ProviderProfile" p ON p."userId" = r."driverId"
+      LEFT JOIN "Agency" ag ON ag."id" = u."agencyId"
+      LEFT JOIN "User" c ON c."id" = r."clientId"
+      WHERE r."status" = 'COMPLETED' ORDER BY COALESCE(r."completedAt", r."createdAt") DESC LIMIT ${n}`;
+    type DelRow = {
+      id: string; at: Date; amount: number; mode: string | null; vehicle: string | null;
+      driverName: string | null; driverPhone: string | null; agencyName: string | null;
+      clientName: string | null; clientPhone: string | null; origin: string | null; dest: string | null; km: number | null;
+    };
+    const deliveries = await this.prisma.$queryRaw<DelRow[]>`
+      SELECT d."id", d."createdAt" AS at, d."price" AS amount, d."mode", d."vehicleType"::text AS vehicle,
+             COALESCE(p."fullName", u."fullName", u."phone") AS "driverName", u."phone" AS "driverPhone", ag."name" AS "agencyName",
+             COALESCE(c."fullName", c."phone") AS "clientName", c."phone" AS "clientPhone",
+             d."pickupAddress" AS origin, d."dropAddress" AS dest, d."distanceKm" AS km
+      FROM "Delivery" d
+      LEFT JOIN "User" u ON u."id" = d."courierId"
+      LEFT JOIN "ProviderProfile" p ON p."userId" = d."courierId"
+      LEFT JOIN "Agency" ag ON ag."id" = u."agencyId"
+      LEFT JOIN "User" c ON c."id" = d."clientId"
       WHERE d."status" = 'COMPLETED' ORDER BY d."createdAt" DESC LIMIT ${n}`;
     const pct = (amount: number, commission: number) => (amount > 0 ? Math.round((commission / amount) * 1000) / 10 : 0);
     const rows = [
       ...rides.map((r) => {
         const amount = Number(r.amount);
         const commission = Number(r.commission);
-        return { kind: "RIDE" as const, id: r.id, ref: `Course #${r.id.slice(0, 6)}`, date: r.at, who: r.who, vehicle: r.vehicle, amount, commission, pct: pct(amount, commission) };
+        return {
+          kind: "RIDE" as const, id: r.id, ref: `Course #${r.id.slice(0, 6)}`, date: r.at, who: r.driverName, vehicle: r.vehicle, amount, commission, pct: pct(amount, commission),
+          driverName: r.driverName, driverPhone: r.driverPhone, agencyName: r.agencyName, independent: !r.agencyName,
+          clientName: r.clientName, clientPhone: r.clientPhone, origin: r.origin, dest: r.dest,
+          distanceKm: r.meters != null ? Math.round((Number(r.meters) / 1000) * 1000) / 1000 : null,
+        };
       }),
       ...deliveries.map((d) => {
         const amount = Number(d.amount);
         const commission = this.pricing ? this.pricing.platformCommission(amount) : Math.round(amount * 0.15);
-        return { kind: d.mode === "PERSONAL" ? ("PERSONAL" as const) : ("DELIVERY" as const), id: d.id, ref: `${d.mode === "PERSONAL" ? "Coursier personnel" : "Livraison"} #${d.id.slice(0, 6)}`, date: d.at, who: d.who, vehicle: null, amount, commission, pct: pct(amount, commission) };
+        return {
+          kind: d.mode === "PERSONAL" ? ("PERSONAL" as const) : ("DELIVERY" as const), id: d.id,
+          ref: `${d.mode === "PERSONAL" ? "Coursier personnel" : "Livraison"} #${d.id.slice(0, 6)}`, date: d.at, who: d.driverName, vehicle: d.vehicle, amount, commission, pct: pct(amount, commission),
+          driverName: d.driverName, driverPhone: d.driverPhone, agencyName: d.agencyName, independent: !d.agencyName,
+          clientName: d.clientName, clientPhone: d.clientPhone, origin: d.origin, dest: d.dest,
+          distanceKm: d.km != null ? Math.round(Number(d.km) * 1000) / 1000 : null,
+        };
       }),
     ];
-    return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, n);
+    return rows.sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime()).slice(0, n);
   }
 
   /** Gains par source et par mois. */
