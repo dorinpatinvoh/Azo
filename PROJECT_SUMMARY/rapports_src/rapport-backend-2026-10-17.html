@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 17 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">17 octobre 2026 · 1 commit poussé sur main (<code>ecb4be03</code>) · 31 suites / 338 tests verts</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">17 octobre 2026 · 3 commits poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>8ab4ce66</code>) + base des lieux élargie · 31 suites / 339 tests verts</span></div>
 
 <h2>1. En résumé</h2>
 <p>Quatre changements : <b>type de compte enregistré sans identité</b> pour les profils professionnels, <b>le tricycle ne livre que les gros colis</b>, <b>base nationale des lieux du Bénin</b> et <b>plaque du Speeder partiellement masquée</b>. <code>tsc</code> sans erreur. Aucune migration.</p>
@@ -23,19 +23,23 @@
 
 <h2>4. Base nationale des lieux (<code>places/</code>)</h2>
 <ul>
-<li><code>benin-gazetteer.json</code> : <b>16 743 lieux</b> couvrant les <b>77 communes</b> (communes, arrondissements, villes, quartiers, villages, hameaux). La liste soignée de Cotonou et d'Abomey-Calavi (<code>benin-gazetteer-core.json</code>, 236 lieux) est prioritaire à la fusion.</li>
+<li><code>benin-gazetteer.json</code> : <b>17 022 lieux</b> couvrant les <b>77 communes</b> : 77 communes, 527 arrondissements, 1 536 quartiers, 6 373 villages, 8 289 hameaux, villes et lieux-dits (relevé élargi du 17 octobre : zones et limites administratives en plus des points « place »). La liste soignée de Cotonou et d'Abomey-Calavi (<code>benin-gazetteer-core.json</code>, 236 lieux) est prioritaire à la fusion.</li>
 <li><b>Sources</b> : OpenStreetMap (Overpass, un relevé par commune), GeoNames (villes, 77 communes, 539 arrondissements). Doublons (même nom à moins de 400 m) fusionnés ; chaque lieu est rattaché à sa commune et à l'arrondissement le plus proche (40 km maximum).</li>
 <li><code>places.module.ts</code> : la recherche classe commune, ville, arrondissement, quartier, village ; sous-titre « type · arrondissement, commune » ; le géocodage inverse essaie d'abord le lieu connu le plus proche (700 m), sinon la recherche en ligne.</li>
 <li><b>Limites</b> : la liste officielle des villages par arrondissement (INStaD) n'a pas pu être obtenue (site en maintenance) ; la couverture dépend de ce qu'OpenStreetMap contient (inégale selon les communes, quelques dizaines de lieux pour certaines). Les arrondissements sont placés par leur chef-lieu. Les noms ne sont pas tous orthographiés selon l'usage officiel.</li>
+<li>« Kpota » (quartier du Séminaire, Abomey-Calavi) ajouté à la main à la liste soignée ; absent d'OpenStreetMap en tant que quartier. Quatre communes restent peu fournies : Ouinhi (17), Tori-Bossito (24), Pobè (25), Zangnanado (31). Détail par commune : <code>COUVERTURE_LIEUX_BENIN_2026-10-17.pdf</code>.</li>
 <li>Tests : 6 tests <code>places</code> verts.</li>
 </ul>
 
 <h2>5. Plaque du Speeder (<code>rides.service.ts</code>)</h2>
 <p><code>maskPlate</code> : début et fin conservés, milieu remplacé par quatre étoiles (« AB1234CD » → « AB123****CD »). Le champ reste <code>plateMasked</code> ; la plaque complète n'est pas exposée au client.</p>
 
+<h2>5bis. Coursier occupé (<code>delivery.module.ts</code>, commit <code>8ab4ce66</code>)</h2>
+<ul><li><code>pending()</code> ne renvoie plus aucune mission à un coursier qui a une mission acceptée ou en cours, ou, pour un coursier personnel, qui est réservé par un client pour la durée choisie (<code>isCourierBusy</code>). Une réservation programmée plus tard ne bloque pas. Le refus à l'acceptation existait déjà.</li><li>Test ajouté dans <code>personal-courier.spec.ts</code>. Non vérifié : un Speeder coursier peut-il prendre une course de Speeder en parallèle (parcours séparé).</li></ul>
+
 <h2>6. Qualité et limites</h2>
 <ul>
-<li><b>31 suites / 338 tests</b> verts, <code>tsc</code> sans erreur.</li>
+<li><b>31 suites / 339 tests</b> verts, <code>tsc</code> sans erreur.</li>
 <li>SMS (OTP) : toujours aucune passerelle ; le mode simulation (code 0000) sert aux tests.</li>
 <li>À faire : renouveler le mot de passe de la base (une URL a été partagée dans une conversation) ; fichier <code>google-services.json</code> pour les notifications push.</li>
 </ul>

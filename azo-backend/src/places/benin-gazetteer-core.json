@@ -1886,5 +1886,13 @@
   "commune": "Cotonou",
   "latitude": 6.37547,
   "longitude": 2.36923
+ },
+ {
+  "title": "Kpota",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.44597,
+  "longitude": 2.35429
  }
 ]
