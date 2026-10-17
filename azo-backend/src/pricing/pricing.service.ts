@@ -412,6 +412,8 @@ export class PricingService {
   deliveryRule(vehicle: string, packageType: string = "small"): { base: number; perKm: number } | null {
     const rule = this.config.delivery?.vehicles?.[vehicle];
     if (!rule) return null;
+    // Le tricycle ne livre que les gros colis ; il n'est plus sollicité pour les autres colis
+    if (rule.onlyPackages && !rule.onlyPackages.includes(packageType)) return null;
     const base = rule.baseByPackage ? rule.baseByPackage[packageType] : rule.base;
     return typeof base === "number" ? { base, perKm: rule.perKm } : null;
   }

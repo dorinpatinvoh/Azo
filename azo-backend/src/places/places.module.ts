@@ -80,10 +80,20 @@ const BENIN_TOWNS = [
 type GazetteerEntry = { title: string; type: string; arr: string; commune: string; latitude: number; longitude: number };
 const GAZETTEER = gazetteerData as GazetteerEntry[];
 const norm = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+// Index préparé une seule fois : la base couvre tout le Bénin (communes, arrondissements, villes, quartiers, villages), recherchée à chaque frappe
+const GAZ_INDEX = GAZETTEER.map((g, i) => ({ g, i, t: norm(g.title), a: norm(g.arr) }));
+// Classement des résultats : communes et villes d'abord, puis arrondissements, quartiers, villages
+const TYPE_RANK: Record<string, number> = { commune: 0, ville: 1, arrondissement: 2, quartier: 3, village: 4, hameau: 5 };
+/** « arrondissement de X, Commune » (Cotonou : « 1er Arrondissement, Cotonou »). */
+const whereOf = (g: GazetteerEntry) => {
+  if (g.commune === "Cotonou") return `${g.arr || "Cotonou"}, Cotonou`.replace(/^Cotonou, Cotonou$/, "Cotonou");
+  const arr = g.arr && norm(g.arr) !== norm(g.title) ? `arrondissement de ${g.arr}` : null;
+  return [arr, g.commune && norm(g.commune) !== norm(g.title) ? g.commune : null].filter(Boolean).join(", ");
+};
 const gazetteerPlace = (g: GazetteerEntry, i: number) => ({
   id: `gaz${i}`,
   title: g.title,
-  subtitle: g.commune === "Cotonou" ? `${g.type}, ${g.arr}, Cotonou` : `${g.type}, arrondissement de ${g.arr}, Abomey-Calavi`,
+  subtitle: g.type === "commune" ? "Commune" : [g.type, whereOf(g)].filter(Boolean).join(", "),
   latitude: g.latitude,
   longitude: g.longitude,
 });
@@ -126,8 +136,8 @@ export class PlacesService {
   async reverseGeocode(latitude: number, longitude: number) {
     const known = this.nearestKnownPlace(latitude, longitude);
     if (known) {
-      const where = known.commune === "Cotonou" ? `${known.arr}, Cotonou` : `${known.arr}, Abomey-Calavi`;
-      const address = `${known.title}, ${where}`;
+      const where = whereOf(known);
+      const address = where ? `${known.title}, ${where}` : known.title;
       return { address, fullAddress: address, latitude, longitude };
     }
     // On essaie le niveau le plus précis (rue, quartier), puis des niveaux plus larges (village, arrondissement, commune)
@@ -212,9 +222,8 @@ export class PlacesService {
 
     // Quartiers / villages connus : le nom, ou le nom de l'arrondissement (ex. « Togba » liste ses quartiers)
     const words = normalizedQ.split(/[^a-z0-9]+/).filter(Boolean);
-    const known = GAZETTEER.map((g, i) => ({ g, i, t: norm(g.title), a: norm(g.arr) }))
-      .filter(({ t, a }) => words.length > 0 && words.every((w) => t.includes(w) || a.includes(w)))
-      .sort((x, y) => Number(y.t.startsWith(words[0] ?? "")) - Number(x.t.startsWith(words[0] ?? "")) || x.t.length - y.t.length)
+    const known = GAZ_INDEX.filter(({ t, a }) => words.length > 0 && words.every((w) => t.includes(w) || a.includes(w)))
+      .sort((x, y) => Number(y.t.startsWith(words[0] ?? "")) - Number(x.t.startsWith(words[0] ?? "")) || (TYPE_RANK[x.g.type] ?? 6) - (TYPE_RANK[y.g.type] ?? 6) || x.t.length - y.t.length)
       .slice(0, 8)
       .map(({ g, i }) => gazetteerPlace(g, i));
 

@@ -200,6 +200,13 @@ export class AuthService {
 
     // Le profil déclaré à l'inscription ouvre un BROUILLON de dossier prestataire :
     // rien n'est accordé tant qu'un admin ne l'a pas approuvé.
+    // Un compte professionnel (Speeder, coursier, livreur, agence) ne remplit pas le formulaire d'identité :
+    // seul son numéro est demandé ; le type choisi est mémorisé tel quel (l'agence en a besoin pour ouvrir son dossier).
+    const proKind = profile === "DRIVER" || profile === "COURIER" || profile === "AGENCY" ? profile : null;
+    if (proKind && !user.signupKind && !user.profileCompletedAt) {
+      user = await this.prisma.user.update({ where: { id: user.id }, data: { signupKind: proKind } });
+    }
+
     let provider = await this.providers.statusOf(user.id);
     if (!provider && (profile === "DRIVER" || profile === "COURIER" || profile === "AGENCY")) {
       await this.providers.openDraftOnSignup(user.id, profile);
@@ -223,6 +230,7 @@ export class AuthService {
         npiCipher: user.npiCipher,
         npiLast4: user.npiLast4,
       }),
+      signupKind: user.signupKind ?? null,
       provider: provider ? { id: provider.id, type: provider.type, status: provider.status } : null,
     };
   }

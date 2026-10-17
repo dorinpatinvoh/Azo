@@ -26,6 +26,7 @@ import { speakKey, speakText, stopSpeaking, type VoiceKey } from "../i18n/voice"
 import {
   ApiError,
   ProviderRef,
+  type ProfileRole,
   type ProviderType,
   authApi,
   needsRegistration,
@@ -202,7 +203,9 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
 
     try {
       const normalized = toBeninE164(digits);
-      const response = await authApi.verifyOtp(normalized, fullCode);
+      // Profil professionnel : seul le numéro est demandé (pas de nom, sexe ni NPI à l'inscription)
+      const proProfile = signupMode && accountKind !== "CLIENT" ? (accountKind === "COURIER_PERSONAL" || accountKind === "COURIER_EXPRESS" ? "COURIER" : accountKind) : "CLIENT";
+      const response = await authApi.verifyOtp(normalized, fullCode, proProfile as ProfileRole);
 
       await SecureStore.setItemAsync("userToken", response.token);
 
@@ -218,8 +221,23 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
         await SecureStore.deleteItemAsync("providerType");
       }
 
-      // Nouveau compte (ou compte sans inscription terminée) : formulaire obligatoire.
-      if (needsRegistration(response.user)) {
+      // Compte professionnel sans fiche d'identité : on va directement au dossier dédié
+      const proKind = response.signupKind && response.signupKind !== "CLIENT" && response.user.profileComplete !== true ? response.signupKind : null;
+      if (proKind) {
+        await SecureStore.deleteItemAsync(REGISTRATION_PENDING_KEY);
+        await SecureStore.setItemAsync("lastLoginPhone", digits).catch(() => undefined);
+        // dossier à remplir (brouillon) : on l'ouvre ; sinon (déposé, validé…) le parcours habituel du prestataire
+        if (provider?.status && provider.status !== "DRAFT") {
+          onVerified(role, provider);
+          return;
+        }
+        const category = proKind === "COURIER" && accountKind === "COURIER_PERSONAL" ? "COURSIER_PERSONNEL" : proKind === "COURIER" && accountKind === "COURIER_EXPRESS" ? "COURSIER_EXPRESS" : null;
+        onVerified("CLIENT", null, proKind as ProviderType, category);
+        return;
+      }
+
+      // Nouveau compte client (ou compte sans inscription terminée) : formulaire obligatoire.
+      if (!proKind && needsRegistration(response.user)) {
         await SecureStore.setItemAsync(REGISTRATION_PENDING_KEY, "1");
         setStep("register");
         return;
@@ -251,8 +269,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
         firstName: normalizeName(firstName),
         gender,
         npi: cleanNpi(npi),
-        // Le serveur ne connaît que 4 types de compte : Coursier personnel et Livreur express sont deux spécialités du même type
-        accountKind: accountKind === "COURIER_PERSONAL" || accountKind === "COURIER_EXPRESS" ? "COURIER" : accountKind,
+        accountKind: "CLIENT",
       });
       // Le serveur doit confirmer l'enregistrement : sinon (serveur pas à jour) on ne laisse
       // pas l'utilisateur entrer comme si tout était sauvegardé.
@@ -265,12 +282,8 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
       spokenDone.current = true;
       if (talk) speakKey("voice.done", voiceLang);
       await SecureStore.setItemAsync("lastLoginPhone", digits).catch(() => undefined);
-      // Profil choisi : le dossier d'inscription dédié s'ouvre ensuite (type d'activité + spécialité du coursier)
-      const startType: ProviderType | null =
-        accountKind === "CLIENT" ? null : accountKind === "COURIER_PERSONAL" || accountKind === "COURIER_EXPRESS" ? "COURIER" : accountKind;
-      const startCategory =
-        accountKind === "COURIER_PERSONAL" ? "COURSIER_PERSONNEL" : accountKind === "COURIER_EXPRESS" ? "COURSIER_EXPRESS" : null;
-      onVerified("CLIENT", null, startType, startCategory);
+      // L'identité (nom, sexe, NPI) ne concerne que le client ; les profils professionnels n'arrivent jamais ici
+      onVerified("CLIENT", null);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         notify(t("auth.alert.outdatedTitle"), t("auth.alert.outdatedBody"));
@@ -501,7 +514,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
                 </Pressable>
               )}
               <View style={styles.labelRow}>
-                <Text style={styles.label}>{t("auth.phone.label")}</Text>
+                <Text style={styles.label}>{signupMode && accountKind === "AGENCY" ? t("auth.phone.labelAgency") : t("auth.phone.label")}</Text>
                 <Text style={styles.digitCount}>
                   {digits.length}/{BENIN_PHONE_LENGTH}
                 </Text>
@@ -557,15 +570,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
             </View>
           ) : (
             <View style={styles.card}>
-              {!signupMode ? (
-                <>
-                  <Text style={styles.label}>{t("auth.kind.title")}</Text>
-                  <AccountKindPicker value={accountKind} onChange={setAccountKind} />
-                  {accountKind !== "CLIENT" ? <Text style={styles.nameHint}>{t("auth.kind.hint")}</Text> : null}
-                </>
-              ) : null}
-
-              <Text style={[styles.label, !signupMode && styles.fieldGap]}>{t("auth.field.lastName")}</Text>
+              <Text style={styles.label}>{t("auth.field.lastName")}</Text>
               <TextInput
                 style={[styles.nameInput, !!lastName && !isValidName(lastName) && styles.inputInvalid]}
                 value={lastName}

@@ -285,7 +285,10 @@
       },
       "ZEM_TRICYCLE": {
         "base": 225,
-        "perKm": 80
+        "perKm": 80,
+        "onlyPackages": [
+          "large"
+        ]
       }
     },
     "_aDefinir": [

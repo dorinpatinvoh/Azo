@@ -1,0 +1,1890 @@
+[
+ {
+  "title": "Tankpè",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.42507,
+  "longitude": 2.31931
+ },
+ {
+  "title": "Cité-les-Palmiers",
+  "type": "village",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.47891,
+  "longitude": 2.34145
+ },
+ {
+  "title": "Zopah-Kokpo",
+  "type": "village",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.47639,
+  "longitude": 2.34855
+ },
+ {
+  "title": "Fandji",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.47536,
+  "longitude": 2.34934
+ },
+ {
+  "title": "Gbodjo",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.47115,
+  "longitude": 2.35928
+ },
+ {
+  "title": "Zogbadjè",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.42363,
+  "longitude": 2.33479
+ },
+ {
+  "title": "Djadjo",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.44186,
+  "longitude": 2.32598
+ },
+ {
+  "title": "Fandji",
+  "type": "village",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.46642,
+  "longitude": 2.34577
+ },
+ {
+  "title": "Tokpa-Zoungo-Sud",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.42305,
+  "longitude": 2.35025
+ },
+ {
+  "title": "Zoca",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.46394,
+  "longitude": 2.35055
+ },
+ {
+  "title": "Aïtchédji",
+  "type": "village",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45592,
+  "longitude": 2.33752
+ },
+ {
+  "title": "Seminaire",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.44308,
+  "longitude": 2.33361
+ },
+ {
+  "title": "Awhanléko",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45988,
+  "longitude": 2.35646
+ },
+ {
+  "title": "Quartier Sèmè",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45932,
+  "longitude": 2.35315
+ },
+ {
+  "title": "Agamandin",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45739,
+  "longitude": 2.35984
+ },
+ {
+  "title": "Sèmè",
+  "type": "village",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45551,
+  "longitude": 2.34627
+ },
+ {
+  "title": "Tokpa-Zoungo-Nord",
+  "type": "quartier",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.43126,
+  "longitude": 2.35279
+ },
+ {
+  "title": "Tchinangbégbo",
+  "type": "village",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.43485,
+  "longitude": 2.34696
+ },
+ {
+  "title": "Agori",
+  "type": "village",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.44828,
+  "longitude": 2.34785
+ },
+ {
+  "title": "Abomey-Calavi",
+  "type": "ville",
+  "arr": "Abomey-Calavi",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.44387,
+  "longitude": 2.35274
+ },
+ {
+  "title": "Adounko",
+  "type": "village",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.34527,
+  "longitude": 2.28862
+ },
+ {
+  "title": "Togbin Plage",
+  "type": "hameau",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.34773,
+  "longitude": 2.30994
+ },
+ {
+  "title": "Togbin Daho",
+  "type": "village",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.35475,
+  "longitude": 2.31067
+ },
+ {
+  "title": "Womey",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40608,
+  "longitude": 2.30469
+ },
+ {
+  "title": "Cocotomey",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39178,
+  "longitude": 2.30125
+ },
+ {
+  "title": "Yénandjro",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40924,
+  "longitude": 2.3106
+ },
+ {
+  "title": "Tokpa",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39068,
+  "longitude": 2.30352
+ },
+ {
+  "title": "Togbin-Kpèvi",
+  "type": "village",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.35805,
+  "longitude": 2.31456
+ },
+ {
+  "title": "Togbin",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.37324,
+  "longitude": 2.30891
+ },
+ {
+  "title": "Djako Daho",
+  "type": "village",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.35296,
+  "longitude": 2.35556
+ },
+ {
+  "title": "Lobozounkpa",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38353,
+  "longitude": 2.30882
+ },
+ {
+  "title": "Hêdomè",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.37624,
+  "longitude": 2.31108
+ },
+ {
+  "title": "Gbègnigan-Midokpo",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40492,
+  "longitude": 2.3183
+ },
+ {
+  "title": "Togbin-Fandji",
+  "type": "village",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.35931,
+  "longitude": 2.32648
+ },
+ {
+  "title": "La Paix",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39216,
+  "longitude": 2.31391
+ },
+ {
+  "title": "Gninkindji",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.37521,
+  "longitude": 2.31544
+ },
+ {
+  "title": "Assrossa",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40545,
+  "longitude": 2.32783
+ },
+ {
+  "title": "Sèdégbé",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38321,
+  "longitude": 2.31889
+ },
+ {
+  "title": "Togoudo",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40714,
+  "longitude": 2.33452
+ },
+ {
+  "title": "Agonkanmey",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40649,
+  "longitude": 2.33661
+ },
+ {
+  "title": "Djoukpa-Togoudo",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40411,
+  "longitude": 2.33318
+ },
+ {
+  "title": "Atrokpocodji",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39155,
+  "longitude": 2.32355
+ },
+ {
+  "title": "Hounsa-Agbodokpa",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40106,
+  "longitude": 2.33146
+ },
+ {
+  "title": "Sèdomey",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40454,
+  "longitude": 2.34414
+ },
+ {
+  "title": "Dèkoungbé",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.37535,
+  "longitude": 2.32782
+ },
+ {
+  "title": "Agbocodji",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38175,
+  "longitude": 2.32523
+ },
+ {
+  "title": "Nonhouénou",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39837,
+  "longitude": 2.34705
+ },
+ {
+  "title": "Finafa",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39289,
+  "longitude": 2.35362
+ },
+ {
+  "title": "Hlouacomey",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39536,
+  "longitude": 2.34944
+ },
+ {
+  "title": "Ounvènoumèdé",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38746,
+  "longitude": 2.3345
+ },
+ {
+  "title": "Ylomahouto",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39177,
+  "longitude": 2.34778
+ },
+ {
+  "title": "Salamey",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39192,
+  "longitude": 2.34464
+ },
+ {
+  "title": "Aïmèvo",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38925,
+  "longitude": 2.33918
+ },
+ {
+  "title": "Dénou",
+  "type": "quartier",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38453,
+  "longitude": 2.34172
+ },
+ {
+  "title": "Godomey",
+  "type": "ville",
+  "arr": "Godomey",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38544,
+  "longitude": 2.34324
+ },
+ {
+  "title": "Houédakomey",
+  "type": "village",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.50815,
+  "longitude": 2.31579
+ },
+ {
+  "title": "Fanto",
+  "type": "village",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.50809,
+  "longitude": 2.2997
+ },
+ {
+  "title": "Maria-Gléta",
+  "type": "quartier",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.42195,
+  "longitude": 2.30426
+ },
+ {
+  "title": "Tankpè-Tanmè",
+  "type": "quartier",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.42521,
+  "longitude": 2.31154
+ },
+ {
+  "title": "Drabo",
+  "type": "village",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.49969,
+  "longitude": 2.29862
+ },
+ {
+  "title": "Zoundja",
+  "type": "village",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.49026,
+  "longitude": 2.32579
+ },
+ {
+  "title": "Houèto-Centre",
+  "type": "quartier",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.43602,
+  "longitude": 2.30669
+ },
+ {
+  "title": "Fifonsi",
+  "type": "quartier",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.44183,
+  "longitude": 2.31761
+ },
+ {
+  "title": "Aïfa-Calavi",
+  "type": "quartier",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.46836,
+  "longitude": 2.33104
+ },
+ {
+  "title": "Ouega",
+  "type": "quartier",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.48714,
+  "longitude": 2.308
+ },
+ {
+  "title": "Ouéga-Agué",
+  "type": "village",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.48429,
+  "longitude": 2.29965
+ },
+ {
+  "title": "Doga",
+  "type": "quartier",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.4485,
+  "longitude": 2.29833
+ },
+ {
+  "title": "Tokan",
+  "type": "quartier",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45309,
+  "longitude": 2.31634
+ },
+ {
+  "title": "Somè",
+  "type": "quartier",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45386,
+  "longitude": 2.29859
+ },
+ {
+  "title": "Ahossougbéta",
+  "type": "village",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.46396,
+  "longitude": 2.31717
+ },
+ {
+  "title": "Ouéga-Tokpa",
+  "type": "village",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.47223,
+  "longitude": 2.30035
+ },
+ {
+  "title": "Togba",
+  "type": "ville",
+  "arr": "Togba",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.46514,
+  "longitude": 2.30486
+ },
+ {
+  "title": "Dassèkomey",
+  "type": "village",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.48868,
+  "longitude": 2.24923
+ },
+ {
+  "title": "Place publique",
+  "type": "lieu-dit",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.4872,
+  "longitude": 2.25007
+ },
+ {
+  "title": "Kissovié",
+  "type": "hameau",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.445,
+  "longitude": 2.23321
+ },
+ {
+  "title": "Kpossidja",
+  "type": "village",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.48516,
+  "longitude": 2.26353
+ },
+ {
+  "title": "Adjagbo",
+  "type": "village",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.48169,
+  "longitude": 2.27528
+ },
+ {
+  "title": "Sakomè",
+  "type": "village",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.43775,
+  "longitude": 2.29125
+ },
+ {
+  "title": "Salédja",
+  "type": "village",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.47507,
+  "longitude": 2.25179
+ },
+ {
+  "title": "Hêvié",
+  "type": "ville",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.44994,
+  "longitude": 2.24059
+ },
+ {
+  "title": "Ahahonto",
+  "type": "village",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.46876,
+  "longitude": 2.2792
+ },
+ {
+  "title": "Alansankomè",
+  "type": "quartier",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.43335,
+  "longitude": 2.26657
+ },
+ {
+  "title": "Fonkomè",
+  "type": "village",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.4456,
+  "longitude": 2.24975
+ },
+ {
+  "title": "Zoungo",
+  "type": "hameau",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45565,
+  "longitude": 2.24992
+ },
+ {
+  "title": "Dessato",
+  "type": "quartier",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45841,
+  "longitude": 2.26091
+ },
+ {
+  "title": "Ouèdo",
+  "type": "quartier",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.44843,
+  "longitude": 2.26182
+ },
+ {
+  "title": "Ouèdo",
+  "type": "village",
+  "arr": "Ouèdo",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.45244,
+  "longitude": 2.26709
+ },
+ {
+  "title": "Houndodji Plage",
+  "type": "hameau",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.3462,
+  "longitude": 2.26771
+ },
+ {
+  "title": "Adounko Kpèvi",
+  "type": "hameau",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.35415,
+  "longitude": 2.28325
+ },
+ {
+  "title": "Adounko Daho",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.35371,
+  "longitude": 2.27791
+ },
+ {
+  "title": "Houndodji",
+  "type": "hameau",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.3523,
+  "longitude": 2.26501
+ },
+ {
+  "title": "Djèkpota-Adounko",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.36965,
+  "longitude": 2.28305
+ },
+ {
+  "title": "Aklakou",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.37117,
+  "longitude": 2.27466
+ },
+ {
+  "title": "Zounga",
+  "type": "quartier",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38512,
+  "longitude": 2.29301
+ },
+ {
+  "title": "Amahoun",
+  "type": "quartier",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38057,
+  "longitude": 2.28542
+ },
+ {
+  "title": "Gbodjè-Womey",
+  "type": "quartier",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.39184,
+  "longitude": 2.2881
+ },
+ {
+  "title": "Gbodjè",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38649,
+  "longitude": 2.28335
+ },
+ {
+  "title": "Cococodji",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.38748,
+  "longitude": 2.27206
+ },
+ {
+  "title": "Houinmè-Daho",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40751,
+  "longitude": 2.23382
+ },
+ {
+  "title": "Hounzévié",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.42024,
+  "longitude": 2.23765
+ },
+ {
+  "title": "Ahouato",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.41926,
+  "longitude": 2.27446
+ },
+ {
+  "title": "Akossavié",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40067,
+  "longitude": 2.25064
+ },
+ {
+  "title": "Sogan",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.40185,
+  "longitude": 2.26236
+ },
+ {
+  "title": "Adovié",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.4219,
+  "longitude": 2.2555
+ },
+ {
+  "title": "Hêvié",
+  "type": "village",
+  "arr": "Hêvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.41386,
+  "longitude": 2.25711
+ },
+ {
+  "title": "Zayiéra",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.55314,
+  "longitude": 2.36374
+ },
+ {
+  "title": "Kansounkpa",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.50746,
+  "longitude": 2.32317
+ },
+ {
+  "title": "Zèkanmey-Domè",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.53541,
+  "longitude": 2.33666
+ },
+ {
+  "title": "Gbétagbo",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.5434,
+  "longitude": 2.34976
+ },
+ {
+  "title": "Agassa-Godomey",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.54259,
+  "longitude": 2.36132
+ },
+ {
+  "title": "Adjagbo",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.52504,
+  "longitude": 2.34534
+ },
+ {
+  "title": "Zopah-Akassato",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.48821,
+  "longitude": 2.34967
+ },
+ {
+  "title": "Glo-Tokpa",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.52933,
+  "longitude": 2.36265
+ },
+ {
+  "title": "Houèkè-Gbo",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.48933,
+  "longitude": 2.36344
+ },
+ {
+  "title": "Houèkè-Honou",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.49807,
+  "longitude": 2.35362
+ },
+ {
+  "title": "Zopah",
+  "type": "quartier",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.50116,
+  "longitude": 2.35403
+ },
+ {
+  "title": "Misséssinto",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.51646,
+  "longitude": 2.35849
+ },
+ {
+  "title": "Houeke Honou",
+  "type": "quartier",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.49654,
+  "longitude": 2.36537
+ },
+ {
+  "title": "Misséssinto",
+  "type": "quartier",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.51592,
+  "longitude": 2.36415
+ },
+ {
+  "title": "Akassato Centre",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.50513,
+  "longitude": 2.35906
+ },
+ {
+  "title": "Akassato",
+  "type": "village",
+  "arr": "Akassato",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.50737,
+  "longitude": 2.36564
+ },
+ {
+  "title": "Dodja",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.51406,
+  "longitude": 2.27557
+ },
+ {
+  "title": "Dodja",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.51816,
+  "longitude": 2.28923
+ },
+ {
+  "title": "Agonsoudja",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.56335,
+  "longitude": 2.3467
+ },
+ {
+  "title": "Gbodjoko",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.58846,
+  "longitude": 2.32398
+ },
+ {
+  "title": "Agonmey",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.55051,
+  "longitude": 2.33782
+ },
+ {
+  "title": "Azonsa",
+  "type": "quartier",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.54051,
+  "longitude": 2.33008
+ },
+ {
+  "title": "Adjogansa",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.57708,
+  "longitude": 2.32995
+ },
+ {
+  "title": "Lohoussa",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.56593,
+  "longitude": 2.33163
+ },
+ {
+  "title": "Agongbé",
+  "type": "quartier",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.53238,
+  "longitude": 2.30882
+ },
+ {
+  "title": "Domey-Gbo",
+  "type": "quartier",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.54128,
+  "longitude": 2.32238
+ },
+ {
+  "title": "Agonkèssa",
+  "type": "hameau",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.55799,
+  "longitude": 2.3244
+ },
+ {
+  "title": "Golo-Fanto",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.57481,
+  "longitude": 2.31451
+ },
+ {
+  "title": "Yèkon-Do",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.56326,
+  "longitude": 2.32047
+ },
+ {
+  "title": "Agonkèssa",
+  "type": "quartier",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.55058,
+  "longitude": 2.31806
+ },
+ {
+  "title": "Yêkon-Aga",
+  "type": "village",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.55998,
+  "longitude": 2.3106
+ },
+ {
+  "title": "Espace-Saint",
+  "type": "quartier",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.56474,
+  "longitude": 2.29893
+ },
+ {
+  "title": "Zèkanmey",
+  "type": "hameau",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.5524,
+  "longitude": 2.30342
+ },
+ {
+  "title": "Adjamè",
+  "type": "quartier",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.55845,
+  "longitude": 2.29689
+ },
+ {
+  "title": "Golo-Djigbé",
+  "type": "ville",
+  "arr": "Glo-Djigbé",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.55926,
+  "longitude": 2.30325
+ },
+ {
+  "title": "Kolètin",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.56617,
+  "longitude": 2.35336
+ },
+ {
+  "title": "Kpodji-Les-Monts",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.56704,
+  "longitude": 2.36519
+ },
+ {
+  "title": "Dokomè",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.57499,
+  "longitude": 2.36238
+ },
+ {
+  "title": "Gbodjè",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.59599,
+  "longitude": 2.38715
+ },
+ {
+  "title": "Zinvié-Agolèdji",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.60448,
+  "longitude": 2.33373
+ },
+ {
+  "title": "Houégoudo",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.63292,
+  "longitude": 2.34181
+ },
+ {
+  "title": "Yèvié",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.59597,
+  "longitude": 2.36956
+ },
+ {
+  "title": "Zinvié-Zounmè",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.62445,
+  "longitude": 2.34406
+ },
+ {
+  "title": "Kpotomey",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.62957,
+  "longitude": 2.35277
+ },
+ {
+  "title": "Sokan",
+  "type": "quartier",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.60317,
+  "longitude": 2.35256
+ },
+ {
+  "title": "Yèvié-Nougo",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.60804,
+  "longitude": 2.36509
+ },
+ {
+  "title": "Tanmè",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.61736,
+  "longitude": 2.36416
+ },
+ {
+  "title": "Zinvié-Fandji",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.6157,
+  "longitude": 2.35511
+ },
+ {
+  "title": "Zinvié",
+  "type": "village",
+  "arr": "Zinvié",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.61338,
+  "longitude": 2.3568
+ },
+ {
+  "title": "Dégué",
+  "type": "hameau",
+  "arr": "Kpanroun",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.65115,
+  "longitude": 2.43935
+ },
+ {
+  "title": "Avadjètomè",
+  "type": "hameau",
+  "arr": "Kpanroun",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.64639,
+  "longitude": 2.39043
+ },
+ {
+  "title": "Kplassouhoué",
+  "type": "village",
+  "arr": "Kpanroun",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.65984,
+  "longitude": 2.3921
+ },
+ {
+  "title": "Kpé",
+  "type": "village",
+  "arr": "Kpanroun",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.64963,
+  "longitude": 2.36009
+ },
+ {
+  "title": "Dèdo",
+  "type": "ville",
+  "arr": "Kpanroun",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.65483,
+  "longitude": 2.37273
+ },
+ {
+  "title": "Hadjanaho",
+  "type": "village",
+  "arr": "Kpanroun",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.67404,
+  "longitude": 2.38145
+ },
+ {
+  "title": "Kpanroun",
+  "type": "village",
+  "arr": "Kpanroun",
+  "commune": "Abomey-Calavi",
+  "latitude": 6.67394,
+  "longitude": 2.36673
+ },
+ {
+  "title": "N'vènamèdé",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37054,
+  "longitude": 2.46349
+ },
+ {
+  "title": "Suru-Léré",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37674,
+  "longitude": 2.46695
+ },
+ {
+  "title": "Donaten",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36378,
+  "longitude": 2.46517
+ },
+ {
+  "title": "Tokplégbé",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36584,
+  "longitude": 2.49053
+ },
+ {
+  "title": "Avotrou",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37893,
+  "longitude": 2.47204
+ },
+ {
+  "title": "Tchanhounkpamè",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37749,
+  "longitude": 2.48162
+ },
+ {
+  "title": "Yagbé",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37188,
+  "longitude": 2.4696
+ },
+ {
+  "title": "Dandji",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37166,
+  "longitude": 2.4836
+ },
+ {
+  "title": "Tanto",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37291,
+  "longitude": 2.47571
+ },
+ {
+  "title": "Finagnon",
+  "type": "quartier",
+  "arr": "1er arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36381,
+  "longitude": 2.47677
+ },
+ {
+  "title": "Minontchou",
+  "type": "quartier",
+  "arr": "2ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39082,
+  "longitude": 2.45289
+ },
+ {
+  "title": "Gankpodo",
+  "type": "quartier",
+  "arr": "2ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38969,
+  "longitude": 2.45629
+ },
+ {
+  "title": "Yénawa",
+  "type": "quartier",
+  "arr": "2ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39047,
+  "longitude": 2.46138
+ },
+ {
+  "title": "Kowégbo",
+  "type": "quartier",
+  "arr": "2ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38654,
+  "longitude": 2.4713
+ },
+ {
+  "title": "Hlakomè",
+  "type": "quartier",
+  "arr": "3ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39459,
+  "longitude": 2.44274
+ },
+ {
+  "title": "Agbodjèdo",
+  "type": "quartier",
+  "arr": "3ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39246,
+  "longitude": 2.44922
+ },
+ {
+  "title": "Midombo",
+  "type": "quartier",
+  "arr": "3ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37871,
+  "longitude": 2.44275
+ },
+ {
+  "title": "Abokicodji-Lagune",
+  "type": "quartier",
+  "arr": "4ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36828,
+  "longitude": 2.44112
+ },
+ {
+  "title": "Fifadji-Houto (Jak)",
+  "type": "quartier",
+  "arr": "4ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36057,
+  "longitude": 2.45963
+ },
+ {
+  "title": "Village sur la Mer",
+  "type": "lieu-dit",
+  "arr": "4ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.3555,
+  "longitude": 2.44799
+ },
+ {
+  "title": "Akpakpa-Dodomè",
+  "type": "quartier",
+  "arr": "4ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35886,
+  "longitude": 2.45563
+ },
+ {
+  "title": "Énagnon",
+  "type": "quartier",
+  "arr": "4ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35771,
+  "longitude": 2.44967
+ },
+ {
+  "title": "Missèbo",
+  "type": "quartier",
+  "arr": "5ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36546,
+  "longitude": 2.4353
+ },
+ {
+  "title": "Xwlacodji",
+  "type": "quartier",
+  "arr": "5ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35318,
+  "longitude": 2.43856
+ },
+ {
+  "title": "Ganhi",
+  "type": "quartier",
+  "arr": "5ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35476,
+  "longitude": 2.4381
+ },
+ {
+  "title": "Placodji",
+  "type": "quartier",
+  "arr": "5ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35239,
+  "longitude": 2.43303
+ },
+ {
+  "title": "Zongo",
+  "type": "quartier",
+  "arr": "5ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35689,
+  "longitude": 2.42734
+ },
+ {
+  "title": "Jesuko",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39286,
+  "longitude": 2.43097
+ },
+ {
+  "title": "Ladji-Gbamey",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39191,
+  "longitude": 2.43154
+ },
+ {
+  "title": "Vossa",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38877,
+  "longitude": 2.4161
+ },
+ {
+  "title": "Ladji",
+  "type": "village",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39075,
+  "longitude": 2.43061
+ },
+ {
+  "title": "Ladji-École",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39124,
+  "longitude": 2.42936
+ },
+ {
+  "title": "Ladji-Centre",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38959,
+  "longitude": 2.432
+ },
+ {
+  "title": "Ahouansori-Agué",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38837,
+  "longitude": 2.42121
+ },
+ {
+  "title": "Hindé 2",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37909,
+  "longitude": 2.43348
+ },
+ {
+  "title": "Djidjè 2",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.3863,
+  "longitude": 2.43068
+ },
+ {
+  "title": "Toweta 1",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38825,
+  "longitude": 2.42376
+ },
+ {
+  "title": "Dantokpa",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37553,
+  "longitude": 2.4314
+ },
+ {
+  "title": "Djidjè 1",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38304,
+  "longitude": 2.43142
+ },
+ {
+  "title": "Toweta 2",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38692,
+  "longitude": 2.42575
+ },
+ {
+  "title": "Agata",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38504,
+  "longitude": 2.42272
+ },
+ {
+  "title": "Gbèdjromèdé 1",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38088,
+  "longitude": 2.42045
+ },
+ {
+  "title": "Aidjèdo 2",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37618,
+  "longitude": 2.42418
+ },
+ {
+  "title": "Aidjèdo 3",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37921,
+  "longitude": 2.42846
+ },
+ {
+  "title": "Aidjèdo 1",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37962,
+  "longitude": 2.42177
+ },
+ {
+  "title": "Aidjèdo 4",
+  "type": "quartier",
+  "arr": "6ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38276,
+  "longitude": 2.42577
+ },
+ {
+  "title": "Tonato",
+  "type": "quartier",
+  "arr": "8ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37782,
+  "longitude": 2.39977
+ },
+ {
+  "title": "Mèdédjro",
+  "type": "quartier",
+  "arr": "8ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.3863,
+  "longitude": 2.41259
+ },
+ {
+  "title": "Houénoussou-Sainte-Rita",
+  "type": "quartier",
+  "arr": "8ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38162,
+  "longitude": 2.40277
+ },
+ {
+  "title": "Sainte Rita",
+  "type": "quartier",
+  "arr": "8ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37921,
+  "longitude": 2.41321
+ },
+ {
+  "title": "Gbèdjromèdé 2",
+  "type": "quartier",
+  "arr": "9ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38789,
+  "longitude": 2.41407
+ },
+ {
+  "title": "Kindonou",
+  "type": "quartier",
+  "arr": "9ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39148,
+  "longitude": 2.3629
+ },
+ {
+  "title": "Vossa-Kpodji",
+  "type": "quartier",
+  "arr": "9ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39294,
+  "longitude": 2.41057
+ },
+ {
+  "title": "Menontin",
+  "type": "quartier",
+  "arr": "9ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.388,
+  "longitude": 2.37356
+ },
+ {
+  "title": "Fifadji",
+  "type": "quartier",
+  "arr": "9ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39286,
+  "longitude": 2.40067
+ },
+ {
+  "title": "Kouhounou",
+  "type": "quartier",
+  "arr": "9ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.38801,
+  "longitude": 2.38004
+ },
+ {
+  "title": "Zogbo",
+  "type": "quartier",
+  "arr": "9ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.39252,
+  "longitude": 2.39429
+ },
+ {
+  "title": "Houeyiho",
+  "type": "quartier",
+  "arr": "11ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37241,
+  "longitude": 2.39395
+ },
+ {
+  "title": "vous etes ici",
+  "type": "quartier",
+  "arr": "11ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.3759,
+  "longitude": 2.40292
+ },
+ {
+  "title": "Gbegamey",
+  "type": "quartier",
+  "arr": "11ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36406,
+  "longitude": 2.41305
+ },
+ {
+  "title": "Gbégamè 3",
+  "type": "quartier",
+  "arr": "11ème arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.3646,
+  "longitude": 2.41119
+ },
+ {
+  "title": "Gbéto",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.34633,
+  "longitude": 2.4068
+ },
+ {
+  "title": "Hlazounto",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36362,
+  "longitude": 2.36602
+ },
+ {
+  "title": "Fidjrossé",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.3525,
+  "longitude": 2.36755
+ },
+ {
+  "title": "Fiyégnon-Jacquot",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35444,
+  "longitude": 2.37184
+ },
+ {
+  "title": "Adjaha-Cité",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36427,
+  "longitude": 2.37373
+ },
+ {
+  "title": "Cadjéhoun",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36144,
+  "longitude": 2.3994
+ },
+ {
+  "title": "Haie-Vive-Cocotiers",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35522,
+  "longitude": 2.39761
+ },
+ {
+  "title": "Gbèdégbé",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36603,
+  "longitude": 2.3805
+ },
+ {
+  "title": "Cadjéhoun",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35848,
+  "longitude": 2.39512
+ },
+ {
+  "title": "Aïbatin",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.36222,
+  "longitude": 2.38013
+ },
+ {
+  "title": "Djomèhountin",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35057,
+  "longitude": 2.38828
+ },
+ {
+  "title": "Les Cocotiers",
+  "type": "quartier",
+  "arr": "12e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.35294,
+  "longitude": 2.39057
+ },
+ {
+  "title": "Ahogbohoué",
+  "type": "quartier",
+  "arr": "13e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.3756,
+  "longitude": 2.3858
+ },
+ {
+  "title": "Agla",
+  "type": "quartier",
+  "arr": "13e arrondissement",
+  "commune": "Cotonou",
+  "latitude": 6.37547,
+  "longitude": 2.36923
+ }
+]

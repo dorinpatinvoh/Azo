@@ -64,19 +64,15 @@ function createPickupCode(): string {
   return String(randomInt(0, 10_000)).padStart(4, "0");
 }
 
-/** Masque la plaque : « AB-1234-CD » → « ••-••34-CD » (2 derniers chiffres + suffixe) */
+/** Masque la plaque : « AB1234CD » → « AB123****CD » */
 function maskPlate(plate: string | null | undefined): string | null {
   if (!plate) return null;
-  const parts = plate.replace(/\s/g, "").split("-");
-  if (parts.length < 2) {
-    // Format non standard : masquer tout sauf les 2 derniers caractères
-    return "••" + plate.slice(-2);
-  }
-  const masked = parts.map((part, i) => {
-    if (i === parts.length - 1) return part; // dernier segment conservé
-    return "••"; // segments intermédiaires masqués
-  });
-  return masked.join("-");
+  // Début et fin visibles, milieu caché : « hjgjk****55 »
+  const compact = plate.replace(/[\s-]/g, "");
+  if (compact.length <= 3) return "****" + compact.slice(-1);
+  const tail = 2;
+  const head = Math.min(5, Math.max(1, compact.length - tail - 1));
+  return compact.slice(0, head) + "****" + compact.slice(-tail);
 }
 
 @Injectable()

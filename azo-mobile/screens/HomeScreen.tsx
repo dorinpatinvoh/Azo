@@ -93,7 +93,7 @@ const QUICK_OPTIONS: Record<QuickKind, { id: string; label: string; sub?: string
   delivery: [
     { id: "ZEM_ESSENCE", label: "Speeder à essence" },
     { id: "ZEM_ELECTRIC", label: "Speeder électrique" },
-    { id: "ZEM_TRICYCLE", label: "Speeder tricycle", sub: "Gros colis possible" },
+    { id: "ZEM_TRICYCLE", label: "Speeder tricycle", sub: "Pour les gros colis uniquement" },
   ],
   personal: [
     { id: "ZEM_ESSENCE", label: "Speeder à essence" },

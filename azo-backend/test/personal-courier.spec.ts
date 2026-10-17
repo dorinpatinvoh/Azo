@@ -178,7 +178,7 @@ describe("Réservation d'un coursier personnel", () => {
     const dto = { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER", price: 200, pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
     await service.create("c1", { ...dto, vehicleType: "ZEM_ESSENCE" });
     expect(prisma.delivery.create.mock.calls[0][0].data.price).toBe(820); // petit colis : 120 + 10 × 70
-    await service.create("c1", { ...dto, vehicleType: "ZEM_TRICYCLE" });
+    await service.create("c1", { ...dto, packageType: "large", vehicleType: "ZEM_TRICYCLE" });
     expect(prisma.delivery.create.mock.calls[1][0].data.price).toBe(1025);
   });
 
@@ -207,5 +207,18 @@ describe("Réservation d'un coursier personnel", () => {
     const dto = { packageType: "large", pickupAddress: "A", dropAddress: "B", payer: "SENDER", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
     await expect(service.create("c1", { ...dto, vehicleType: "ZEM_ESSENCE" })).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.create("c1", { ...dto, vehicleType: "ZEM_TRICYCLE" })).resolves.toBeDefined();
+  });
+
+  it("le tricycle n'est plus sollicité tant qu'il ne s'agit pas d'un gros colis", async () => {
+    const { service } = make();
+    jest.spyOn(service as any, "routeKm").mockResolvedValue(1);
+    const a = { lat: 6.37, lng: 2.39 };
+    const b = { lat: 6.38, lng: 2.4 };
+    for (const packageType of ["doc", "small", "medium"]) {
+      await expect(service.quote("ZEM_TRICYCLE", packageType, a, b)).rejects.toBeInstanceOf(BadRequestException);
+    }
+    const dto = { packageType: "medium", pickupAddress: "A", dropAddress: "B", payer: "SENDER", vehicleType: "ZEM_TRICYCLE", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
+    await expect(service.create("c1", dto)).rejects.toThrow(/réservé aux gros colis/);
+    await expect(service.quote("ZEM_TRICYCLE", "large", a, b)).resolves.toEqual({ km: 1, price: 305 });
   });
 });

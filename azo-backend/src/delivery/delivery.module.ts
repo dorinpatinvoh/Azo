@@ -105,10 +105,16 @@ export class DeliveryService {
     }
   }
 
+  private refusalMessage(vehicle: string, packageType: string): string {
+    if (packageType === "large") return "Un gros colis se livre en Speeder tricycle.";
+    if (vehicle === "ZEM_TRICYCLE") return "Le Speeder tricycle est réservé aux gros colis : choisis un Speeder moto (essence ou électrique) pour ce colis.";
+    return "Choisis un Speeder moto (essence ou électrique) et un type de colis proposé.";
+  }
+
   /** Devis d'un colis : le prix affiché au client est exactement celui que le serveur facturera (distance de l'itinéraire). */
   async quote(vehicleType: string, packageType: string, pickup: { lat: number; lng: number }, drop: { lat: number; lng: number }) {
     if (!this.pricing.deliveryRule(vehicleType, packageType)) {
-      throw new BadRequestException(packageType === "large" ? "Un gros colis se livre en Speeder tricycle." : "Ce Speeder ne livre pas ce type de colis.");
+      throw new BadRequestException(this.refusalMessage(vehicleType, packageType));
     }
     const km = Math.round((await this.routeKm(pickup, drop)) * 10) / 10;
     return { km, price: this.pricing.deliveryPrice(vehicleType, km, packageType) };
@@ -155,7 +161,7 @@ export class DeliveryService {
       // Speeder demandé pour le colis : seuls les livreurs de ce véhicule voient la mission. Moto ou tricycle uniquement.
       const express = vehicleType ?? "ZEM_ESSENCE";
       if (!this.pricing.deliveryRule(express, base.packageType)) {
-        throw new BadRequestException(base.packageType === "large" ? "Un gros colis se livre en Speeder tricycle." : "Choisis un Speeder moto (essence ou électrique) ou un tricycle, et un type de colis proposé.");
+        throw new BadRequestException(this.refusalMessage(express, base.packageType));
       }
       if (base.packageType === "large" && express !== "ZEM_TRICYCLE") {
         throw new BadRequestException("Un gros colis se livre en Speeder tricycle.");

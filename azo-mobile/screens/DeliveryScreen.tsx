@@ -52,7 +52,7 @@ const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
 type Props = { onBack: () => void; onConfirm: () => void; initialDrop?: Place | null; initialSpeeder?: VehicleType | null };
 
 export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initialSpeeder }: Props) {
-  const [selectedType, setSelectedType] = useState("small");
+  const [selectedType, setSelectedType] = useState(initialSpeeder === "ZEM_TRICYCLE" ? "large" : "small");
   const [speeder, setSpeeder] = useState<VehicleType>(initialSpeeder && initialSpeeder !== "GAZELLE" && initialSpeeder !== "KOALA" && initialSpeeder !== "LEOPARD" ? initialSpeeder : "ZEM_ESSENCE");
   const [routeKm, setRouteKm] = useState<number | null>(null);
   const [pickup, setPickup] = useState<Place | null>(null);
@@ -73,6 +73,8 @@ export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initial
   useEffect(() => {
     // le gros colis ne se livre qu'en tricycle : les autres Speeders se cachent
     if (selectedType === "large" && speeder !== "ZEM_TRICYCLE") setSpeeder("ZEM_TRICYCLE");
+    // le tricycle n'est plus sollicité tant qu'il ne s'agit pas d'un gros colis
+    if (selectedType !== "large" && speeder === "ZEM_TRICYCLE") setSpeeder("ZEM_ESSENCE");
   }, [speeder, selectedType]);
 
   useEffect(() => {
@@ -297,7 +299,7 @@ export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initial
 
         <Text style={styles.sectionTitle}>Quel Speeder pour ton colis ?</Text>
         <View style={{ gap: spacing.sm }}>
-          {SPEEDERS.filter((v) => selectedType !== "large" || v.id === "ZEM_TRICYCLE").map((v) => {
+          {SPEEDERS.filter((v) => (selectedType === "large" ? v.id === "ZEM_TRICYCLE" : v.id !== "ZEM_TRICYCLE")).map((v) => {
             const active = speeder === v.id;
             const perKm = tarification().delivery?.vehicles?.[v.id]?.perKm;
             return (

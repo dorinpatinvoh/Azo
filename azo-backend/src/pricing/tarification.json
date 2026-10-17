@@ -179,7 +179,7 @@
     "vehicles": {
       "ZEM_ESSENCE": { "perKm": 70, "baseByPackage": { "doc": 100, "small": 120, "medium": 200 } },
       "ZEM_ELECTRIC": { "perKm": 70, "baseByPackage": { "doc": 100, "small": 120, "medium": 200 } },
-      "ZEM_TRICYCLE": { "base": 225, "perKm": 80 }
+      "ZEM_TRICYCLE": { "base": 225, "perKm": 80, "onlyPackages": ["large"] }
     },
     "_aDefinir": [
       "commissionPct — règle à définir : aucun tarif de livraison n'est validé pour le moment. Cette valeur est provisoire (reprise de l'existant) et ne doit pas être présentée comme une règle métier."

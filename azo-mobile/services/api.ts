@@ -215,7 +215,7 @@ export const authApi = {
   // `profile` n'accorde PLUS aucun rôle : il ouvre un brouillon de dossier prestataire
   // qu'un administrateur doit valider. Le rôle métier arrive avec l'approbation.
   verifyOtp: async (phone: string, code: string, profile: ProfileRole = "CLIENT") => {
-    const r = await api.post<{ token: string; user: UserProfile; provider: ProviderRef | null }>("/auth/verify-otp", {
+    const r = await api.post<{ token: string; user: UserProfile; provider: ProviderRef | null; signupKind?: string | null }>("/auth/verify-otp", {
       phone,
       code,
       profile,
