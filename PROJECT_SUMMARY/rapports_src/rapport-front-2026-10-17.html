@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 17 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">17 octobre 2026 · 3 commits poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>0afb4017</code>)</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">17 octobre 2026 · 4 commits de code poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>0afb4017</code>, <code>f717e40b</code>)</span></div>
 
 <h2>1. En résumé</h2>
 <p>Trois changements côté mobile : <b>une inscription simplifiée pour les profils professionnels</b> (le numéro seul), <b>le tricycle réservé aux gros colis</b> et <b>la plaque du Speeder partiellement masquée</b>. Tout compile (<code>tsc</code> sans erreur).</p>
@@ -51,6 +51,16 @@
 <li><b>Comptes déjà créés</b> : la spécialité enregistrée reste à corriger avec <code>scripts/set-courier-category.js</code> (voir rapport backend).</li>
 </ul>
 
+<h2>2septies. Coursier et livreur : le client valide leur proposition, puis les deux se suivent</h2>
+<ul>
+<li><b>Même parcours qu'une course simple.</b> Quand un coursier personnel ou un livreur express accepte une commande, sa mission n'est plus confirmée tout de suite : elle passe en « proposition ». Le client reçoit une <b>popup par-dessus n'importe quel écran</b> (<code>DeliveryOfferPopup</code>, <code>DeliveryOfferCard</code>) avec le nom, la spécialité, la note, le nombre de missions, « Vérifié par AZƆ̀ », la distance jusqu'au départ, le trajet, le prix et un compte à rebours ; le bouton « Voir le profil » ouvre la fiche (<code>DriverProfileSheet</code>, qui accepte maintenant un chargeur de profil de coursier).</li>
+<li>Le client <b>choisit</b> (la mission est confirmée, il va suivre son coursier dans l'onglet Courses) ou <b>refuse</b> (la commande repart chez les autres coursiers, celui-ci ne la revoit plus) ; sans réponse, la proposition expire. Le téléphone et l'identité complète du coursier restent cachés tant que le client ne l'a pas choisi.</li>
+<li><b>Côté coursier</b> (<code>CourierHomeScreen.tsx</code>) : après « Accepter la mission », carte « En attente du client » avec compte à rebours, « Le client regarde ton profil… » dès que la popup est ouverte, et « Retirer ma proposition » ; passage automatique à la mission dès l'accord du client (temps réel et relecture toutes les 3 s). Le bouton d'acceptation est bloqué pendant qu'une proposition attend.</li>
+<li><b>Suivi dans les deux sens</b> : le client suit son coursier sur la carte (déjà en place) ; le coursier voit maintenant son client bouger sur sa carte (<code>ClientTrackMap</code>, mise à jour toutes les 4 s) avec le point de ramassage. La position du client est partagée pendant la mission par un suivi global (<code>useActiveClientDelivery</code>, <code>useClientTracking</code>), quel que soit l'écran affiché.</li>
+<li>Les listes (Courses, colis, coursier personnel) comptent la proposition comme une commande en cours, avec le message « Un coursier a accepté : regarde son profil… ».</li>
+<li><b>Limites</b> : les textes des nouvelles fenêtres sont en français uniquement (les notifications sont en quatre langues) ; la position du client n'est partagée que pendant que l'application est ouverte. <b>Non essayé sur un téléphone.</b></li>
+</ul>
+
 <h2>3. Colis : le tricycle ne livre que les gros colis</h2>
 <ul>
 <li>« Envoyer un colis » : document, petit et moyen colis ne proposent que le Speeder à essence et l'électrique ; « Gros colis » ne propose que le tricycle ; le Speeder se réajuste si le type de colis change.</li>
@@ -65,6 +75,7 @@
 
 <h2>6. Commit du jour</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>f717e40b</code></td><td>Proposition du coursier ou livreur validée par le client (popup, profil), suivi du client par le coursier</td></tr>
 <tr><td><code>0afb4017</code></td><td>Commissions détaillées dans les finances admin, message des 15 % en fin de course, distance en direct, spécialité du coursier conservée, rayon de 20 km, nouvel accueil client</td></tr>
 <tr><td><code>8d82013c</code></td><td>Retour possible à chaque étape de l'inscription (identité du client, dossier professionnel)</td></tr>
 <tr><td><code>ecb4be03</code></td><td>Inscription professionnelle par numéro seul ; tricycle réservé aux gros colis ; base nationale des lieux ; plaque partiellement masquée</td></tr></table>

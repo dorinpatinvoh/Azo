@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 17 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">17 octobre 2026 · 5 commits poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>8ab4ce66</code>, <code>88e49834</code>, <code>0afb4017</code>) · 31 suites / 347 tests verts</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">17 octobre 2026 · 6 commits de code poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>8ab4ce66</code>, <code>88e49834</code>, <code>0afb4017</code>, <code>f717e40b</code>) · 31 suites / 355 tests verts</span></div>
 
 <h2>1. En résumé</h2>
 <p>Quatre changements : <b>type de compte enregistré sans identité</b> pour les profils professionnels, <b>le tricycle ne livre que les gros colis</b>, <b>base nationale des lieux du Bénin</b> et <b>plaque du Speeder partiellement masquée</b>. <code>tsc</code> sans erreur. Aucune migration.</p>
@@ -67,9 +67,21 @@
 <li>Règle inchangée : un coursier ne voit que les réservations de son propre véhicule.</li>
 </ul>
 
+<h2>5septies. Livraisons : le coursier se propose, le client valide (<code>delivery.module.ts</code>)</h2>
+<ul>
+<li><b>Migration</b> <code>20261017150000_delivery_offers</code> (ajout de colonnes seulement, aucune donnée touchée) : <code>Delivery.offeredAt</code>, <code>offerExpiresAt</code>, <code>offerSeenAt</code>, <code>declinedCourierIds</code> (<code>TEXT[]</code>), <code>clientLat</code>, <code>clientLng</code>, <code>clientLocatedAt</code>. Appliquée sur une base vide, schéma et migrations alignés pour la table <code>Delivery</code>.</li>
+<li><b>Flux</b> : <code>POST /deliveries/:id/accept</code> (le corps peut contenir <code>lat</code> et <code>lng</code> du coursier) fait passer la mission de PENDING à <b>OFFERED</b> pendant <code>offerExpirySeconds</code> (45 s, comme les courses) si <code>requireClientApproval</code> est actif ; sinon l'ancien comportement (MATCHED direct). Puis : <code>GET /deliveries/offers/pending</code> (rattrapage de la popup), <code>GET /deliveries/:id/courier-profile</code>, <code>POST /deliveries/:id/offer-seen</code>, <code>POST :id/approve-courier</code> (OFFERED → MATCHED ; la fenêtre de réservation du coursier personnel est fixée à ce moment, avec contrôle de chevauchement), <code>POST :id/decline-courier</code> et <code>POST :id/withdraw-offer</code> (retour en PENDING, coursier ajouté à <code>declinedCourierIds</code> et masqué de <code>pending</code>).</li>
+<li><b>Expiration</b> : <code>DeliveryOfferExpiryTask</code> balaie toutes les 5 s (marge de confirmation identique aux courses). Un coursier avec une proposition en attente est « occupé » (<code>isCourierBusy</code>, vérification à l'acceptation). Le client peut annuler pendant une proposition ; un coursier qui annule pendant une proposition la retire.</li>
+<li><b>Temps réel</b> (<code>RidesGateway.emitToUser</code>, exportée par <code>RidesModule</code>) : <code>delivery:offered</code> (popup du client), <code>delivery:offer-ended</code>, <code>delivery:offer-approved</code>, <code>delivery:offer-seen</code> ; notifications poussées <code>NOTIFICATION_DELIVERY_OFFERED(_PERSONAL/_BODY)</code>, <code>_APPROVED(_BODY)</code>, <code>_DECLINED</code> en quatre langues.</li>
+<li><b>Confidentialité</b> : avant validation, la liste du client ne contient ni le nom ni le téléphone du coursier ; le profil public (<code>courier-profile.ts</code>) n'expose ni téléphone ni pièces ; la plaque est partiellement masquée (<code>rides/plate.ts</code>, extraite de <code>rides.service.ts</code>).</li>
+<li><b>Suivi du client</b> : <code>POST /deliveries/:id/client-location</code> (client de la mission, statuts MATCHED / IN_PROGRESS) ; <code>GET :id/track</code> renvoie la position du client <b>seulement au coursier</b> de la mission.</li>
+<li><b>Vérifié</b> sur une base jetable avec l'API et des WebSocket : 22 vérifications sur 23 passent (popup temps réel, rattrapage, profil sans téléphone, identité masquée avant validation, ouverture de la popup vue par le coursier, un 2<sup>e</sup> coursier bloqué, un tiers refusé, refus + exclusion, expiration automatique, retrait, validation, positions dans les deux sens, codes de ramassage et de remise, annulation pendant une proposition) ; la 23<sup>e</sup> était un défaut du jeu d'essai (compte créé sans nom). 8 tests automatiques ajoutés dans <code>personal-courier.spec.ts</code>.</li>
+<li><b>Non vérifié</b> : un livreur express avec cette boucle (même code que le coursier personnel) et le comportement sur téléphone.</li>
+</ul>
+
 <h2>6. Qualité et limites</h2>
 <ul>
-<li><b>31 suites / 347 tests</b> verts, <code>tsc</code> sans erreur.</li>
+<li><b>31 suites / 355 tests</b> verts, <code>tsc</code> sans erreur.</li>
 <li>SMS (OTP) : toujours aucune passerelle ; le mode simulation (code 0000) sert aux tests.</li>
 <li>À faire : renouveler le mot de passe de la base (une URL a été partagée dans une conversation) ; fichier <code>google-services.json</code> pour les notifications push.</li>
 </ul>
@@ -78,6 +90,7 @@
 
 <h2>7. Commit du jour</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>f717e40b</code></td><td>Proposition du coursier validée par le client (migration <code>20261017150000</code>, routes, expiration, temps réel, suivi du client)</td></tr>
 <tr><td><code>0afb4017</code></td><td>Commissions détaillées, distance par la vitesse du téléphone, message des 15 %, rayon 20 km, colis réservés aux coursiers validés, nom du prestataire, script de spécialité</td></tr>
 <tr><td><code>88e49834</code></td><td>Base des lieux élargie (17 022 lieux, 77 communes, Kpota de Calavi) ; rapports et couverture</td></tr>
 <tr><td><code>8ab4ce66</code></td><td>Un coursier occupé ou réservé ne se voit plus proposer d'autres missions</td></tr>
