@@ -803,7 +803,11 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
 SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
               goTo("provider-status");
             }}
-            onBack={() => goBack()}
+            onBack={() => {
+              // Inscription professionnelle tout juste commencée (rien avant ce dossier) : retour au numéro pour corriger une erreur
+              if (signupType && historyRef.current.length === 0) void handleLogout();
+              else goBack();
+            }}
           />
         )}
 

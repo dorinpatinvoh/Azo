@@ -27,6 +27,7 @@ import {
   ApiError,
   ProviderRef,
   type ProfileRole,
+  setToken,
   type ProviderType,
   authApi,
   needsRegistration,
@@ -80,11 +81,26 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
         setStep("phone");
         return true;
       }
-      // Écran du numéro et inscription : le retour du téléphone quitte l'application (pas de retour à l'onboarding)
+      // Formulaire d'identité : retour au numéro pour corriger une erreur (numéro, type de compte)
+      if (step === "register") {
+        void backToPhone();
+        return true;
+      }
+      // Écran du numéro : le retour du téléphone quitte l'application (pas de retour à l'onboarding)
       return false;
     });
     return () => sub.remove();
   }, [step]);
+
+  /** Abandonne l'inscription en cours : la session est fermée et on revient au numéro, champs conservés. */
+  async function backToPhone() {
+    setToken(null);
+    for (const key of ["userToken", "userRole", "providerStatus", "providerType", REGISTRATION_PENDING_KEY]) {
+      await SecureStore.deleteItemAsync(key).catch(() => undefined);
+    }
+    setCode(["", "", "", ""]);
+    setStep("phone");
+  }
 
   // « Créer un compte » depuis l'écran du numéro : le profil est choisi avant le numéro et le code, puis le parcours dédié suit
   const [signupMode, setSignupMode] = useState(false);
@@ -419,16 +435,11 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
           {/* En-tête épuré : flèche retour à gauche (code), verrou (inscription) */}
           <View style={styles.topRow}>
             <Pressable
-              onPress={step === "code" ? () => setStep("phone") : undefined}
+              onPress={step === "code" ? () => setStep("phone") : step === "register" ? () => void backToPhone() : undefined}
               style={styles.iconButton}
-              accessibilityLabel={step === "register" ? t("auth.mandatoryStep") : t("common.back")}
-              disabled={step === "register"}
+              accessibilityLabel={t("common.back")}
             >
-              <MaterialIcons
-                name={step === "register" ? "lock" : "arrow-back"}
-                size={20}
-                color={step === "register" ? colors.outline : colors.onSurface}
-              />
+              <MaterialIcons name="arrow-back" size={20} color={colors.onSurface} />
             </Pressable>
             <View style={{ flexDirection: "row", gap: spacing.sm }}>
               {voiceAssist && (
