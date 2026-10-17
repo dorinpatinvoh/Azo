@@ -1,0 +1,33 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 17 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">17 octobre 2026 · 1 commit poussé sur main (<code>ecb4be03</code>)</span></div>
+
+<h2>1. En résumé</h2>
+<p>Trois changements côté mobile : <b>une inscription simplifiée pour les profils professionnels</b> (le numéro seul), <b>le tricycle réservé aux gros colis</b> et <b>la plaque du Speeder partiellement masquée</b>. Tout compile (<code>tsc</code> sans erreur).</p>
+<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone. <b>Le backend doit être déployé avant l'APK</b> (le serveur enregistre le type de compte à la vérification du code). <b>Priorités de test :</b> l'inscription de chaque profil (Client, Speeder course simple, coursier personnel, livreur express, agence de flotte), puis la reconnexion d'un professionnel qui n'a pas fini son dossier.</div>
+
+<h2>2. Inscription : l'identité ne concerne que le client</h2>
+<ul>
+<li><b>Client</b> : inchangé — formulaire Nom, Prénom, Sexe, NPI après le code reçu.</li>
+<li><b>Speeder (course simple), coursier personnel, livreur express</b> : l'écran « Créer un compte » ne demande que <b>le numéro de la personne</b>. Après le code, l'application ouvre directement le dossier dédié (type d'activité et spécialité du coursier conservés). Plus de nom, sexe ni NPI à cette étape.</li>
+<li><b>Agence de flotte</b> : seul le numéro est demandé, avec le libellé « Numéro du représentant ou du propriétaire (10 chiffres) » (fr, en, es, de : <code>auth.phone.labelAgency</code>) ; le texte d'aide du choix du type de compte précise que seul le numéro est demandé.</li>
+<li>Le choix du type de compte a disparu de l'écran du formulaire d'identité (il ne sert plus qu'au client) ; <code>OtpLoginScreen.tsx</code> envoie le type au serveur lors de la vérification du code (<code>authApi.verifyOtp(…, profil)</code>).</li>
+<li><b>Reconnexion</b> : un professionnel dont le dossier est encore en brouillon retrouve son dossier sans repasser par l'identité ; si son dossier est déposé ou validé, le parcours habituel du prestataire s'applique.</li>
+<li><b>Limite</b> : un professionnel n'a ni nom ni NPI enregistrés ; s'il veut aussi commander comme client, il devra remplir le formulaire d'identité (non vérifié que l'application le lui propose clairement).</li>
+</ul>
+
+<h2>3. Colis : le tricycle ne livre que les gros colis</h2>
+<ul>
+<li>« Envoyer un colis » : document, petit et moyen colis ne proposent que le Speeder à essence et l'électrique ; « Gros colis » ne propose que le tricycle ; le Speeder se réajuste si le type de colis change.</li>
+<li>Depuis l'accueil, choisir « Speeder tricycle » pour une livraison ouvre la commande avec « Gros colis » sélectionné ; texte « Pour les gros colis uniquement ». La course simple et le coursier personnel en tricycle ne changent pas.</li>
+</ul>
+
+<h2>4. Plaque du Speeder</h2>
+<p>Le client voit la plaque partiellement : début et fin visibles, milieu caché (ex. « AB123****CD »). Le mobile affiche simplement ce que renvoie le serveur ; aucun changement de code mobile.</p>
+
+<h2>5. Cartes et recherche de lieux</h2>
+<p>Aucun changement de code mobile : la recherche d'adresse et la position affichée profitent de la nouvelle base de lieux du serveur (voir le rapport backend), après déploiement.</p>
+
+<h2>6. Commit du jour</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>ecb4be03</code></td><td>Inscription professionnelle par numéro seul ; tricycle réservé aux gros colis ; base nationale des lieux ; plaque partiellement masquée</td></tr></table>
+</body></html>

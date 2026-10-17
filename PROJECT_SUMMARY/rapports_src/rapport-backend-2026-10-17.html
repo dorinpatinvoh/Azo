@@ -1,0 +1,46 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 17 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">17 octobre 2026 · 1 commit poussé sur main (<code>ecb4be03</code>) · 31 suites / 338 tests verts</span></div>
+
+<h2>1. En résumé</h2>
+<p>Quatre changements : <b>type de compte enregistré sans identité</b> pour les profils professionnels, <b>le tricycle ne livre que les gros colis</b>, <b>base nationale des lieux du Bénin</b> et <b>plaque du Speeder partiellement masquée</b>. <code>tsc</code> sans erreur. Aucune migration.</p>
+<div class="box warn"><b>Déploiement :</b> le push de <code>main</code> déclenche le déploiement sur Render. Après déploiement, <code>/health</code> doit afficher <code>ecb4be03</code>. Rien n'a été testé en production.</div>
+
+<h2>2. Inscription des profils professionnels (<code>auth.service.ts</code>)</h2>
+<ul>
+<li><code>verifyOtp(phone, code, profile)</code> : pour <code>DRIVER</code>, <code>COURIER</code> ou <code>AGENCY</code>, si le compte n'a ni <code>signupKind</code> ni <code>profileCompletedAt</code>, le serveur enregistre <code>signupKind</code> (sans nom, sexe ni NPI). Un client déjà inscrit ne peut donc pas devenir agence : la règle <code>signupKind === "AGENCY"</code> de <code>providers.module.ts</code> reste intacte.</li>
+<li>Le brouillon de dossier prestataire est ouvert comme avant (<code>openDraftOnSignup</code>).</li>
+<li>La réponse contient maintenant <code>signupKind</code> (au niveau de la racine, à côté de <code>user</code> et <code>provider</code>) : le mobile s'en sert pour ne pas redemander l'identité à un professionnel.</li>
+<li>Le formulaire <code>POST /users/me/registration</code> est inchangé (client). <code>RegistrationCompleteGuard</code> (CLIENT) est inchangé : un professionnel sans identité n'a pas accès aux commandes de client.</li>
+<li><b>Non couvert par un test dédié</b> (les 338 tests existants passent).</li>
+</ul>
+
+<h2>3. Le tricycle ne livre que les gros colis</h2>
+<ul>
+<li><code>tarification.json</code> : <code>delivery.vehicles.ZEM_TRICYCLE.onlyPackages: ["large"]</code> ; <code>PricingService.deliveryRule</code> renvoie <code>null</code> pour tout autre type de colis.</li>
+<li>Devis (<code>GET /deliveries/quote</code>) et création refusés (400, « Le Speeder tricycle est réservé aux gros colis… ») pour document, petit et moyen colis ; un gros colis reste réservé au tricycle. Course simple et coursier personnel en tricycle non touchés.</li>
+<li>Test : <code>personal-courier.spec.ts</code> (devis refusé doc / petit / moyen, création refusée, gros colis à 1 km = 305 F).</li>
+</ul>
+
+<h2>4. Base nationale des lieux (<code>places/</code>)</h2>
+<ul>
+<li><code>benin-gazetteer.json</code> : <b>16 743 lieux</b> couvrant les <b>77 communes</b> (communes, arrondissements, villes, quartiers, villages, hameaux). La liste soignée de Cotonou et d'Abomey-Calavi (<code>benin-gazetteer-core.json</code>, 236 lieux) est prioritaire à la fusion.</li>
+<li><b>Sources</b> : OpenStreetMap (Overpass, un relevé par commune), GeoNames (villes, 77 communes, 539 arrondissements). Doublons (même nom à moins de 400 m) fusionnés ; chaque lieu est rattaché à sa commune et à l'arrondissement le plus proche (40 km maximum).</li>
+<li><code>places.module.ts</code> : la recherche classe commune, ville, arrondissement, quartier, village ; sous-titre « type · arrondissement, commune » ; le géocodage inverse essaie d'abord le lieu connu le plus proche (700 m), sinon la recherche en ligne.</li>
+<li><b>Limites</b> : la liste officielle des villages par arrondissement (INStaD) n'a pas pu être obtenue (site en maintenance) ; la couverture dépend de ce qu'OpenStreetMap contient (inégale selon les communes, quelques dizaines de lieux pour certaines). Les arrondissements sont placés par leur chef-lieu. Les noms ne sont pas tous orthographiés selon l'usage officiel.</li>
+<li>Tests : 6 tests <code>places</code> verts.</li>
+</ul>
+
+<h2>5. Plaque du Speeder (<code>rides.service.ts</code>)</h2>
+<p><code>maskPlate</code> : début et fin conservés, milieu remplacé par quatre étoiles (« AB1234CD » → « AB123****CD »). Le champ reste <code>plateMasked</code> ; la plaque complète n'est pas exposée au client.</p>
+
+<h2>6. Qualité et limites</h2>
+<ul>
+<li><b>31 suites / 338 tests</b> verts, <code>tsc</code> sans erreur.</li>
+<li>SMS (OTP) : toujours aucune passerelle ; le mode simulation (code 0000) sert aux tests.</li>
+<li>À faire : renouveler le mot de passe de la base (une URL a été partagée dans une conversation) ; fichier <code>google-services.json</code> pour les notifications push.</li>
+</ul>
+
+<h2>7. Commit du jour</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>ecb4be03</code></td><td>Inscription professionnelle par numéro seul ; tricycle réservé aux gros colis ; base nationale des lieux ; plaque partiellement masquée</td></tr></table>
+</body></html>
