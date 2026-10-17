@@ -21,6 +21,8 @@ import { FONT } from "../theme/fontNormalize";
 import { API_URL, Delivery, deliveryApi, errorMessage, getToken, providersApi, userApi, walletApi, type UserProfile } from "../services/api";
 import { io } from "socket.io-client";
 import ClientTrackMap from "../components/ClientTrackMap";
+import TripDistanceBanner from "../components/TripDistanceBanner";
+import { fmtTraveled } from "../utils/geo";
 import { formatBeninPhoneDisplay, maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
 import { useCourierTracking } from "../hooks/useCourierTracking";
@@ -156,7 +158,11 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
   }, [offeredDelivery?.id]);
 
   // Coursier personnel : le GPS suit la mission pour calculer les kilomètres réellement parcourus
-  useCourierTracking(activeDelivery && ["MATCHED", "IN_PROGRESS"].includes(activeDelivery.status) ? activeDelivery.id : null);
+  // Distance parcourue en direct (renvoyée par le serveur à chaque position envoyée)
+  const [liveMeters, setLiveMeters] = useState<number | null>(null);
+  useEffect(() => setLiveMeters(null), [activeDelivery?.id, activeDelivery?.status]);
+  useCourierTracking(activeDelivery && ["MATCHED", "IN_PROGRESS"].includes(activeDelivery.status) ? activeDelivery.id : null, setLiveMeters);
+  const doneMeters = Math.max(liveMeters ?? 0, activeDelivery?.traveledMeters ?? 0);
 
   const currentSimCode = useMemo(() => {
     if (!activeDelivery) return null;
@@ -518,6 +524,14 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                 me={myPos}
               />
 
+              {activeDelivery.status === "IN_PROGRESS" ? (
+                <TripDistanceBanner
+                  title="Distance parcourue"
+                  remaining={fmtTraveled(doneMeters / 1000)}
+                  sub={activeDelivery.mode === "PERSONAL" ? "Prix final : base + kilomètres réellement parcourus" : "Compteur depuis le ramassage"}
+                />
+              ) : null}
+
               {activeDelivery.client ? (
                 <View style={styles.clientRow}>
                   <View style={{ flex: 1 }}>
@@ -783,8 +797,8 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
               </View>
               <Text style={styles.ongoingRoute} numberOfLines={1}>De : {activeDelivery.pickupAddress}</Text>
               <Text style={styles.ongoingRoute} numberOfLines={1}>Vers : {activeDelivery.dropAddress}</Text>
-              {typeof activeDelivery.traveledMeters === "number" && activeDelivery.mode === "PERSONAL" ? (
-                <Text style={styles.ongoingRoute}>{(activeDelivery.traveledMeters / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km parcourus</Text>
+              {typeof activeDelivery.traveledMeters === "number" && activeDelivery.status === "IN_PROGRESS" ? (
+                <Text style={styles.ongoingRoute}>{fmtTraveled(doneMeters / 1000)} parcourus</Text>
               ) : null}
               <Pressable style={styles.ongoingBtn} onPress={() => setTab("home")} accessibilityRole="button">
                 <Text style={styles.ongoingBtnText}>Ouvrir la mission</Text>

@@ -329,4 +329,35 @@ describe("Réservation d'un coursier personnel", () => {
       expect(prisma.delivery.findFirst.mock.calls[0][0].where.OR[0].status.in).toContain("OFFERED");
     });
   });
+
+  describe("distance parcourue d'une mission (coursier personnel et livreur express)", () => {
+    const base = { clientId: "c1", courierId: "k1", price: 1000, odoLat: 6.37, odoLng: 2.39, odoCred: 0 };
+    const send = async (row: Record<string, unknown>, dto: Record<string, unknown>) => {
+      const { service, prisma } = make();
+      prisma.delivery.findUnique.mockResolvedValue({ id: "d1", ...base, ...row });
+      prisma.delivery.update = jest.fn().mockResolvedValue({ traveledMeters: 0 });
+      await service.updateLocation("k1", "d1", { latitude: 6.37 + 1 / 111_195, longitude: 2.39, accuracy: 5, ...dto } as any);
+      return prisma.delivery.update.mock.calls[0][0].data;
+    };
+
+    it("compte un petit déplacement réel grâce à la vitesse du téléphone (livreur express comme coursier personnel)", async () => {
+      for (const mode of ["EXPRESS", "PERSONAL"]) {
+        const data = await send({ mode, status: "IN_PROGRESS", odoAt: new Date(Date.now() - 2000) }, { speed: 1.2 });
+        expect(data.traveledMeters.increment).toBeGreaterThan(2);
+        expect(data.traveledMeters.increment).toBeLessThan(2.6);
+        expect(data.odoCred).toBeCloseTo(data.traveledMeters.increment, 3);
+      }
+    });
+
+    it("à l'arrêt (vitesse nulle), le bruit du GPS n'ajoute aucun mètre", async () => {
+      const data = await send({ mode: "EXPRESS", status: "IN_PROGRESS", odoAt: new Date(Date.now() - 2000) }, { speed: 0 });
+      expect(data.traveledMeters).toBeUndefined();
+    });
+
+    it("avant le ramassage (MATCHED), rien n'est compté", async () => {
+      const data = await send({ mode: "PERSONAL", status: "MATCHED", odoAt: new Date(Date.now() - 2000) }, { speed: 3 });
+      expect(data.traveledMeters).toBeUndefined();
+      expect(data.odoCred).toBeUndefined();
+    });
+  });
 });

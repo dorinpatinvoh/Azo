@@ -4,6 +4,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import OSMMapView from "./OSMMapView";
 import { deliveryApi, type DeliveryTrack } from "../services/api";
+import { fmtTraveled } from "../utils/geo";
 
 /** Carte en direct du coursier personnel + kilomètres déjà parcourus (affichés au client). */
 export default function CourierTrackMap({ deliveryId, perKm }: { deliveryId: string; perKm?: number }) {
@@ -17,7 +18,7 @@ export default function CourierTrackMap({ deliveryId, perKm }: { deliveryId: str
         .then((t) => alive && setTrack(t))
         .catch(() => undefined);
     load();
-    const timer = setInterval(load, 4000);
+    const timer = setInterval(load, 2500);
     return () => {
       alive = false;
       clearInterval(timer);
@@ -44,7 +45,7 @@ export default function CourierTrackMap({ deliveryId, perKm }: { deliveryId: str
         </View>
       )}
       <Text style={styles.km}>
-        {km.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km parcourus{perKm ? ` · ${perKm.toLocaleString("fr-FR")} F / km` : ""}
+        {fmtTraveled(km)} parcourus{perKm ? ` · ${perKm.toLocaleString("fr-FR")} F / km` : ""}
       </Text>
     </View>
   );

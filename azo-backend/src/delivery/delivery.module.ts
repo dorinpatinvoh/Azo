@@ -57,6 +57,8 @@ class CourierLocationDto {
   @IsNumber() @Min(-90) @Max(90) latitude: number;
   @IsNumber() @Min(-180) @Max(180) longitude: number;
   @IsOptional() @IsNumber() @Min(0) accuracy?: number;
+  /** Vitesse mesurée par le téléphone (m/s) : permet de compter les petits déplacements réels sans compter le bruit du GPS. */
+  @IsOptional() @IsNumber() @Min(0) speed?: number;
 }
 
 class AcceptDto {
@@ -647,13 +649,15 @@ export class DeliveryService {
     if (!["MATCHED", "IN_PROGRESS"].includes(d.status)) throw new BadRequestException("Le suivi est terminé pour cette livraison");
     const now = Date.now();
     const data: Prisma.DeliveryUpdateInput = { courierLat: dto.latitude, courierLng: dto.longitude, courierLocatedAt: new Date(now) };
-    if (d.status === "IN_PROGRESS" && d.mode === "PERSONAL") {
-      const previous = d.odoLat !== null && d.odoLng !== null && d.odoAt ? { lat: d.odoLat, lng: d.odoLng, at: d.odoAt.getTime() } : null;
-      const step = odometerStep(previous, { lat: dto.latitude, lng: dto.longitude, at: now }, dto.accuracy);
+    // Distance parcourue depuis le ramassage : coursier personnel (prix final) et livreur express (information), même calcul que la course simple
+    if (d.status === "IN_PROGRESS") {
+      const previous = d.odoLat !== null && d.odoLng !== null && d.odoAt ? { lat: d.odoLat, lng: d.odoLng, at: d.odoAt.getTime(), cred: d.odoCred ?? 0 } : null;
+      const step = odometerStep(previous, { lat: dto.latitude, lng: dto.longitude, at: now }, dto.accuracy, dto.speed);
       if (step?.accepted) {
         data.odoLat = step.point.lat;
         data.odoLng = step.point.lng;
         data.odoAt = new Date(step.point.at);
+        data.odoCred = step.point.cred ?? 0;
         if (step.meters > 0) data.traveledMeters = { increment: step.meters };
       }
     }

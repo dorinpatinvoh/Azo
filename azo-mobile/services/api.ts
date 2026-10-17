@@ -760,7 +760,7 @@ export const deliveryApi = {
     api.get<{ km: number; price: number }>(`${P}/deliveries/quote?vehicleType=${q.vehicleType}&packageType=${q.packageType}&pickupLat=${q.pickupLat}&pickupLng=${q.pickupLng}&dropLat=${q.dropLat}&dropLng=${q.dropLng}`),
   track: (id: string) => api.get<DeliveryTrack>(`${P}/deliveries/${id}/track`),
   /** Coursier : position GPS pendant la mission. */
-  location: (id: string, body: { latitude: number; longitude: number; accuracy?: number }) =>
+  location: (id: string, body: { latitude: number; longitude: number; accuracy?: number; speed?: number }) =>
     api.post<{ traveledMeters: number }>(`${P}/deliveries/${id}/location`, body),
   cancel: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/cancel`),
   /** Propositions de coursiers en attente de ma décision (rattrapage de la popup). */

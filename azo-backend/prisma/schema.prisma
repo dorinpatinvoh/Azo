@@ -387,6 +387,8 @@ model Delivery {
   clientLat     Float?
   clientLng     Float?
   clientLocatedAt DateTime?
+  // Distance parcourue : mètres déjà comptés grâce à la vitesse du téléphone depuis le point d'ancrage (évite de les compter deux fois)
+  odoCred       Float    @default(0)
 }
 
 model RentalBooking {
