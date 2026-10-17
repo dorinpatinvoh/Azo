@@ -144,6 +144,42 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     es: t("Pago recibido", "Entrega {amount} FCFA · el {pct} % de la entrega (−{commission} F) se paga a la empresa AZƆ̀ · recibes +{net} FCFA."),
     de: t("Zahlung erhalten", "Lieferung {amount} FCFA · {pct} % der Lieferung (−{commission} F) gehen an das Unternehmen AZƆ̀ · du erhältst +{net} FCFA."),
   },
+  NOTIFICATION_DELIVERY_OFFERED: {
+    fr: t("Un livreur a accepté ton colis"),
+    en: t("A courier accepted your parcel"),
+    es: t("Un repartidor aceptó tu paquete"),
+    de: t("Ein Zusteller hat dein Paket angenommen"),
+  },
+  NOTIFICATION_DELIVERY_OFFERED_PERSONAL: {
+    fr: t("Un coursier a accepté ta réservation"),
+    en: t("A courier accepted your booking"),
+    es: t("Un mensajero aceptó tu reserva"),
+    de: t("Ein Kurier hat deine Buchung angenommen"),
+  },
+  NOTIFICATION_DELIVERY_OFFERED_BODY: {
+    fr: t("", "Touche pour voir son profil — il te reste {s} s."),
+    en: t("", "Tap to see their profile — you have {s} s left."),
+    es: t("", "Toca para ver su perfil — te quedan {s} s."),
+    de: t("", "Tippe, um sein Profil zu sehen — dir bleiben {s} s."),
+  },
+  NOTIFICATION_DELIVERY_APPROVED: {
+    fr: t("Le client t'a choisi"),
+    en: t("The customer chose you"),
+    es: t("El cliente te eligió"),
+    de: t("Der Kunde hat dich gewählt"),
+  },
+  NOTIFICATION_DELIVERY_APPROVED_BODY: {
+    fr: t("", "Rends-toi au point de ramassage."),
+    en: t("", "Head to the pick-up point."),
+    es: t("", "Ve al punto de recogida."),
+    de: t("", "Fahre zum Abholpunkt."),
+  },
+  NOTIFICATION_DELIVERY_DECLINED: {
+    fr: t("Le client a choisi un autre coursier.", "Tu peux accepter une autre mission."),
+    en: t("The customer chose another courier.", "You can accept another mission."),
+    es: t("El cliente eligió a otro mensajero.", "Puedes aceptar otra misión."),
+    de: t("Der Kunde hat einen anderen Kurier gewählt.", "Du kannst einen anderen Auftrag annehmen."),
+  },
   NOTIFICATION_RIDE_CANCELLED: {
     fr: t("Course annulée"),
     en: t("Ride cancelled"),

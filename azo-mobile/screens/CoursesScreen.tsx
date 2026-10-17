@@ -55,7 +55,7 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
   }, []);
 
   // Une commande de colis en cours : on actualise l'état toutes les 8 s (la carte du livreur se met à jour d'elle-même)
-  const hasActiveDelivery = deliveries.some((d) => ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status));
+  const hasActiveDelivery = deliveries.some((d) => ["PENDING", "OFFERED", "MATCHED", "IN_PROGRESS"].includes(d.status));
   useEffect(() => {
     if (!hasActiveDelivery) return;
     const timer = setInterval(() => { load().catch(() => undefined); }, 8000);
@@ -93,7 +93,7 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
 
   const deliveryMatches = useCallback(
     (d: Delivery) => {
-      if (filter === "ACTIVE") return ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status);
+      if (filter === "ACTIVE") return ["PENDING", "OFFERED", "MATCHED", "IN_PROGRESS"].includes(d.status);
       if (filter === "COMPLETED") return d.status === "COMPLETED";
       if (filter === "CANCELLED") return d.status === "CANCELLED";
       return true;
@@ -156,7 +156,7 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
             <Text style={styles.statLabel}>Terminées</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{rides.filter((r) => ACTIVE_STATUSES.includes(r.status)).length + deliveries.filter((d) => ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status)).length}</Text>
+            <Text style={styles.statValue}>{rides.filter((r) => ACTIVE_STATUSES.includes(r.status)).length + deliveries.filter((d) => ["PENDING", "OFFERED", "MATCHED", "IN_PROGRESS"].includes(d.status)).length}</Text>
             <Text style={styles.statLabel}>En cours</Text>
           </View>
           <View style={[styles.statCard, styles.statCardMain]}>

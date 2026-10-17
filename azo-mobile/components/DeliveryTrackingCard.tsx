@@ -13,7 +13,7 @@ import { BrandAlert } from "./BrandAlert";
 
 type Props = { delivery: Delivery; onChanged: () => void };
 
-const ACTIVE = ["PENDING", "MATCHED", "IN_PROGRESS"];
+const ACTIVE = ["PENDING", "OFFERED", "MATCHED", "IN_PROGRESS"];
 
 /**
  * Suivi d'une commande de colis ou de coursier personnel dans l'onglet « Courses » : état, trajet, carte du livreur en direct,
@@ -92,6 +92,10 @@ export default function DeliveryTrackingCard({ delivery: d, onChanged }: Props) 
         </Text>
       ) : null}
 
+      {d.status === "OFFERED" ? (
+        <Text style={styles.meta}>Un {personal ? "coursier" : "livreur"} a accepté : regarde son profil et valide-le dans la fenêtre qui s'ouvre.</Text>
+      ) : null}
+
       {d.status === "PENDING" ? (
         <Text style={styles.meta}>
           {personal
@@ -128,7 +132,7 @@ export default function DeliveryTrackingCard({ delivery: d, onChanged }: Props) 
         </View>
       ) : null}
 
-      {["PENDING", "MATCHED"].includes(d.status) ? (
+      {["PENDING", "OFFERED", "MATCHED"].includes(d.status) ? (
         <Pressable style={styles.cancelBtn} onPress={cancel} disabled={busy}>
           <Text style={styles.cancelText}>Annuler la demande</Text>
         </Pressable>

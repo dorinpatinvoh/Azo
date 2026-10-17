@@ -18,6 +18,7 @@ import { CreateRideDto } from "./dto/create-ride.dto";
 import { LatLng, buildRadar, haversineKm, isRideExpired, rideAgeMinutes } from "./radar";
 import { haversineMeters } from "./odometer";
 import { buildDisplayName, buildDriverDisplayName } from "./display-name";
+import { maskPlate } from "./plate";
 import { assertClientAllowed, assertDriverAllowed } from "./standing";
 import { clientStatsFor } from "./client-stats";
 import { SCHEDULE_RELEASE_LEAD_MIN, isWaitingForRelease, parseSchedule, withReleaseAsCreation } from "./schedule";
@@ -62,17 +63,6 @@ const WITH_DRIVER_PROFILE = {
 
 function createPickupCode(): string {
   return String(randomInt(0, 10_000)).padStart(4, "0");
-}
-
-/** Masque la plaque : « AB1234CD » → « AB123****CD » */
-function maskPlate(plate: string | null | undefined): string | null {
-  if (!plate) return null;
-  // Début et fin visibles, milieu caché : « hjgjk****55 »
-  const compact = plate.replace(/[\s-]/g, "");
-  if (compact.length <= 3) return "****" + compact.slice(-1);
-  const tail = 2;
-  const head = Math.min(5, Math.max(1, compact.length - tail - 1));
-  return compact.slice(0, head) + "****" + compact.slice(-tail);
 }
 
 @Injectable()

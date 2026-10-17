@@ -165,7 +165,7 @@ export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initial
   }
 
   const activeDeliveries = deliveries.filter((d) =>
-    d.mode !== "PERSONAL" && ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status)
+    d.mode !== "PERSONAL" && ["PENDING", "OFFERED", "MATCHED", "IN_PROGRESS"].includes(d.status)
   );
 
   return (
@@ -254,7 +254,7 @@ export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initial
                     </View>
                   ) : null}
 
-                  {["PENDING", "MATCHED"].includes(d.status) ? (
+                  {["PENDING", "OFFERED", "MATCHED"].includes(d.status) ? (
                     <Pressable style={styles.cancelBtn} onPress={() => handleCancel(d)}>
                       <Text style={styles.cancelBtnText}>Annuler la demande</Text>
                     </Pressable>

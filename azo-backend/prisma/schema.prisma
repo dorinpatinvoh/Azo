@@ -378,6 +378,15 @@ model Delivery {
   courierLat    Float? // dernière position du coursier (suivi par le client)
   courierLng    Float?
   courierLocatedAt DateTime?
+  // Proposition du coursier : le client la valide (OFFERED → MATCHED) comme pour une course simple
+  offeredAt     DateTime?
+  offerExpiresAt DateTime?
+  offerSeenAt   DateTime?
+  declinedCourierIds String[] @default([])
+  // Dernière position du client (suivie par le coursier une fois la mission confirmée)
+  clientLat     Float?
+  clientLng     Float?
+  clientLocatedAt DateTime?
 }
 
 model RentalBooking {

@@ -668,7 +668,7 @@ export const rideApi = ridesApi;
 
 /* ==================== LIVRAISON DE COLIS & COURSIER ==================== */
 
-export type DeliveryStatus = "PENDING" | "MATCHED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type DeliveryStatus = "PENDING" | "OFFERED" | "MATCHED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 export type Delivery = {
   id: string;
@@ -696,8 +696,28 @@ export type Delivery = {
   pickupLat?: number | null;
   pickupLng?: number | null;
   pickupDistanceKm?: number | null;
+  /** Proposition du coursier en attente de la décision du client (statut OFFERED). */
+  offerExpiresAt?: string | null;
+  offerSeenAt?: string | null;
   client?: RidePerson | null;
   courier?: RidePerson | null;
+};
+
+/** Popup du client : un coursier ou livreur a accepté la commande, il regarde son profil avant de décider. */
+export type DeliveryOffer = {
+  deliveryId: string;
+  mode: "EXPRESS" | "PERSONAL";
+  packageType?: string;
+  vehicleType?: VehicleType | null;
+  bookingHours?: number | null;
+  price: number;
+  pickupAddress: string;
+  dropAddress: string;
+  expiresAt: string;
+  serverNow: string;
+  expiresInSeconds: number;
+  courier: DriverPublicProfile & { specialty?: string };
+  offer: { distanceKm: number | null; etaMinutes: number | null };
 };
 
 /** Suivi en direct d'une livraison (position du coursier, kilomètres parcourus). */
@@ -709,6 +729,10 @@ export type DeliveryTrack = {
   courierLng: number | null;
   courierLocatedAt: string | null;
   traveledMeters: number;
+  /** Position du client : renvoyée seulement au coursier de la mission. */
+  clientLat?: number | null;
+  clientLng?: number | null;
+  clientLocatedAt?: string | null;
 };
 
 export const deliveryApi = {
@@ -739,13 +763,25 @@ export const deliveryApi = {
   location: (id: string, body: { latitude: number; longitude: number; accuracy?: number }) =>
     api.post<{ traveledMeters: number }>(`${P}/deliveries/${id}/location`, body),
   cancel: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/cancel`),
+  /** Propositions de coursiers en attente de ma décision (rattrapage de la popup). */
+  pendingOffers: () => api.get<{ offers: DeliveryOffer[] }>(`${P}/deliveries/offers/pending`),
+  approveCourier: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/approve-courier`),
+  declineCourier: (id: string) => api.post<{ deliveryId: string; status: string }>(`${P}/deliveries/${id}/decline-courier`),
+  offerSeen: (id: string) => api.post<{ seenAt: string }>(`${P}/deliveries/${id}/offer-seen`),
+  courierProfile: (id: string) => api.get<DriverPublicProfile>(`${P}/deliveries/${id}/courier-profile`),
+  /** Ma position, pour que le coursier me suive pendant la mission. */
+  clientLocation: (id: string, body: { latitude: number; longitude: number; accuracy?: number }) =>
+    api.post<{ ok: boolean }>(`${P}/deliveries/${id}/client-location`, body),
 
   /* --- Coursier / Livreur --- */
-  /** Missions dans un rayon de 10 km autour de la position donnée. */
+  /** Missions dans un rayon de 20 km autour de la position donnée. */
   pending: (near?: { latitude: number; longitude: number }) =>
     api.get<Delivery[]>(`${P}/deliveries/pending${near ? `?lat=${near.latitude}&lng=${near.longitude}` : ""}`),
   courierHistory: () => api.get<Delivery[]>(`${P}/deliveries/courier`),
-  accept: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/accept`),
+  /** Le coursier se propose : le client valide (statut OFFERED) avant que la mission ne soit confirmée. */
+  accept: (id: string, pos?: { latitude: number; longitude: number }) =>
+    api.post<Delivery>(`${P}/deliveries/${id}/accept`, pos ? { lat: pos.latitude, lng: pos.longitude } : {}),
+  withdrawOffer: (id: string) => api.post<{ deliveryId: string; status: string }>(`${P}/deliveries/${id}/withdraw-offer`),
   confirmPickup: (id: string, code: string) =>
     api.post<Delivery>(`${P}/deliveries/${id}/confirm-pickup`, { code }),
   confirmDelivery: (id: string, code: string) =>

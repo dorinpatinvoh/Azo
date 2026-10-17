@@ -11,6 +11,8 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   rideId: string;
+  /** Livraisons : charge le profil du coursier au lieu de celui d'un Speeder de course. */
+  fetchProfile?: () => Promise<DriverPublicProfile>;
   /** Nom déjà connu du Speeder (affiché même si le profil détaillé n'est pas disponible). */
   name: string;
   profile?: DriverPublicProfile | null;
@@ -47,7 +49,7 @@ function Row({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap
  * (`driver.profile`) ; à défaut, on le demande à `GET /rides/:id/driver-profile`. Le serveur ne
  * fournit jamais le téléphone ni les pièces d'identité : seulement ce qui rassure le client.
  */
-export default function DriverProfileSheet({ visible, onClose, rideId, name, profile, onChoose, onDecline, busy }: Props) {
+export default function DriverProfileSheet({ visible, onClose, rideId, fetchProfile, name, profile, onChoose, onDecline, busy }: Props) {
   const { t, locale } = useI18n();
   const [fetched, setFetched] = useState<DriverPublicProfile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -56,8 +58,7 @@ export default function DriverProfileSheet({ visible, onClose, rideId, name, pro
     if (!visible || profile) return;
     let active = true;
     setLoading(true);
-    ridesApi
-      .driverProfile(rideId)
+    (fetchProfile ? fetchProfile() : ridesApi.driverProfile(rideId))
       .then((value) => active && setFetched(value))
       .catch(() => undefined)
       .finally(() => active && setLoading(false));

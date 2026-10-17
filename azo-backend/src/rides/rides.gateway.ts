@@ -748,6 +748,11 @@ export class RidesGateway implements OnGatewayConnection {
     this.server?.to(`user:${clientId}`).emit("ride:offered", payload);
   }
 
+  /** Événement générique envoyé à la room personnelle d'un utilisateur (livraisons : proposition du coursier, confirmation). */
+  emitToUser(userId: string, event: string, payload: Record<string, unknown>) {
+    this.server?.to(`user:${userId}`).emit(event, payload);
+  }
+
   /** La proposition est terminée : la popup du client se ferme (retirée, expirée, annulée, choisie ailleurs). */
   emitOfferEnded(clientId: string, rideId: string, outcome: "declined" | "withdrawn" | "expired" | "cancelled" | "approved") {
     this.server?.to(`user:${clientId}`).emit("ride:offer-ended", { rideId, outcome, at: new Date().toISOString() });

@@ -3,10 +3,14 @@ import {
   Query,
   Body,
   Controller,
+  ConflictException,
   ForbiddenException,
   Get,
   Injectable,
+  Logger,
   Module,
+  OnModuleDestroy,
+  OnModuleInit,
   NotFoundException,
   Param,
   Post,
@@ -23,6 +27,9 @@ import { WalletModule, WalletService } from "../wallet/wallet.module";
 import { NotificationsModule, NotificationsService } from "../notifications/notifications.module";
 import { PricingModule, PricingService } from "../pricing/pricing.module";
 import { RegistrationCompleteGuard } from "../common/guards/registration-complete.guard";
+import { RidesGateway } from "../rides/rides.gateway";
+import { RidesModule } from "../rides/rides.module";
+import { COURIER_PROFILE_SELECT, buildPublicCourierProfile } from "./courier-profile";
 
 
 class CreateDeliveryDto {
@@ -52,6 +59,11 @@ class CourierLocationDto {
   @IsOptional() @IsNumber() @Min(0) accuracy?: number;
 }
 
+class AcceptDto {
+  @IsOptional() @IsNumber() @Min(-90) @Max(90) lat?: number;
+  @IsOptional() @IsNumber() @Min(-180) @Max(180) lng?: number;
+}
+
 class ConfirmCodeDto {
   @IsString() @MaxLength(8) code: string;
 }
@@ -67,8 +79,11 @@ export class DeliveryService {
     private prisma: PrismaService,
     private wallet: WalletService,
     private notifications: NotificationsService,
-    private pricing: PricingService
+    private pricing: PricingService,
+    private gateway: RidesGateway
   ) {}
+
+  private readonly logger = new Logger(DeliveryService.name);
 
   private async enrich(items: (Delivery & { client?: { fullName: string | null; phone: string } })[]) {
     const courierIds = Array.from(new Set(items.map((d) => d.courierId).filter((id): id is string => !!id)));
@@ -82,7 +97,8 @@ export class DeliveryService {
     return items.map((d) => ({
       ...d,
       commission: this.pricing.deliveryCommission(d.price),
-      courier: d.courierId ? courierMap.get(d.courierId) ?? null : null,
+      // Tant que le client n'a pas validé la proposition (OFFERED), il ne voit ni le nom ni le téléphone du coursier
+      courier: d.courierId && d.status !== "OFFERED" ? courierMap.get(d.courierId) ?? null : null,
     }));
   }
 
@@ -231,7 +247,7 @@ export class DeliveryService {
       where: {
         courierId,
         OR: [
-          { status: { in: ["MATCHED", "IN_PROGRESS"] }, NOT: { mode: "PERSONAL", bookedFrom: { gt: now } } },
+          { status: { in: ["OFFERED", "MATCHED", "IN_PROGRESS"] }, NOT: { mode: "PERSONAL", bookedFrom: { gt: now } } },
           { mode: "PERSONAL", status: { in: ["MATCHED", "IN_PROGRESS", "COMPLETED"] }, bookedFrom: { lte: now }, bookedUntil: { gt: now } },
         ],
       },
@@ -246,7 +262,7 @@ export class DeliveryService {
     if (courierId && (await this.isCourierBusy(courierId))) return [];
     const scope = await this.courierScope(courierId);
     const items = await this.prisma.delivery.findMany({
-      where: { status: "PENDING", courierId: null, ...this.scopeWhere(scope) },
+      where: { status: "PENDING", courierId: null, ...this.scopeWhere(scope), ...(courierId ? { NOT: { declinedCourierIds: { has: courierId } } } : {}) },
       include: { client: { select: { fullName: true, phone: true } } },
       orderBy: { createdAt: "desc" },
       take: 40,
@@ -288,11 +304,11 @@ export class DeliveryService {
   }
 
   // Acceptation atomique d'une mission par un coursier / livreur
-  async accept(courierId: string, id: string) {
+  async accept(courierId: string, id: string, pos?: { lat: number; lng: number }) {
     if (!(await this.isApprovedCourier(courierId))) throw new ForbiddenException("Seuls les coursiers et livreurs validés par AZƆ̀ peuvent prendre une mission.");
     const active = await this.prisma.delivery.findFirst({
       // une réservation programmée plus tard n'empêche pas d'accepter une course maintenant
-      where: { courierId, status: { in: ["MATCHED", "IN_PROGRESS"] }, NOT: { mode: "PERSONAL", bookedFrom: { gt: new Date() } } },
+      where: { courierId, status: { in: ["OFFERED", "MATCHED", "IN_PROGRESS"] }, NOT: { mode: "PERSONAL", bookedFrom: { gt: new Date() } } },
     });
     if (active && active.id !== id) {
       throw new BadRequestException("Tu as déjà une livraison en cours. Termine-la avant d'en accepter une autre.");
@@ -333,6 +349,38 @@ export class DeliveryService {
       throw new BadRequestException("Tu ne peux pas accepter ta propre demande de livraison");
     }
 
+    if (existing.declinedCourierIds?.includes(courierId)) {
+      throw new ForbiddenException("Le client a déjà refusé ta proposition pour cette mission.");
+    }
+
+    const settings = this.offerSettings();
+    if (settings.approval) {
+      // Comme pour une course simple : le coursier se propose, le client regarde son profil et décide (PENDING → OFFERED → MATCHED)
+      const offeredAt = new Date();
+      const offerExpiresAt = new Date(offeredAt.getTime() + settings.seconds * 1000);
+      const claimed = await this.prisma.delivery.updateMany({
+        where: { id, status: "PENDING", courierId: null },
+        data: {
+          courierId,
+          status: "OFFERED",
+          offeredAt,
+          offerExpiresAt,
+          offerSeenAt: null,
+          ...(pos ? { courierLat: pos.lat, courierLng: pos.lng, courierLocatedAt: offeredAt } : {}),
+        },
+      });
+      if (claimed.count === 0) {
+        throw new BadRequestException("Cette mission vient d'être prise par un autre coursier ou a été annulée");
+      }
+      void this.announceOffer(id).catch((e) => this.logger.warn(`announceOffer ${id} : ${e?.message ?? e}`));
+      const offered = await this.prisma.delivery.findUniqueOrThrow({
+        where: { id },
+        include: { client: { select: { fullName: true, phone: true } } },
+      });
+      const [enrichedOffer] = await this.enrich([offered]);
+      return { ...enrichedOffer, pickupCode: "••••", deliveryCode: "••••" };
+    }
+
     const updated = await this.prisma.delivery.updateMany({
       where: { id, status: "PENDING", courierId: null },
       data: { courierId, status: "MATCHED", ...(bookedFrom && bookedUntil ? { bookedFrom, bookedUntil } : {}) },
@@ -359,6 +407,236 @@ export class DeliveryService {
     return isLiveSms
       ? { ...enriched, pickupCode: "••••", deliveryCode: "••••" }
       : enriched;
+  }
+
+  /* ------------------------------------------------------------------------------------------------------------------ */
+  /*  Proposition du coursier ou livreur : le client regarde son profil et décide (comme pour une course simple)        */
+  /* ------------------------------------------------------------------------------------------------------------------ */
+
+  private offerSettings() {
+    const r = this.pricing.rideSettings();
+    return { approval: r.requireClientApproval !== false, seconds: r.offerExpirySeconds, graceMs: r.offerApprovalGraceSeconds * 1000 };
+  }
+
+  private offerEnded(message: string) {
+    return new ConflictException({ code: "DELIVERY_OFFER_ENDED", message });
+  }
+
+  /** Contenu de la popup du client : profil public du coursier, délai (heure du serveur) et distance jusqu'au départ. */
+  private async loadOfferPayload(id: string) {
+    const d = await this.prisma.delivery.findUnique({
+      where: { id },
+      select: {
+        id: true, clientId: true, courierId: true, status: true, mode: true, packageType: true, vehicleType: true, bookingHours: true,
+        price: true, pickupAddress: true, dropAddress: true, pickupLat: true, pickupLng: true, offerExpiresAt: true, courierLat: true, courierLng: true,
+      },
+    });
+    if (!d || d.status !== "OFFERED" || !d.courierId || !d.offerExpiresAt) return null;
+    const courier = await this.prisma.user.findUnique({ where: { id: d.courierId }, select: COURIER_PROFILE_SELECT });
+    if (!courier) return null;
+    let distanceKm: number | null = null;
+    if (d.courierLat != null && d.courierLng != null && d.pickupLat != null && d.pickupLng != null) {
+      distanceKm = Math.round(haversineKm({ latitude: d.courierLat, longitude: d.courierLng }, { latitude: d.pickupLat, longitude: d.pickupLng }) * 10) / 10;
+    }
+    const now = new Date();
+    return {
+      clientId: d.clientId,
+      payload: {
+        deliveryId: d.id,
+        mode: d.mode,
+        packageType: d.packageType,
+        vehicleType: d.vehicleType,
+        bookingHours: d.bookingHours,
+        price: d.price,
+        pickupAddress: d.pickupAddress,
+        dropAddress: d.dropAddress,
+        expiresAt: d.offerExpiresAt.toISOString(),
+        serverNow: now.toISOString(),
+        expiresInSeconds: Math.max(0, Math.round((d.offerExpiresAt.getTime() - now.getTime()) / 1000)),
+        courier: buildPublicCourierProfile(courier),
+        offer: { distanceKm, etaMinutes: distanceKm !== null ? Math.max(1, Math.round((distanceKm / 20) * 60)) : null },
+      },
+    };
+  }
+
+  /** Prévient le client : événement temps réel (popup) + notification poussée. */
+  private async announceOffer(id: string) {
+    const loaded = await this.loadOfferPayload(id);
+    if (!loaded) return;
+    const { clientId, payload } = loaded;
+    this.gateway.emitToUser(clientId, "delivery:offered", payload);
+    await this.notifications.push(
+      clientId,
+      payload.mode === "PERSONAL" ? "Un coursier a accepté ta réservation" : "Un livreur a accepté ton colis",
+      `Touche pour voir son profil — il te reste ${payload.expiresInSeconds} s.`,
+      "DELIVERY",
+      {
+        sendPush: true,
+        channelId: "ride-offers",
+        ttlSeconds: payload.expiresInSeconds,
+        data: { event: "delivery-offered", deliveryId: id, expiresAt: payload.expiresAt, serverNow: payload.serverNow },
+        titleKey: payload.mode === "PERSONAL" ? "NOTIFICATION_DELIVERY_OFFERED_PERSONAL" : "NOTIFICATION_DELIVERY_OFFERED",
+        bodyKey: "NOTIFICATION_DELIVERY_OFFERED_BODY",
+        params: { s: payload.expiresInSeconds },
+      }
+    );
+  }
+
+  /** Propositions en attente de la décision du client (rattrapage de la popup). */
+  async pendingOffers(clientId: string) {
+    const cutoff = new Date(Date.now() - this.offerSettings().graceMs);
+    const rows = await this.prisma.delivery.findMany({ where: { clientId, status: "OFFERED", offerExpiresAt: { gt: cutoff } }, select: { id: true } });
+    const loaded = await Promise.all(rows.map((r) => this.loadOfferPayload(r.id)));
+    return { offers: loaded.flatMap((entry) => (entry ? [entry.payload] : [])) };
+  }
+
+  /** Le client a ouvert la popup : le coursier voit « le client regarde ton profil ». Idempotent. */
+  async offerSeen(id: string, clientId: string) {
+    const d = await this.prisma.delivery.findUnique({ where: { id }, select: { clientId: true, courierId: true, status: true, offerSeenAt: true } });
+    if (!d) throw new NotFoundException("Livraison introuvable");
+    if (d.clientId !== clientId) throw new ForbiddenException();
+    if (d.status !== "OFFERED") throw this.offerEnded("La proposition est terminée");
+    if (d.offerSeenAt) return { seenAt: d.offerSeenAt.toISOString() };
+    const seenAt = new Date();
+    const { count } = await this.prisma.delivery.updateMany({ where: { id, clientId, status: "OFFERED", offerSeenAt: null }, data: { offerSeenAt: seenAt } });
+    if (count === 1 && d.courierId) this.gateway.emitToUser(d.courierId, "delivery:offer-seen", { deliveryId: id, at: seenAt.toISOString() });
+    return { seenAt: seenAt.toISOString() };
+  }
+
+  /** Profil public du coursier, pour le client de la commande. */
+  async courierProfile(id: string, clientId: string) {
+    const d = await this.prisma.delivery.findUnique({ where: { id }, select: { clientId: true, courierId: true, status: true } });
+    if (!d) throw new NotFoundException("Livraison introuvable");
+    if (d.clientId !== clientId) throw new ForbiddenException();
+    if (!d.courierId || !["OFFERED", "MATCHED", "IN_PROGRESS", "COMPLETED"].includes(d.status)) {
+      throw new BadRequestException("Le profil du coursier n'est pas encore disponible");
+    }
+    const courier = await this.prisma.user.findUnique({ where: { id: d.courierId }, select: COURIER_PROFILE_SELECT });
+    if (!courier) throw new NotFoundException("Coursier introuvable");
+    return buildPublicCourierProfile(courier);
+  }
+
+  private async expireOfferedIfNeeded(id: string): Promise<boolean> {
+    const d = await this.prisma.delivery.findUnique({ where: { id }, select: { id: true, clientId: true, courierId: true, status: true, declinedCourierIds: true, offerExpiresAt: true } });
+    if (!d || d.status !== "OFFERED") return false;
+    if (!d.offerExpiresAt || d.offerExpiresAt > new Date(Date.now() - this.offerSettings().graceMs)) return false;
+    await this.revertOfferToPending(d, d.courierId, "expired");
+    return true;
+  }
+
+  /** Balayage périodique : les propositions sans réponse du client retournent à la recherche. */
+  async expireAllPendingOffers(): Promise<void> {
+    const expired = await this.prisma.delivery.findMany({
+      where: { status: "OFFERED", offerExpiresAt: { lt: new Date(Date.now() - this.offerSettings().graceMs) } },
+      select: { id: true, clientId: true, courierId: true, status: true, declinedCourierIds: true, offerExpiresAt: true },
+    });
+    await Promise.all(expired.map((d) => this.revertOfferToPending(d, d.courierId, "expired").catch((e) => this.logger.warn(`expire ${d.id} : ${e?.message ?? e}`))));
+  }
+
+  /** Fenêtre de réservation d'un coursier personnel, à partir de la validation du client. */
+  private async bookingWindow(d: { id: string; courierId: string | null; mode: string; bookingHours: number | null; scheduledAt: Date | null }) {
+    if (d.mode !== "PERSONAL" || !d.bookingHours) return {};
+    const now = new Date();
+    const bookedFrom = d.scheduledAt && d.scheduledAt > now ? d.scheduledAt : now;
+    const bookedUntil = new Date(bookedFrom.getTime() + d.bookingHours * 3600_000);
+    if (d.courierId) {
+      const clash = await this.prisma.delivery.findFirst({
+        where: { courierId: d.courierId, mode: "PERSONAL", status: { in: ["MATCHED", "IN_PROGRESS", "COMPLETED"] }, bookedFrom: { lt: bookedUntil }, bookedUntil: { gt: bookedFrom }, NOT: { id: d.id } },
+      });
+      if (clash) throw new BadRequestException("Ce coursier est déjà réservé sur cette période.");
+    }
+    return { bookedFrom, bookedUntil };
+  }
+
+  /** Le client choisit ce coursier : OFFERED → MATCHED. */
+  async approveCourier(id: string, clientId: string) {
+    await this.expireOfferedIfNeeded(id);
+    const d = await this.prisma.delivery.findUnique({ where: { id }, include: { client: { select: { fullName: true, phone: true } } } });
+    if (!d) throw new NotFoundException("Livraison introuvable");
+    if (d.clientId !== clientId) throw new ForbiddenException();
+    if (d.status === "MATCHED") {
+      const [already] = await this.enrich([d]);
+      return already;
+    }
+    if (d.status !== "OFFERED") throw this.offerEnded("Cette proposition n'est plus disponible");
+    const cutoff = new Date(Date.now() - this.offerSettings().graceMs);
+    if (!d.offerExpiresAt || d.offerExpiresAt < cutoff) throw this.offerEnded("La proposition a expiré");
+    const booking = await this.bookingWindow(d);
+    const { count } = await this.prisma.delivery.updateMany({
+      where: { id, clientId, status: "OFFERED", offerExpiresAt: { gt: cutoff } },
+      data: { status: "MATCHED", offeredAt: null, offerExpiresAt: null, offerSeenAt: null, ...booking },
+    });
+    if (count === 0) throw this.offerEnded("La proposition a expiré ou n'est plus disponible");
+    this.gateway.emitToUser(clientId, "delivery:offer-ended", { deliveryId: id, outcome: "approved", at: new Date().toISOString() });
+    if (d.courierId) {
+      this.gateway.emitToUser(d.courierId, "delivery:offer-approved", { deliveryId: id, at: new Date().toISOString() });
+      await this.notifications
+        .push(d.courierId, "Le client t'a choisi", "Rends-toi au point de ramassage.", "DELIVERY", {
+          sendPush: true,
+          titleKey: "NOTIFICATION_DELIVERY_APPROVED",
+          bodyKey: "NOTIFICATION_DELIVERY_APPROVED_BODY",
+          data: { event: "delivery-approved", deliveryId: id },
+        })
+        .catch(() => null);
+    }
+    const fresh = await this.prisma.delivery.findUniqueOrThrow({ where: { id }, include: { client: { select: { fullName: true, phone: true } } } });
+    const [enriched] = await this.enrich([fresh]);
+    return enriched;
+  }
+
+  /** Le client refuse ce coursier : retour à la recherche, ce coursier ne revoit plus la mission. */
+  async declineCourier(id: string, clientId: string) {
+    const d = await this.prisma.delivery.findUnique({ where: { id }, select: { id: true, clientId: true, courierId: true, status: true, declinedCourierIds: true } });
+    if (!d) throw new NotFoundException("Livraison introuvable");
+    if (d.clientId !== clientId) throw new ForbiddenException();
+    if (d.status !== "OFFERED") throw this.offerEnded("Aucune proposition à refuser");
+    return this.revertOfferToPending(d, d.courierId, "declined");
+  }
+
+  /** Le coursier retire sa proposition. */
+  async withdrawOffer(id: string, courierId: string) {
+    const d = await this.prisma.delivery.findUnique({ where: { id }, select: { id: true, clientId: true, courierId: true, status: true, declinedCourierIds: true } });
+    if (!d) throw new NotFoundException("Livraison introuvable");
+    if (d.courierId !== courierId) throw new ForbiddenException("Cette proposition ne t'est pas attribuée");
+    if (d.status !== "OFFERED") throw this.offerEnded("Aucune proposition à retirer");
+    return this.revertOfferToPending(d, courierId, "withdrawn");
+  }
+
+  private async revertOfferToPending(
+    d: { id: string; clientId: string; courierId: string | null; status: string; declinedCourierIds: string[] },
+    courierId: string | null,
+    reason: "declined" | "withdrawn" | "expired"
+  ) {
+    const declined = courierId && !d.declinedCourierIds.includes(courierId) ? [...d.declinedCourierIds, courierId] : d.declinedCourierIds;
+    const { count } = await this.prisma.delivery.updateMany({
+      where: { id: d.id, status: "OFFERED" },
+      data: { status: "PENDING", courierId: null, offeredAt: null, offerExpiresAt: null, offerSeenAt: null, declinedCourierIds: declined },
+    });
+    if (count === 0) return { deliveryId: d.id, status: "PENDING" };
+    this.gateway.emitToUser(d.clientId, "delivery:offer-ended", { deliveryId: d.id, outcome: reason, at: new Date().toISOString() });
+    if (courierId) {
+      this.gateway.emitToUser(courierId, "delivery:offer-ended", { deliveryId: d.id, outcome: reason, at: new Date().toISOString() });
+      if (reason === "declined") {
+        await this.notifications
+          .push(courierId, "Le client a choisi un autre coursier.", "Tu peux accepter une autre mission.", "DELIVERY", {
+            sendPush: true,
+            titleKey: "NOTIFICATION_DELIVERY_DECLINED",
+            data: { event: "delivery-declined", deliveryId: d.id },
+          })
+          .catch(() => null);
+      }
+    }
+    return { deliveryId: d.id, status: "PENDING" };
+  }
+
+  /** Position du client (envoyée pendant la mission) : le coursier peut le suivre sur sa carte. */
+  async updateClientLocation(clientId: string, id: string, dto: CourierLocationDto) {
+    const d = await this.prisma.delivery.findUnique({ where: { id }, select: { clientId: true, status: true } });
+    if (!d) throw new NotFoundException("Livraison introuvable");
+    if (d.clientId !== clientId) throw new ForbiddenException("Cette livraison n'est pas la tienne");
+    if (!["MATCHED", "IN_PROGRESS"].includes(d.status)) throw new BadRequestException("Le suivi est terminé pour cette livraison");
+    await this.prisma.delivery.update({ where: { id }, data: { clientLat: dto.latitude, clientLng: dto.longitude, clientLocatedAt: new Date() } });
+    return { ok: true };
   }
 
   /** Position du coursier (envoyée toutes les quelques secondes pendant la mission). Après le ramassage, les kilomètres s'accumulent (coursier personnel). */
@@ -396,6 +674,8 @@ export class DeliveryService {
       courierLng: d.courierLng,
       courierLocatedAt: d.courierLocatedAt,
       traveledMeters: d.traveledMeters,
+      // Le coursier suit aussi son client ; le client, lui, ne reçoit que la position du coursier
+      ...(d.courierId === userId ? { clientLat: d.clientLat, clientLng: d.clientLng, clientLocatedAt: d.clientLocatedAt } : {}),
     };
   }
 
@@ -539,7 +819,7 @@ export class DeliveryService {
     if (!d) throw new NotFoundException("Livraison introuvable");
 
     if (d.clientId === userId) {
-      if (!["PENDING", "MATCHED"].includes(d.status)) {
+      if (!["PENDING", "OFFERED", "MATCHED"].includes(d.status)) {
         throw new BadRequestException("Impossible d'annuler : le colis est déjà en cours d'acheminement");
       }
       const updated = await this.prisma.delivery.update({
@@ -547,6 +827,9 @@ export class DeliveryService {
         data: { status: "CANCELLED" },
         include: { client: { select: { fullName: true, phone: true } } },
       });
+      if (d.status === "OFFERED") {
+        this.gateway.emitToUser(d.clientId, "delivery:offer-ended", { deliveryId: id, outcome: "cancelled", at: new Date().toISOString() });
+      }
       if (d.courierId) {
         await this.notifications.push(
           d.courierId,
@@ -558,6 +841,13 @@ export class DeliveryService {
       }
       const [enriched] = await this.enrich([updated]);
       return enriched;
+    }
+
+    if (d.courierId === userId && d.status === "OFFERED") {
+      await this.withdrawOffer(id, userId);
+      const back = await this.prisma.delivery.findUniqueOrThrow({ where: { id }, include: { client: { select: { fullName: true, phone: true } } } });
+      const [enrichedBack] = await this.enrich([back]);
+      return { ...enrichedBack, pickupCode: "••••", deliveryCode: "••••" };
     }
 
     if (d.courierId === userId) {
@@ -619,9 +909,46 @@ export class DeliveryController {
     return this.svc.courierDeliveries(u.userId);
   }
 
+  // Propositions de coursiers en attente de la décision du client (déclaré AVANT les routes en :id)
+  @Get("offers/pending")
+  offersPending(@CurrentUser() u) {
+    return this.svc.pendingOffers(u.userId);
+  }
+
   @Post(":id/accept")
-  accept(@CurrentUser() u, @Param("id") id: string) {
-    return this.svc.accept(u.userId, id);
+  accept(@CurrentUser() u, @Param("id") id: string, @Body() body?: AcceptDto) {
+    const pos = typeof body?.lat === "number" && typeof body?.lng === "number" ? { lat: body.lat, lng: body.lng } : undefined;
+    return this.svc.accept(u.userId, id, pos);
+  }
+
+  @Post(":id/approve-courier")
+  approveCourier(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.approveCourier(id, u.userId);
+  }
+
+  @Post(":id/decline-courier")
+  declineCourier(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.declineCourier(id, u.userId);
+  }
+
+  @Post(":id/withdraw-offer")
+  withdrawOffer(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.withdrawOffer(id, u.userId);
+  }
+
+  @Post(":id/offer-seen")
+  offerSeen(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.offerSeen(id, u.userId);
+  }
+
+  @Get(":id/courier-profile")
+  courierProfile(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.courierProfile(id, u.userId);
+  }
+
+  @Post(":id/client-location")
+  clientLocation(@CurrentUser() u, @Param("id") id: string, @Body() dto: CourierLocationDto) {
+    return this.svc.updateClientLocation(u.userId, id, dto);
   }
 
   @Post(":id/location")
@@ -650,9 +977,29 @@ export class DeliveryController {
   }
 }
 
+/** Toutes les 5 s : une proposition de coursier sans réponse du client retourne à la recherche. */
+@Injectable()
+export class DeliveryOfferExpiryTask implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(DeliveryOfferExpiryTask.name);
+  private handle: ReturnType<typeof setInterval> | null = null;
+
+  constructor(private readonly deliveries: DeliveryService) {}
+
+  onModuleInit() {
+    this.handle = setInterval(() => {
+      this.deliveries.expireAllPendingOffers().catch((e) => this.logger.warn(`Balayage des propositions : ${e?.message ?? e}`));
+    }, 5_000);
+  }
+
+  onModuleDestroy() {
+    if (this.handle !== null) clearInterval(this.handle);
+    this.handle = null;
+  }
+}
+
 @Module({
-  imports: [WalletModule, NotificationsModule, PricingModule],
+  imports: [WalletModule, NotificationsModule, PricingModule, RidesModule],
   controllers: [DeliveryController],
-  providers: [DeliveryService],
+  providers: [DeliveryService, DeliveryOfferExpiryTask],
 })
 export class DeliveryModule {}

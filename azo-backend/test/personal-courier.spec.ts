@@ -1,8 +1,10 @@
 jest.mock("../src/wallet/wallet.module", () => ({ WalletService: class WalletService {}, WalletModule: class {} }));
 jest.mock("../src/notifications/notifications.module", () => ({ NotificationsService: class {}, NotificationsModule: class {} }));
 jest.mock("../src/pricing/pricing.module", () => ({ PricingService: class {}, PricingModule: class {} }));
+jest.mock("../src/rides/rides.gateway", () => ({ RidesGateway: class {} }));
+jest.mock("../src/rides/rides.module", () => ({ RidesModule: class {} }));
 
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException } from "@nestjs/common";
 import { DeliveryService } from "../src/delivery/delivery.module";
 import { PricingService } from "../src/pricing/pricing.service";
 
@@ -30,7 +32,9 @@ describe("Tarification coursier personnel et commission de 15 %", () => {
 });
 
 describe("Réservation d'un coursier personnel", () => {
-  const make = (over: Record<string, unknown> = {}) => {
+  // Par défaut : validation du client désactivée (la mission passe directement à MATCHED) ; `approval: true` pour tester la proposition
+  const make = (over: Record<string, unknown> = {}, approval = false) => {
+    jest.spyOn(pricing, "rideSettings").mockReturnValue({ ...PricingService.prototype.rideSettings.call(pricing), requireClientApproval: approval });
     const prisma: any = {
       providerProfile: { findUnique: jest.fn().mockResolvedValue({ type: "COURIER", status: "APPROVED", categoryId: "COURSIER_PERSONNEL", vehicleType: "ZEM_ESSENCE" }) },
       delivery: {
@@ -46,7 +50,8 @@ describe("Réservation d'un coursier personnel", () => {
     };
     const wallet: any = { getWallet: jest.fn().mockResolvedValue({ balance: 50000 }) };
     const notifications = { push: jest.fn().mockResolvedValue(undefined) };
-    return { prisma, wallet, service: new DeliveryService(prisma, wallet as any, notifications as any, pricing) };
+    const gateway = { emitToUser: jest.fn() };
+    return { prisma, wallet, notifications, gateway, service: new DeliveryService(prisma, wallet as any, notifications as any, pricing, gateway as any) };
   };
 
   it("refuse un autre client tant que la réservation n'est pas terminée", async () => {
@@ -246,5 +251,82 @@ describe("Réservation d'un coursier personnel", () => {
     prisma.delivery.findMany.mockResolvedValue([row("proche", 6.37 + 0.135), row("loin", 6.37 + 0.225), row("sans-lieu", 0)].map((r, i) => (i === 2 ? { ...r, pickupLat: null, pickupLng: null } : r)));
     const list: any[] = await service.pending("k1", { lat: 6.37, lng: 2.39 });
     expect(list.map((d) => d.id).sort()).toEqual(["proche", "sans-lieu"]);
+  });
+
+  describe("proposition du coursier validée par le client", () => {
+    const offered = (extra: Record<string, unknown> = {}) => ({
+      id: "d1", clientId: "c1", courierId: "k1", status: "OFFERED", mode: "PERSONAL", bookingHours: 5, scheduledAt: null, price: 1500, pickupCode: "1234", deliveryCode: "5678",
+      offerExpiresAt: new Date(Date.now() + 40_000), declinedCourierIds: [], ...extra,
+    });
+
+    it("accepter ne confirme pas : la mission passe à OFFERED et le client est prévenu", async () => {
+      const { service, prisma, gateway } = make({}, true);
+      prisma.delivery.findUniqueOrThrow.mockResolvedValue(offered());
+      prisma.delivery.findUnique.mockResolvedValue({ id: "d1", clientId: "c1", mode: "PERSONAL", vehicleType: "ZEM_ESSENCE", bookingHours: 5, declinedCourierIds: [] });
+      const result: any = await service.accept("k1", "d1", { lat: 6.37, lng: 2.39 });
+      const data = prisma.delivery.updateMany.mock.calls[0][0].data;
+      expect(data.status).toBe("OFFERED");
+      expect(data.courierId).toBe("k1");
+      expect(data.offerExpiresAt.getTime()).toBeGreaterThan(Date.now());
+      expect(data.bookedFrom).toBeUndefined();
+      expect(result.pickupCode).toBe("••••");
+      expect(result.courier).toBeNull();
+      void gateway;
+    });
+
+    it("un coursier refusé par le client ne peut plus reprendre la même mission", async () => {
+      const { service, prisma } = make({}, true);
+      prisma.delivery.findUnique.mockResolvedValue({ id: "d1", clientId: "c1", mode: "PERSONAL", vehicleType: "ZEM_ESSENCE", bookingHours: 5, declinedCourierIds: ["k1"] });
+      await expect(service.accept("k1", "d1")).rejects.toThrow(/refusé/);
+    });
+
+    it("le client valide : MATCHED, réservation du coursier personnel fixée, coursier prévenu", async () => {
+      const { service, prisma, gateway, notifications } = make();
+      prisma.delivery.findUnique.mockResolvedValue(offered());
+      prisma.delivery.findUniqueOrThrow.mockResolvedValue({ ...offered(), status: "MATCHED", price: 1500 });
+      await service.approveCourier("d1", "c1");
+      const data = prisma.delivery.updateMany.mock.calls[0][0].data;
+      expect(data.status).toBe("MATCHED");
+      expect(data.bookedUntil.getTime() - data.bookedFrom.getTime()).toBe(5 * 3600_000);
+      expect(gateway.emitToUser).toHaveBeenCalledWith("k1", "delivery:offer-approved", expect.anything());
+      expect(notifications.push).toHaveBeenCalledWith("k1", expect.any(String), expect.any(String), "DELIVERY", expect.objectContaining({ titleKey: "NOTIFICATION_DELIVERY_APPROVED" }));
+    });
+
+    it("un autre client ne peut ni valider ni refuser", async () => {
+      const { service, prisma } = make();
+      prisma.delivery.findUnique.mockResolvedValue(offered());
+      await expect(service.approveCourier("d1", "intrus")).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.declineCourier("d1", "intrus")).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it("le client refuse : retour en recherche et le coursier est exclu", async () => {
+      const { service, prisma, gateway } = make();
+      prisma.delivery.findUnique.mockResolvedValue(offered());
+      await service.declineCourier("d1", "c1");
+      const data = prisma.delivery.updateMany.mock.calls[0][0].data;
+      expect(data).toMatchObject({ status: "PENDING", courierId: null, declinedCourierIds: ["k1"] });
+      expect(gateway.emitToUser).toHaveBeenCalledWith("c1", "delivery:offer-ended", expect.objectContaining({ outcome: "declined" }));
+    });
+
+    it("le coursier retire sa proposition", async () => {
+      const { service, prisma } = make();
+      prisma.delivery.findUnique.mockResolvedValue(offered());
+      await service.withdrawOffer("d1", "k1");
+      expect(prisma.delivery.updateMany.mock.calls[0][0].data).toMatchObject({ status: "PENDING", courierId: null, declinedCourierIds: ["k1"] });
+      await expect(service.withdrawOffer("d1", "autre")).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it("une proposition expirée est refusée à la validation et retourne en recherche", async () => {
+      const { service, prisma } = make();
+      prisma.delivery.findUnique.mockResolvedValue(offered({ offerExpiresAt: new Date(Date.now() - 60_000) }));
+      await expect(service.approveCourier("d1", "c1")).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it("un coursier occupé par une proposition en attente ne voit plus d'autres missions", async () => {
+      const { service, prisma } = make();
+      prisma.delivery.findFirst.mockResolvedValue({ id: "d1" });
+      await expect(service.pending("k1")).resolves.toEqual([]);
+      expect(prisma.delivery.findFirst.mock.calls[0][0].where.OR[0].status.in).toContain("OFFERED");
+    });
   });
 });

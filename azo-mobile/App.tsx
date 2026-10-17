@@ -21,7 +21,11 @@ import AdminSupportScreen from "./screens/AdminSupportScreen";
 import MessagesScreen from "./screens/MessagesScreen";
 import { clearAvatar } from "./utils/avatar";
 import { useOfferWatcher } from "./hooks/useOfferWatcher";
+import { useDeliveryOfferWatcher } from "./hooks/useDeliveryOfferWatcher";
+import { useActiveClientDelivery } from "./hooks/useActiveClientDelivery";
+import { useClientTracking } from "./hooks/useClientTracking";
 import OfferPopup from "./components/OfferPopup";
+import DeliveryOfferPopup from "./components/DeliveryOfferPopup";
 import { I18nProvider, isVoiceOfferAnswered, loadI18n, markVoiceOfferAnswered, tr, useI18n } from "./i18n";
 import OtpLoginScreen, { REGISTRATION_PENDING_KEY } from "./screens/OtpLoginScreen";
 import HomeScreen from "./screens/HomeScreen";
@@ -189,6 +193,10 @@ function AppInner() {
   // Popup « un Speeder a accepté ta course » : par-dessus n'importe quel écran du client
   const clientRoutes: Route[] = ["home", "courses", "wallet", "profile", "profile-info", "help", "messages", "notifications", "ride-request", "ride-tracking", "delivery", "personal-courier", "rental"];
   const offerWatcher = useOfferWatcher(!!sessionToken && clientRoutes.includes(route), route === "ride-tracking");
+  // Propositions de coursiers et livreurs pour les colis et réservations du client : même popup que pour une course simple
+  const deliveryOffers = useDeliveryOfferWatcher(!!sessionToken && clientRoutes.includes(route));
+  // Commande confirmée : le client partage sa position avec son coursier, quel que soit l'écran affiché
+  useClientTracking(useActiveClientDelivery(!!sessionToken && clientRoutes.includes(route)));
   // Session ouverte mais inscription (nom, prénom, sexe, NPI) pas terminée : on rouvre le formulaire.
   // Inscription professionnelle commencée mais jamais déposée : au retour sur l'accueil, on propose de la continuer ou de la supprimer
   const draftPromptShown = useRef(false);
@@ -896,6 +904,17 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
                 setRideLabel(undefined);
                 goTo("ride-tracking");
               }
+            }}
+          />
+        )}
+        {deliveryOffers.offer && !offerWatcher.offer && (
+          <DeliveryOfferPopup
+            offer={deliveryOffers.offer}
+            onClose={deliveryOffers.dismiss}
+            onDecided={(outcome) => {
+              deliveryOffers.dismiss();
+              // Coursier choisi : on suit la commande dans l'onglet Courses ; refusé : la recherche continue
+              if (outcome === "approved") goTo("courses");
             }}
           />
         )}

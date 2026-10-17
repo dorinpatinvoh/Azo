@@ -17,6 +17,6 @@ import { MessagesController } from "./messages.controller";
   imports: [WalletModule, NotificationsModule, PricingModule],
   controllers: [RidesController, RideSettlementController, MessagesController],
   providers: [RidesService, RidesGateway, RideSettlementService, RidesOfferExpiryTask, ScheduledRidesTask, TipsService, MessagesService, RideExtrasService],
-  exports: [RidesService, MessagesService],
+  exports: [RidesService, MessagesService, RidesGateway],
 })
 export class RidesModule {}

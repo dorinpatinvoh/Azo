@@ -18,7 +18,9 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { FONT } from "../theme/fontNormalize";
-import { Delivery, deliveryApi, errorMessage, providersApi, userApi, walletApi, type UserProfile } from "../services/api";
+import { API_URL, Delivery, deliveryApi, errorMessage, getToken, providersApi, userApi, walletApi, type UserProfile } from "../services/api";
+import { io } from "socket.io-client";
+import ClientTrackMap from "../components/ClientTrackMap";
 import { formatBeninPhoneDisplay, maskBeninPhone, maskPersonName } from "../utils/phone";
 import RideChatModal from "../components/RideChatModal";
 import { useCourierTracking } from "../hooks/useCourierTracking";
@@ -144,6 +146,15 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
     [history]
   );
 
+  // Proposition envoyée, en attente de la décision du client (il regarde ton profil)
+  const offeredDelivery = useMemo(() => history.find((d) => d.status === "OFFERED") ?? null, [history]);
+  const [offerNow, setOfferNow] = useState(Date.now());
+  useEffect(() => {
+    if (!offeredDelivery) return;
+    const t = setInterval(() => setOfferNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [offeredDelivery?.id]);
+
   // Coursier personnel : le GPS suit la mission pour calculer les kilomètres réellement parcourus
   useCourierTracking(activeDelivery && ["MATCHED", "IN_PROGRESS"].includes(activeDelivery.status) ? activeDelivery.id : null);
 
@@ -211,10 +222,23 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
 
   useEffect(() => {
     if (!online) return;
+    // Pendant qu'une proposition attend la décision du client, on relit toutes les 3 s pour passer à la carte dès son accord
     const timer = setInterval(() => {
       loadAccount().catch(() => undefined);
-    }, POLL_MS);
+    }, offeredDelivery ? 3000 : POLL_MS);
     return () => clearInterval(timer);
+  }, [online, loadAccount, !!offeredDelivery]);
+
+  // Temps réel : le client a choisi ce coursier, ou la proposition est terminée (refusée, expirée, annulée)
+  useEffect(() => {
+    if (!online) return;
+    const socket = io(API_URL, { transports: ["websocket"], auth: { token: getToken() } });
+    const refresh = () => loadAccount().catch(() => undefined);
+    socket.on("delivery:offer-approved", refresh);
+    socket.on("delivery:offer-ended", refresh);
+    return () => {
+      socket.disconnect();
+    };
   }, [online, loadAccount]);
 
   async function onRefresh() {
@@ -237,11 +261,25 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
   async function handleAccept(id: string) {
     setBusy(true);
     try {
-      await deliveryApi.accept(id);
+      await deliveryApi.accept(id, myPos ?? undefined);
       setOtpInput("");
       await loadAccount();
+      BrandAlert.alert("Proposition envoyée", "Le client regarde ton profil et a quelques secondes pour te choisir. Tu passes à la carte dès son accord.");
     } catch (e) {
       BrandAlert.alert("Mission indisponible", errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleWithdraw() {
+    if (!offeredDelivery) return;
+    setBusy(true);
+    try {
+      await deliveryApi.withdrawOffer(offeredDelivery.id);
+      await loadAccount();
+    } catch (e) {
+      BrandAlert.alert("Action impossible", errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -473,6 +511,13 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                 </View>
               </View>
 
+              {/* Où est le client : sa position est partagée pendant la mission, comme sur une course simple */}
+              <ClientTrackMap
+                deliveryId={activeDelivery.id}
+                pickup={activeDelivery.pickupLat != null && activeDelivery.pickupLng != null ? { latitude: activeDelivery.pickupLat, longitude: activeDelivery.pickupLng } : null}
+                me={myPos}
+              />
+
               {activeDelivery.client ? (
                 <View style={styles.clientRow}>
                   <View style={{ flex: 1 }}>
@@ -568,6 +613,27 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
             </View>
           ) : null}
 
+          {/* Ma proposition attend la décision du client */}
+          {offeredDelivery && !activeDelivery ? (
+            <View style={styles.offerWaiting}>
+              <View style={styles.offerWaitingTop}>
+                <MaterialIcons name="hourglass-top" size={22} color={colors.primary} />
+                <Text style={styles.offerWaitingTitle}>En attente du client</Text>
+                <Text style={styles.offerWaitingSec}>
+                  {Math.max(0, Math.ceil((Date.parse(offeredDelivery.offerExpiresAt ?? "") - offerNow) / 1000)) || 0} s
+                </Text>
+              </View>
+              <Text style={styles.offerWaitingText} numberOfLines={2}>
+                {offeredDelivery.offerSeenAt ? "Le client regarde ton profil…" : "Ta proposition est envoyée au client."}
+              </Text>
+              <Text style={styles.offerWaitingText} numberOfLines={1}>De : {offeredDelivery.pickupAddress}</Text>
+              <Text style={styles.offerWaitingText} numberOfLines={1}>Vers : {offeredDelivery.dropAddress}</Text>
+              <Pressable style={[styles.offerWithdraw, busy && { opacity: 0.55 }]} onPress={handleWithdraw} disabled={busy} accessibilityRole="button">
+                <Text style={styles.offerWithdrawText}>Retirer ma proposition</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {/* Missions disponibles */}
           <View style={styles.sectionHeader}>
             <View style={{ flex: 1 }}>
@@ -648,13 +714,13 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                     </View>
 
                     <Pressable
-                      style={[styles.acceptBtn, (busy || !!activeDelivery) && { opacity: 0.55 }]}
-                      disabled={busy || !!activeDelivery}
+                      style={[styles.acceptBtn, (busy || !!activeDelivery || !!offeredDelivery) && { opacity: 0.55 }]}
+                      disabled={busy || !!activeDelivery || !!offeredDelivery}
                       onPress={() => handleAccept(item.id)}
                     >
                       <MaterialIcons name="check-circle" size={18} color="#fff" />
                       <Text style={styles.acceptBtnText}>
-                        {activeDelivery ? "Termine ta mission en cours" : "Accepter la mission"}
+                        {activeDelivery ? "Termine ta mission en cours" : offeredDelivery ? "Une proposition est en attente" : "Accepter la mission"}
                       </Text>
                     </Pressable>
                   </View>
@@ -1039,6 +1105,13 @@ const styles = StyleSheet.create({
   profileRowSub: { ...typography.bodySm, color: colors.onSurfaceVariant },
   sectionTitle: { ...typography.headlineSm, color: colors.onSurface, fontWeight: "800" },
   activityLine: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 2 },
+  offerWaiting: { backgroundColor: colors.primaryFixed, borderRadius: radius.xl, padding: spacing.md, gap: 4, marginBottom: spacing.md },
+  offerWaitingTop: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  offerWaitingTitle: { ...typography.headlineSm, color: colors.onSurface, flex: 1 },
+  offerWaitingSec: { ...typography.labelLg, color: colors.primary, fontWeight: "800" },
+  offerWaitingText: { ...typography.bodyMd, color: colors.onSurfaceVariant },
+  offerWithdraw: { marginTop: spacing.xs, alignSelf: "flex-start", paddingVertical: 6 },
+  offerWithdrawText: { ...typography.labelLg, color: colors.error, fontWeight: "700" },
   refreshLink: { ...typography.labelMd, color: colors.primary, fontWeight: "700" },
 
   emptyCard: {

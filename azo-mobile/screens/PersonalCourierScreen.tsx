@@ -67,7 +67,7 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked, in
   const loadBookings = React.useCallback(async () => {
     try {
       const list = await deliveryApi.mine();
-      setBookings(list.filter((d) => d.mode === "PERSONAL" && ["PENDING", "MATCHED", "IN_PROGRESS"].includes(d.status)));
+      setBookings(list.filter((d) => d.mode === "PERSONAL" && ["PENDING", "OFFERED", "MATCHED", "IN_PROGRESS"].includes(d.status)));
     } catch {
       // hors ligne : on garde la liste précédente
     }
@@ -159,7 +159,7 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked, in
               <View style={styles.codeBox}><Text style={styles.priceNote}>Code de départ</Text><Text style={styles.codeValue}>{b.pickupCode}</Text></View>
               <View style={styles.codeBox}><Text style={styles.priceNote}>Code de fin</Text><Text style={styles.codeValue}>{b.deliveryCode}</Text></View>
             </View>
-            {["PENDING", "MATCHED"].includes(b.status) ? (
+            {["PENDING", "OFFERED", "MATCHED"].includes(b.status) ? (
               <Pressable
                 onPress={() =>
                   BrandAlert.alert("Annuler la réservation", "Veux-tu annuler cette demande ?", [
