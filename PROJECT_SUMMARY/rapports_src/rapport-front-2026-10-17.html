@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 17 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">17 octobre 2026 · 1 commit poussé sur main (<code>ecb4be03</code>)</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">17 octobre 2026 · 2 commits poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>)</span></div>
 
 <h2>1. En résumé</h2>
 <p>Trois changements côté mobile : <b>une inscription simplifiée pour les profils professionnels</b> (le numéro seul), <b>le tricycle réservé aux gros colis</b> et <b>la plaque du Speeder partiellement masquée</b>. Tout compile (<code>tsc</code> sans erreur).</p>
@@ -13,6 +13,14 @@
 <li>Le choix du type de compte a disparu de l'écran du formulaire d'identité (il ne sert plus qu'au client) ; <code>OtpLoginScreen.tsx</code> envoie le type au serveur lors de la vérification du code (<code>authApi.verifyOtp(…, profil)</code>).</li>
 <li><b>Reconnexion</b> : un professionnel dont le dossier est encore en brouillon retrouve son dossier sans repasser par l'identité ; si son dossier est déposé ou validé, le parcours habituel du prestataire s'applique.</li>
 <li><b>Limite</b> : un professionnel n'a ni nom ni NPI enregistrés ; s'il veut aussi commander comme client, il devra remplir le formulaire d'identité (non vérifié que l'application le lui propose clairement).</li>
+</ul>
+
+<h2>2bis. Inscription : retour possible pour corriger une erreur</h2>
+<ul>
+<li><b>Étape du code</b> : la flèche ramène au numéro (le type de compte choisi reste sélectionné).</li>
+<li><b>Formulaire d'identité du client</b> : il était verrouillé (cadenas). La flèche et le bouton retour du téléphone ferment la session en cours et ramènent à l'écran du numéro (<code>backToPhone</code> dans <code>OtpLoginScreen.tsx</code>) pour changer de numéro ou de type de compte. Le compte déjà créé reste sans identité et le formulaire se rouvre à la reconnexion.</li>
+<li><b>Dossier d'un profil professionnel</b> juste après l'inscription : la flèche de la première étape déconnecte et ramène au numéro (<code>App.tsx</code>, seulement si rien n'a été visité avant ce dossier) ; sinon le retour habituel est conservé.</li>
+<li><b>Non vérifié sur un téléphone.</b></li>
 </ul>
 
 <h2>3. Colis : le tricycle ne livre que les gros colis</h2>
@@ -29,5 +37,6 @@
 
 <h2>6. Commit du jour</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>8d82013c</code></td><td>Retour possible à chaque étape de l'inscription (identité du client, dossier professionnel)</td></tr>
 <tr><td><code>ecb4be03</code></td><td>Inscription professionnelle par numéro seul ; tricycle réservé aux gros colis ; base nationale des lieux ; plaque partiellement masquée</td></tr></table>
 </body></html>
