@@ -221,4 +221,11 @@ describe("Réservation d'un coursier personnel", () => {
     await expect(service.create("c1", dto)).rejects.toThrow(/réservé aux gros colis/);
     await expect(service.quote("ZEM_TRICYCLE", "large", a, b)).resolves.toEqual({ km: 1, price: 305 });
   });
+
+  it("un coursier occupé ou réservé ne se voit proposer aucune autre mission", async () => {
+    const { service, prisma } = make();
+    prisma.delivery.findFirst.mockResolvedValueOnce({ id: "d-en-cours" });
+    await expect(service.pending("k1")).resolves.toEqual([]);
+    expect(prisma.delivery.findMany).not.toHaveBeenCalled();
+  });
 });

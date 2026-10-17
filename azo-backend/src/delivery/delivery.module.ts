@@ -219,7 +219,24 @@ export class DeliveryService {
     return { mode: "EXPRESS", OR: [{ vehicleType: null }, { vehicleType: scope.vehicleType }] };
   }
 
+  private async isCourierBusy(courierId: string): Promise<boolean> {
+    const now = new Date();
+    const busy = await this.prisma.delivery.findFirst({
+      where: {
+        courierId,
+        OR: [
+          { status: { in: ["MATCHED", "IN_PROGRESS"] }, NOT: { mode: "PERSONAL", bookedFrom: { gt: now } } },
+          { mode: "PERSONAL", status: { in: ["MATCHED", "IN_PROGRESS", "COMPLETED"] }, bookedFrom: { lte: now }, bookedUntil: { gt: now } },
+        ],
+      },
+      select: { id: true },
+    });
+    return !!busy;
+  }
+
   async pending(courierId?: string, near?: { lat: number; lng: number }) {
+    // Un coursier occupé (mission en cours, ou réservé par un client pour la durée choisie) ne se voit proposer aucune autre mission
+    if (courierId && (await this.isCourierBusy(courierId))) return [];
     const scope = await this.courierScope(courierId);
     const items = await this.prisma.delivery.findMany({
       where: { status: "PENDING", courierId: null, ...this.scopeWhere(scope) },
