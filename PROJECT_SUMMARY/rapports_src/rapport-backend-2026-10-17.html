@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 17 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">17 octobre 2026 · 3 commits poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>8ab4ce66</code>) + base des lieux élargie · 31 suites / 339 tests verts</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">17 octobre 2026 · 5 commits poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>8ab4ce66</code>, <code>88e49834</code>, <code>0afb4017</code>) · 31 suites / 347 tests verts</span></div>
 
 <h2>1. En résumé</h2>
 <p>Quatre changements : <b>type de compte enregistré sans identité</b> pour les profils professionnels, <b>le tricycle ne livre que les gros colis</b>, <b>base nationale des lieux du Bénin</b> et <b>plaque du Speeder partiellement masquée</b>. <code>tsc</code> sans erreur. Aucune migration.</p>
@@ -37,9 +37,39 @@
 <h2>5bis. Coursier occupé (<code>delivery.module.ts</code>, commit <code>8ab4ce66</code>)</h2>
 <ul><li><code>pending()</code> ne renvoie plus aucune mission à un coursier qui a une mission acceptée ou en cours, ou, pour un coursier personnel, qui est réservé par un client pour la durée choisie (<code>isCourierBusy</code>). Une réservation programmée plus tard ne bloque pas. Le refus à l'acceptation existait déjà.</li><li>Test ajouté dans <code>personal-courier.spec.ts</code>. Non vérifié : un Speeder coursier peut-il prendre une course de Speeder en parallèle (parcours séparé).</li></ul>
 
+<h2>5ter. Audit de bout en bout (base jetable, API locale)</h2>
+<ul>
+<li>L'API a été lancée en local sur une base PostgreSQL <b>créée pour l'occasion</b> (toutes les migrations appliquées de zéro, puis base supprimée) et environ <b>120 vérifications</b> ont été rejouées : inscription des cinq profils, dépôt et validation des dossiers, course complète (radar, proposition, codes, position par WebSocket, paiement avec 15 %, pourboire, notes, reçu), colis et coursier personnel, agence (activation, flotte, recharge et reprise), portefeuille, assistance, notifications, lieux, location, boutique, console admin, droits d'accès.</li>
+<li><b>Faille corrigée</b> (<code>delivery.module.ts</code>) : n'importe quel compte (client, Speeder de courses) pouvait accepter une mission de colis. Seuls les coursiers et livreurs <b>validés</b> le peuvent (<code>isApprovedCourier</code> ; <code>pending</code> renvoie une liste vide aux autres) ; test ajouté.</li>
+<li><b>Nom du prestataire</b> (<code>providers.module.ts</code>) : un prestataire inscrit par son seul numéro n'avait pas de fiche d'identité, donc pas de prénom ni de nom dans l'application. Le nom du dossier devient son nom (<code>splitFullName</code>) dès l'enregistrement du dossier et à l'approbation ; une identité vérifiée (NPI) n'est jamais écrasée. Test ajouté.</li>
+<li><b>Non vérifié</b> : paiement FedaPay réel, envoi de SMS, notifications sur téléphone fermé, écrans sur téléphone.</li>
+<li><b>À décider</b> : le serveur écrit encore « Spider » dans environ 95 textes (notifications, libellés de dossier) alors que l'application dit « Speeder ».</li>
+</ul>
+
+<h2>5quater. Commissions détaillées (<code>admin/finance.service.ts</code>)</h2>
+<ul>
+<li><code>GET /admin/finance/commissions</code> renvoie pour chaque course ou livraison terminée : nom et téléphone du prestataire (nom du dossier en priorité), agence éventuelle (<code>independent</code>), client, départ et arrivée, distance, date de fin, montant, commission et pourcentage. Vérifié sur PostgreSQL : course indépendante 1 000 F → 150 F (15 %) ; employé d'agence → 30 F (3 %) avec le nom de l'agence ; livraison de 600 F → 90 F.</li>
+<li>Notifications de fin de course et de livraison réécrites en quatre langues : « {pct} % de la course (−{commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +… ».</li>
+</ul>
+
+<h2>5quinquies. Distance parcourue : chaque déplacement réel (<code>rides/odometer.ts</code>)</h2>
+<ul>
+<li>Sous le seuil de bruit de la position, un déplacement est désormais compté à partir de la <b>vitesse mesurée par le téléphone</b> (effet Doppler, précise au dixième de m/s) : vitesse × durée (au plus 5 s par intervalle, bornée par la position), au millimètre. À l'arrêt (vitesse sous 0,5 m/s), rien n'est compté. Un champ <code>cred</code> évite de compter deux fois ce qui l'a déjà été par la vitesse quand la position confirme le déplacement.</li>
+<li><code>ride:progress</code> est émis toutes les 500 ms (avant 5 s). La base garde des mètres entiers (colonnes <code>Int</code>) : la partie inférieure à un mètre reste en mémoire et part à l'envoi suivant ; écart de prix inférieur à 0,1 F.</li>
+<li>Tests (<code>odometer.spec.ts</code>, 16 au total) : déplacement lent à 1 m/s compté, 0,6 m/s pendant 1 s = 0,6 m, 120 points immobiles = 0, pas de double comptage. <b>Non vérifié sur un trajet réel</b> ; les missions de coursier personnel utilisent encore l'ancien comptage (sans la vitesse).</li>
+<li>Le prélèvement de 15 % était déjà correct : indépendant 15 %, employé d'agence le taux de son niveau.</li>
+</ul>
+
+<h2>5sexies. Coursier personnel et livreur express</h2>
+<ul>
+<li>Rayon de recherche des missions : <b>20 km</b> (<code>PICKUP_RADIUS_KM</code>, avant 10 km) ; test : 15 km visible, 25 km masqué, lieu inconnu visible.</li>
+<li>Cause probable du coursier personnel qui ne voyait aucune commande : sa spécialité enregistrée était « livreur express » (bug du formulaire mobile, voir rapport front). <b>Script de correction</b> : <code>node --env-file=.env scripts/set-courier-category.js 01XXXXXXXX PERSONNEL</code> (<code>--allow-remote</code> pour Render).</li>
+<li>Règle inchangée : un coursier ne voit que les réservations de son propre véhicule.</li>
+</ul>
+
 <h2>6. Qualité et limites</h2>
 <ul>
-<li><b>31 suites / 339 tests</b> verts, <code>tsc</code> sans erreur.</li>
+<li><b>31 suites / 347 tests</b> verts, <code>tsc</code> sans erreur.</li>
 <li>SMS (OTP) : toujours aucune passerelle ; le mode simulation (code 0000) sert aux tests.</li>
 <li>À faire : renouveler le mot de passe de la base (une URL a été partagée dans une conversation) ; fichier <code>google-services.json</code> pour les notifications push.</li>
 </ul>
@@ -48,5 +78,8 @@
 
 <h2>7. Commit du jour</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>0afb4017</code></td><td>Commissions détaillées, distance par la vitesse du téléphone, message des 15 %, rayon 20 km, colis réservés aux coursiers validés, nom du prestataire, script de spécialité</td></tr>
+<tr><td><code>88e49834</code></td><td>Base des lieux élargie (17 022 lieux, 77 communes, Kpota de Calavi) ; rapports et couverture</td></tr>
+<tr><td><code>8ab4ce66</code></td><td>Un coursier occupé ou réservé ne se voit plus proposer d'autres missions</td></tr>
 <tr><td><code>ecb4be03</code></td><td>Inscription professionnelle par numéro seul ; tricycle réservé aux gros colis ; base nationale des lieux ; plaque partiellement masquée</td></tr></table>
 </body></html>

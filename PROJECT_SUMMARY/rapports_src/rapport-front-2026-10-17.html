@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 17 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">17 octobre 2026 · 2 commits poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>)</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">17 octobre 2026 · 3 commits poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>0afb4017</code>)</span></div>
 
 <h2>1. En résumé</h2>
 <p>Trois changements côté mobile : <b>une inscription simplifiée pour les profils professionnels</b> (le numéro seul), <b>le tricycle réservé aux gros colis</b> et <b>la plaque du Speeder partiellement masquée</b>. Tout compile (<code>tsc</code> sans erreur).</p>
@@ -23,6 +23,34 @@
 <li><b>Non vérifié sur un téléphone.</b></li>
 </ul>
 
+<h2>2ter. Accueil client redessiné (<code>HomeScreen.tsx</code>)</h2>
+<ul>
+<li><b>Portefeuille</b> : carte violette de la charte, solde en blanc sur une ligne (il se réduit pour ne plus être coupé), bouton « Recharger » blanc.</li>
+<li><b>Barre de recherche</b> « Chercher une destination… » rétablie sous le portefeuille (ouvre la commande de course).</li>
+<li><b>Trois grandes cartes</b> (moto, tricycle, voiture) : pastille d'icône ronde, badge (Populaire, Sécurisé), même hauteur.</li>
+<li><b>Services &amp; Partenaires</b> : trois tuiles, puis deux grandes tuiles côte à côte (elles étaient coupées) ; titres de section qui ne sont plus tronqués.</li>
+</ul>
+
+<h2>2quater. Commission de 15 % : ce que voit chaque profil</h2>
+<ul>
+<li><b>Speeder, coursier, livreur</b> : à la fin de chaque course ou mission, la fenêtre indique « <i>15 % de l'argent de la course (X F) est versé à l'entreprise AZƆ̀ — Tu reçois : +Y F</i> » (fonction <code>commissionNotice</code> dans <code>utils/rideDisplay.ts</code>). Le même message apparaît quand la course se termine par un arrêt accepté (il n'y avait avant qu'un « paiement effectué »). Un employé d'agence voit le taux réel de son niveau d'agence.</li>
+<li><b>Administrateur</b> : l'onglet Finances affiche, juste sous « Disponible au retrait », la section <b>Commissions reçues</b> : une carte par course ou livraison avec le <b>nom et le téléphone du Speeder</b>, « Indépendant » ou « Agence … », le trajet (départ → arrivée), le client, la date et l'heure, la distance, la commission en vert et « 15 % de X F », plus le total des commissions affichées. Une erreur de chargement est maintenant affichée au lieu d'une liste vide.</li>
+</ul>
+
+<h2>2quinquies. Distance parcourue en direct</h2>
+<ul>
+<li>Le compteur est mis à jour presque en direct (toutes les demi-secondes) et s'affiche au plus près : « 742,3 m » sous 1 km, « 1,254 km » au-delà, côté Speeder, côté client et dans le panneau d'arrêt anticipé (<code>fmtTraveled</code> dans <code>utils/geo.ts</code>, <code>RideStopPanel.tsx</code>).</li>
+<li>Le calcul se fait sur le serveur (voir rapport backend) : chaque déplacement réel est compté, le bruit du GPS à l'arrêt ne l'est pas.</li>
+</ul>
+
+<h2>2sexies. Coursier personnel et livreur express</h2>
+<ul>
+<li><b>Bug corrigé</b> (<code>ProviderOnboardingScreen.tsx</code>) : le brouillon de dossier créé à l'inscription n'a pas de spécialité ; à l'ouverture du formulaire, l'application la remplaçait toujours par « Livreur express », même si « Coursier personnel » avait été choisi. Un coursier personnel ne voyait donc jamais les commandes de coursier personnel. La spécialité choisie à l'inscription est maintenant conservée.</li>
+<li>Écran des missions : rayon de <b>20 km</b> (avant 10 km) et rappel de la spécialité et du véhicule sous le titre (ex. « Coursier personnel · Speeder moto à essence »).</li>
+<li>Côté client (onglet Courses) : tant qu'aucun coursier n'a accepté, la carte affiche « Recherche d'un coursier… à moins de 20 km » ; la carte du coursier apparaît dès l'acceptation.</li>
+<li><b>Comptes déjà créés</b> : la spécialité enregistrée reste à corriger avec <code>scripts/set-courier-category.js</code> (voir rapport backend).</li>
+</ul>
+
 <h2>3. Colis : le tricycle ne livre que les gros colis</h2>
 <ul>
 <li>« Envoyer un colis » : document, petit et moyen colis ne proposent que le Speeder à essence et l'électrique ; « Gros colis » ne propose que le tricycle ; le Speeder se réajuste si le type de colis change.</li>
@@ -37,6 +65,7 @@
 
 <h2>6. Commit du jour</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>0afb4017</code></td><td>Commissions détaillées dans les finances admin, message des 15 % en fin de course, distance en direct, spécialité du coursier conservée, rayon de 20 km, nouvel accueil client</td></tr>
 <tr><td><code>8d82013c</code></td><td>Retour possible à chaque étape de l'inscription (identité du client, dossier professionnel)</td></tr>
 <tr><td><code>ecb4be03</code></td><td>Inscription professionnelle par numéro seul ; tricycle réservé aux gros colis ; base nationale des lieux ; plaque partiellement masquée</td></tr></table>
 </body></html>
