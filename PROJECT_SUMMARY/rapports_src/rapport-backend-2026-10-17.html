@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 17 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">17 octobre 2026 · 6 commits de code poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>8ab4ce66</code>, <code>88e49834</code>, <code>0afb4017</code>, <code>f717e40b</code>) · 31 suites / 355 tests verts</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait aujourd'hui sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">17 octobre 2026 · 7 commits de code poussés sur main (<code>ecb4be03</code>, <code>8d82013c</code>, <code>8ab4ce66</code>, <code>88e49834</code>, <code>0afb4017</code>, <code>f717e40b</code>, <code>2a2a8d82</code>) · 31 suites / 358 tests verts</span></div>
 
 <h2>1. En résumé</h2>
 <p>Quatre changements : <b>type de compte enregistré sans identité</b> pour les profils professionnels, <b>le tricycle ne livre que les gros colis</b>, <b>base nationale des lieux du Bénin</b> et <b>plaque du Speeder partiellement masquée</b>. <code>tsc</code> sans erreur. Aucune migration.</p>
@@ -79,9 +79,17 @@
 <li><b>Non vérifié</b> : un livreur express avec cette boucle (même code que le coursier personnel) et le comportement sur téléphone.</li>
 </ul>
 
+<h2>5octies. Distance des livraisons : vitesse du téléphone (<code>delivery.module.ts</code>)</h2>
+<ul>
+<li><code>POST /deliveries/:id/location</code> accepte <code>speed</code> (m/s) et applique <code>odometerStep</code> avec la vitesse, comme pour les courses, <b>pour les deux modes</b> (coursier personnel et livreur express), seulement à partir du ramassage (IN_PROGRESS). La réponse renvoie <code>traveledMeters</code> (nombre décimal, la colonne <code>Delivery.traveledMeters</code> est un <code>Float</code> : aucune perte de précision).</li>
+<li><b>Migration</b> <code>20261017170000_delivery_odometer_cred</code> : colonne <code>Delivery.odoCred</code> (<code>DOUBLE PRECISION NOT NULL DEFAULT 0</code>) = mètres déjà comptés par la vitesse depuis le point d'ancrage, pour ne pas compter deux fois. Appliquée sur une base vide, sans écart avec le schéma.</li>
+<li>Le prix final du coursier personnel (<code>confirmDelivery</code>) utilise ces kilomètres ; le prix du livreur express ne change pas (fixé à la commande).</li>
+<li>Tests ajoutés (<code>personal-courier.spec.ts</code>, 35 au total) : petit déplacement à 1,2 m/s compté pour les deux modes, vitesse nulle = 0, avant le ramassage = 0. <b>Non vérifié sur un trajet réel</b>.</li>
+</ul>
+
 <h2>6. Qualité et limites</h2>
 <ul>
-<li><b>31 suites / 355 tests</b> verts, <code>tsc</code> sans erreur.</li>
+<li><b>31 suites / 358 tests</b> verts, <code>tsc</code> sans erreur.</li>
 <li>SMS (OTP) : toujours aucune passerelle ; le mode simulation (code 0000) sert aux tests.</li>
 <li>À faire : renouveler le mot de passe de la base (une URL a été partagée dans une conversation) ; fichier <code>google-services.json</code> pour les notifications push.</li>
 </ul>
@@ -90,6 +98,7 @@
 
 <h2>7. Commit du jour</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>2a2a8d82</code></td><td>Distance précise (vitesse du téléphone) pour les livraisons, migration <code>20261017170000</code></td></tr>
 <tr><td><code>f717e40b</code></td><td>Proposition du coursier validée par le client (migration <code>20261017150000</code>, routes, expiration, temps réel, suivi du client)</td></tr>
 <tr><td><code>0afb4017</code></td><td>Commissions détaillées, distance par la vitesse du téléphone, message des 15 %, rayon 20 km, colis réservés aux coursiers validés, nom du prestataire, script de spécialité</td></tr>
 <tr><td><code>88e49834</code></td><td>Base des lieux élargie (17 022 lieux, 77 communes, Kpota de Calavi) ; rapports et couverture</td></tr>
