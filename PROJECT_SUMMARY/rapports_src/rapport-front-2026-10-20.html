@@ -1,0 +1,44 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 20 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">20 octobre 2026 · 1 commit de code poussé sur main (<code>77fa4e64</code>)</span></div>
+
+<h2>1. En résumé</h2>
+<p>Nouveauté : le <b>parrainage</b>. L'administrateur crée des parrains ; un prestataire saisit le code de son parrain à l'inscription ; le parrain suit ses filleuls dans un espace dédié. Tout compile (<code>tsc</code> sans erreur).</p>
+<div class="box warn"><b>À savoir avant de tester :</b> rien de ce rapport n'a été essayé sur un téléphone. <b>Le backend doit être déployé avant l'APK</b> (nouvelle migration <code>20261018100000_referrals</code>). <b>Priorités de test :</b> créer un parrain depuis l'onglet Parrains, se connecter avec son numéro, inscrire un Speeder avec son code, puis regarder les chiffres chez le parrain.</div>
+
+<h2>2. Console administrateur : onglet « Parrains »</h2>
+<ul>
+<li>Nouvel onglet <b>Parrains</b> dans la barre du bas de l'administrateur (<code>AdminTabBar.tsx</code>, écran <code>AdminReferralsScreen.tsx</code>).</li>
+<li><b>Ajouter</b> : nom complet, numéro de téléphone, note facultative. Le parrain reçoit un code <code>AZO-XXXXXX</code> (fenêtre de confirmation avec « Partager le code »). Un numéro déjà utilisé par un client inscrit ou un prestataire est refusé.</li>
+<li><b>Liste</b> : une carte par parrain avec le nombre de Speeders, d'agences, de coursiers et de livreurs, et le détail actifs / inactifs / en attente / ont rechargé (avec le total rechargé).</li>
+<li><b>Fiche d'un parrain</b> : les mêmes chiffres, la liste complète des filleuls (numéros complets), « Rattacher un prestataire » (par son numéro), « Retirer de ce parrain » sur chaque filleul, « Désactiver / Réactiver » le parrain.</li>
+</ul>
+
+<h2>3. Espace du parrain</h2>
+<ul>
+<li>Le parrain se connecte avec son numéro (code SMS) et arrive directement dans <b>Espace parrain</b> (<code>ReferrerHomeScreen.tsx</code>), <b>sans formulaire d'identité</b>. L'application retient ce profil au redémarrage (valeur de rôle « REFERRER » côté appareil).</li>
+<li><b>Son code</b> en grand, avec « Partager mon code » (message prêt à envoyer).</li>
+<li><b>Chiffres par catégorie</b> (<code>ReferralOverview.tsx</code>) : Speeders, agences, coursiers personnels, livreurs express ; toucher une catégorie filtre la liste. Vue d'ensemble : parrainés, actifs, inactifs, en attente, et « N ont rechargé leur compte » avec le total rechargé.</li>
+<li><b>Filtres</b> : tous, actifs, inactifs, en attente, ont rechargé.</li>
+<li><b>Fiche de chaque filleul</b> : nom, catégorie, numéro <b>partiellement masqué</b>, ville, état, date d'inscription, date de validation, dernière activité, missions au total et sur 30 jours (flotte pour une agence), recharges (nombre, montant, dernière date).</li>
+<li>Actualisation en tirant l'écran et toutes les 30 s ; déconnexion avec confirmation.</li>
+<li><b>Règles</b> : « Actif » = dossier validé et au moins une course ou livraison terminée ces 30 derniers jours ; « Inactif » = dossier validé sans activité récente.</li>
+</ul>
+
+<h2>4. Inscription d'un prestataire avec un code de parrainage</h2>
+<ul>
+<li>Sur « Créer un compte », pour Speeder, coursier personnel, livreur express et agence : champ <b>« Code de parrainage (facultatif) »</b> sous le numéro (<code>OtpLoginScreen.tsx</code>). Le code est envoyé à la vérification du code reçu par SMS ; casse et espaces ignorés.</li>
+<li>Code inconnu, désactivé ou invalide : fenêtre « Ce code est inconnu ou n'est plus valable. Ton inscription continue sans parrain. » ; l'inscription n'est jamais bloquée.</li>
+<li>Le champ n'existe pas pour le Client : un client n'est jamais rattaché à un parrain.</li>
+</ul>
+
+<h2>5. Limites</h2>
+<ul>
+<li>Les textes du parrainage sont en <b>français uniquement</b>.</li>
+<li>Pas de récompense ni de commission pour les parrains : <b>suivi seulement</b>.</li>
+<li>Pour un livreur ou un coursier, la « dernière activité » s'appuie sur la date de la commande (une livraison n'a pas d'heure de fin enregistrée).</li>
+</ul>
+
+<h2>6. Commit</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>77fa4e64</code></td><td>Parrainage : onglet Parrains (admin), espace parrain, code à l'inscription</td></tr></table>
+</body></html>

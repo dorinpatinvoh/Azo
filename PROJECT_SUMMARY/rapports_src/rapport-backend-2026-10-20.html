@@ -1,0 +1,56 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 20 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">20 octobre 2026 · 1 commit de code poussé sur main (<code>77fa4e64</code>) · 32 suites / 369 tests verts</span></div>
+
+<h2>1. En résumé</h2>
+<p>Le <b>parrainage</b> : tables, routes administrateur et parrain, rattachement des prestataires à l'inscription. <code>tsc</code> sans erreur. Une migration (une table, deux colonnes).</p>
+<div class="box warn"><b>Déploiement :</b> le push de <code>main</code> déclenche le déploiement sur Render ; <code>/health</code> doit afficher <code>77fa4e64</code> ou plus récent. Le serveur doit être déployé avant l'APK.</div>
+
+<h2>2. Données (migration <code>20261018100000_referrals</code>)</h2>
+<ul>
+<li>Table <code>Referrer</code> : <code>userId</code> (unique, le compte du parrain), <code>code</code> (unique, « AZO- » + 6 caractères sans I, L, O, 0, 1), <code>active</code>, <code>note</code>, <code>createdById</code> (administrateur), <code>createdAt</code>.</li>
+<li><code>User.referrerId</code> (clé étrangère vers <code>Referrer</code>, <code>ON DELETE SET NULL</code>, indexée) et <code>User.referredAt</code> : le parrain d'un prestataire. Le rôle du parrain reste <code>CLIENT</code> ; on le reconnaît à sa ligne <code>Referrer</code> (pas de nouvelle valeur de l'énumération <code>Role</code>).</li>
+<li>Appliquée sur une base vide ; aucun écart entre le schéma et les migrations pour ces objets.</li>
+</ul>
+
+<h2>3. Routes</h2>
+<table>
+<tr><th>Route</th><th>Rôle</th></tr>
+<tr><td><code>POST /admin/referrals</code> {fullName, phone, note?}</td><td>Admin : crée le parrain (compte + code). 409 si le numéro est déjà parrain, client inscrit avec identité, prestataire ou membre d'agence.</td></tr>
+<tr><td><code>GET /admin/referrals</code></td><td>Admin : parrains avec leurs chiffres par catégorie (100 derniers).</td></tr>
+<tr><td><code>GET /admin/referrals/:id</code></td><td>Admin : fiche et liste complète des filleuls (numéros complets).</td></tr>
+<tr><td><code>PATCH /admin/referrals/:id</code> {active?, note?}</td><td>Admin : désactiver / réactiver, note.</td></tr>
+<tr><td><code>POST /admin/referrals/:id/attach</code> {phone}</td><td>Admin : rattache un prestataire existant (404 inconnu, 400 simple client, 409 déjà parrainé ou parrain).</td></tr>
+<tr><td><code>DELETE /admin/referrals/referral/:userId</code></td><td>Admin : retire un filleul de son parrain.</td></tr>
+<tr><td><code>GET /referrals/me</code></td><td>Parrain : ses chiffres et ses filleuls (numéros partiellement masqués). 403 pour un compte qui n'est pas parrain ou un parrain désactivé.</td></tr>
+</table>
+<ul>
+<li><b>Connexion</b> : <code>POST /auth/verify-otp</code> accepte <code>referralCode</code> (facultatif) et renvoie <code>referralStatus</code> (<code>APPLIED</code>, <code>INVALID</code> ou <code>null</code>) et <code>referrer</code> ({code, active} si le compte est un parrain : l'application ouvre alors l'espace parrain sans formulaire d'identité). Le code n'est pris en compte que pour une inscription Speeder, coursier, livreur ou agence, sur un compte sans parrain et sans identité client ; un code inconnu, désactivé ou celui du prestataire lui-même est signalé sans bloquer l'inscription.</li>
+</ul>
+
+<h2>4. Calcul du suivi (<code>referrals/referrals.module.ts</code>, <code>referral-logic.ts</code>)</h2>
+<ul>
+<li><b>Catégorie</b> : Speeder (<code>DRIVER</code>), agence, coursier personnel (<code>COURIER</code> + <code>COURSIER_PERSONNEL</code>), livreur express (autres <code>COURIER</code>).</li>
+<li><b>État</b> : dossier validé + au moins une course ou livraison terminée ces <b>30 jours</b> = actif ; validé sans activité récente = inactif ; brouillon, déposé, en examen, information demandée = en attente ; refusé ; suspendu.</li>
+<li><b>Activité</b> : courses terminées (<code>Ride.completedAt</code>) et livraisons terminées (<code>Delivery.createdAt</code>, faute d'heure de fin). Une agence compte l'activité de sa flotte (ses chauffeurs rattachés, sans son propriétaire).</li>
+<li><b>Recharges</b> : transactions <code>kind = RECHARGE</code> et <code>status = CONFIRMED</code> du portefeuille du filleul (nombre, total, dernière date) ; les recharges en attente ne comptent pas.</li>
+<li>Requêtes groupées (pas de requête par filleul).</li>
+</ul>
+
+<h2>5. Vérifications</h2>
+<ul>
+<li><b>Essai de bout en bout</b> sur une base jetable avec l'API : <b>22 vérifications sur 22</b> (création du parrain, refus de doublons et de comptes déjà inscrits, connexion du parrain, 403 pour un client, inscription avec code en majuscules, minuscules ou avec espace, code invalide signalé, client jamais rattaché, rattachement et refus côté administrateur, chiffres par catégorie, actifs / inactifs / en attente, recharges 7 000 F sans la recharge en attente, missions et flotte, numéros masqués côté parrain et complets côté administrateur, retrait et nouveau rattachement, désactivation).</li>
+<li><b>Tests automatiques</b> (<code>test/referrals.spec.ts</code>, 11 tests) : codes, normalisation, catégories, états actif / inactif, masquage, rattachement par code, création par l'administrateur, accès à l'espace parrain.</li>
+<li><b>Non vérifié</b> : écrans sur téléphone.</li>
+</ul>
+
+<h2>6. Limites et suites possibles</h2>
+<ul>
+<li>Pas de récompense ni de commission pour les parrains : suivi seulement.</li>
+<li>La liste des parrains calcule les chiffres parrain par parrain (suffisant pour quelques dizaines de parrains).</li>
+<li>Le numéro d'un parrain doit être neuf : un client inscrit ou un prestataire ne peut pas le devenir.</li>
+</ul>
+
+<h2>7. Commit</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>77fa4e64</code></td><td>Parrainage : migration <code>20261018100000</code>, routes administrateur et parrain, code à l'inscription</td></tr></table>
+</body></html>
