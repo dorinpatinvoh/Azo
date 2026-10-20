@@ -2,12 +2,13 @@ import React from "react";
 import PillTabBar, { type PillTabItem } from "./PillTabBar";
 
 /** Onglets de l'espace administrateur : chacun ouvre son écran (le choix est géré par App.tsx). */
-export type AdminTab = "providers" | "dashboard" | "finance" | "support";
+export type AdminTab = "providers" | "dashboard" | "finance" | "referrals" | "support";
 
 const ADMIN_TABS: PillTabItem<AdminTab>[] = [
   { id: "providers", label: "Dossiers", icon: "shield-checkmark-outline", iconActive: "shield-checkmark" },
   { id: "dashboard", label: "Pilotage", icon: "speedometer-outline", iconActive: "speedometer" },
   { id: "finance", label: "Finances", icon: "cash-outline", iconActive: "cash" },
+  { id: "referrals", label: "Parrains", icon: "people-outline", iconActive: "people" },
   { id: "support", label: "Support", icon: "headset-outline", iconActive: "headset" },
 ];
 

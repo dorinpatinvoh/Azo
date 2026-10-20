@@ -104,6 +104,8 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
 
   // « Créer un compte » depuis l'écran du numéro : le profil est choisi avant le numéro et le code, puis le parcours dédié suit
   const [signupMode, setSignupMode] = useState(false);
+  // Code de parrainage (facultatif) saisi à l'inscription d'un prestataire
+  const [referralCode, setReferralCode] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState(["", "", "", ""]);
   // Inscription (après l'OTP) : nom, prénom, sexe et NPI
@@ -221,7 +223,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
       const normalized = toBeninE164(digits);
       // Profil professionnel : seul le numéro est demandé (pas de nom, sexe ni NPI à l'inscription)
       const proProfile = signupMode && accountKind !== "CLIENT" ? (accountKind === "COURIER_PERSONAL" || accountKind === "COURIER_EXPRESS" ? "COURIER" : accountKind) : "CLIENT";
-      const response = await authApi.verifyOtp(normalized, fullCode, proProfile as ProfileRole);
+      const response = await authApi.verifyOtp(normalized, fullCode, proProfile as ProfileRole, proProfile !== "CLIENT" ? referralCode : undefined);
 
       await SecureStore.setItemAsync("userToken", response.token);
 
@@ -235,6 +237,22 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
       } else {
         await SecureStore.deleteItemAsync("providerStatus");
         await SecureStore.deleteItemAsync("providerType");
+      }
+
+      // Compte parrain (créé par l'administrateur) : espace parrain, sans formulaire d'identité
+      if (response.referrer) {
+        await SecureStore.setItemAsync("userRole", "REFERRER");
+        await SecureStore.deleteItemAsync("providerStatus");
+        await SecureStore.deleteItemAsync("providerType");
+        await SecureStore.deleteItemAsync(REGISTRATION_PENDING_KEY);
+        await SecureStore.setItemAsync("lastLoginPhone", digits).catch(() => undefined);
+        onVerified("REFERRER", null);
+        return;
+      }
+
+      // Code de parrainage refusé : l'inscription continue, sans parrain
+      if (response.referralStatus === "INVALID") {
+        notify("Code de parrainage", "Ce code est inconnu ou n'est plus valable. Ton inscription continue sans parrain.");
       }
 
       // Compte professionnel sans fiche d'identité : on va directement au dossier dédié
@@ -554,6 +572,22 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
                 )}
               </View>
 
+              {signupMode && accountKind !== "CLIENT" ? (
+                <View style={{ marginBottom: spacing.md }}>
+                  <Text style={styles.label}>Code de parrainage (facultatif)</Text>
+                  <TextInput
+                    style={styles.nameInput}
+                    value={referralCode}
+                    onChangeText={(v) => setReferralCode(v.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 10))}
+                    placeholder="Ex. AZO-7K4M2Q"
+                    placeholderTextColor={colors.outline}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    maxLength={10}
+                  />
+                  <Text style={styles.nameHint}>Tu as été recruté par un parrain AZƆ̀ ? Saisis son code.</Text>
+                </View>
+              ) : null}
               <View style={styles.operatorsRow}>
                 <Text style={styles.operatorsLabel}>{t("auth.phone.operators")}</Text>
                 <View style={{ flexDirection: "row", gap: 6 }}>

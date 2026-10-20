@@ -1,6 +1,7 @@
 jest.mock("@prisma/client", () => ({}));
 jest.mock("../src/prisma/prisma.service", () => ({ PrismaService: class PrismaService {} }));
 jest.mock("../src/providers/providers.module", () => ({ ProvidersService: class ProvidersService {} }));
+jest.mock("../src/referrals/referrals.module", () => ({ ReferralsService: class ReferralsService {} }));
 
 import {
   AuthService,

@@ -178,6 +178,13 @@ model User {
   /// Solde du chauffeur au moment du rattachement : cet argent gagné AVANT l'agence lui appartient, l'agence ne peut pas le retirer
   agencyProtectedBalance Int @default(0)
 
+  // Parrainage : le parrain qui a recruté ce prestataire (code saisi à l'inscription, ou rattachement par l'administrateur)
+  referrerId String?
+  referrer   Referrer? @relation("ReferrerFilleuls", fields: [referrerId], references: [id])
+  referredAt DateTime?
+  /// Renseigné si ce compte EST un parrain (créé par l'administrateur)
+  referrerProfile Referrer? @relation("ReferrerAccount")
+
   // Dossier prestataire (null pour un simple client)
   provider ProviderProfile?
 
@@ -200,6 +207,8 @@ model User {
   rideMessages                  RideMessage[]
   rideTipsAsClient              RideTip[]                   @relation("TipClient")
   rideTipsAsDriver              RideTip[]                   @relation("TipDriver")
+
+  @@index([referrerId])
 }
 
 model NpiRegistrationAttempt {
@@ -253,6 +262,20 @@ model Transaction {
   meta        String?
   kind        String? // "RIDE" | "TIP" | "RECHARGE" | "WITHDRAWAL" — filtrage pour calculs financiers
   createdAt   DateTime          @default(now())
+}
+
+/// Parrain : compte créé par l'administrateur, qui suit les prestataires qu'il a recrutés (Speeders, agences, livreurs, coursiers).
+model Referrer {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation("ReferrerAccount", fields: [userId], references: [id])
+  /// Code que le prestataire saisit à son inscription (ex. AZO-7K4M2Q)
+  code        String   @unique
+  active      Boolean  @default(true)
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  referrals   User[]   @relation("ReferrerFilleuls")
 }
 
 model Agency {

@@ -214,11 +214,21 @@ export const authApi = {
     api.post<{ message: string; phone: string; otpCode?: string }>("/auth/request-otp", { phone }),
   // `profile` n'accorde PLUS aucun rôle : il ouvre un brouillon de dossier prestataire
   // qu'un administrateur doit valider. Le rôle métier arrive avec l'approbation.
-  verifyOtp: async (phone: string, code: string, profile: ProfileRole = "CLIENT") => {
-    const r = await api.post<{ token: string; user: UserProfile; provider: ProviderRef | null; signupKind?: string | null }>("/auth/verify-otp", {
+  verifyOtp: async (phone: string, code: string, profile: ProfileRole = "CLIENT", referralCode?: string) => {
+    const r = await api.post<{
+      token: string;
+      user: UserProfile;
+      provider: ProviderRef | null;
+      signupKind?: string | null;
+      /** Parrainage : code appliqué (APPLIED), refusé (INVALID) ou non saisi (null). */
+      referralStatus?: "APPLIED" | "INVALID" | null;
+      /** Renseigné si ce compte est un parrain : l'application ouvre l'espace parrain. */
+      referrer?: { code: string; active: boolean } | null;
+    }>("/auth/verify-otp", {
       phone,
       code,
       profile,
+      ...(referralCode && referralCode.trim() ? { referralCode: referralCode.trim() } : {}),
     });
     setToken(r.token); // toutes les requêtes suivantes sont authentifiées
     return r;
@@ -1292,6 +1302,89 @@ export type AdminAuditEvent = {
     name: string;
     phone: string;
   };
+};
+
+/* ==================== PARRAINAGE ==================== */
+
+export type ReferralKind = "SPEEDER" | "AGENCE" | "COURSIER_PERSONNEL" | "LIVREUR_EXPRESS";
+export type ReferralStatus = "ACTIF" | "INACTIF" | "EN_ATTENTE" | "REFUSE" | "SUSPENDU";
+
+export type ReferralKindSummary = {
+  total: number;
+  enAttente: number;
+  actifs: number;
+  inactifs: number;
+  autres: number;
+  ontRecharge: number;
+  montantRecharge: number;
+};
+
+export type ReferralItem = {
+  userId: string;
+  name: string;
+  phone: string;
+  kind: ReferralKind | null;
+  status: ReferralStatus;
+  providerStatus: string | null;
+  city: string | null;
+  vehicleType: VehicleType | null;
+  agencyName: string | null;
+  fleetSize: number | null;
+  referredAt: string | null;
+  registeredAt: string;
+  approvedAt: string | null;
+  lastActivityAt: string | null;
+  jobsTotal: number;
+  jobsLast30Days: number;
+  recharged: boolean;
+  rechargeCount: number;
+  rechargedTotal: number;
+  lastRechargeAt: string | null;
+};
+
+export type ReferralOverviewData = {
+  summary: {
+    activeWindowDays: number;
+    byKind: Record<ReferralKind, ReferralKindSummary>;
+    totals: ReferralKindSummary;
+    unclassified: number;
+  };
+  referrals: ReferralItem[];
+};
+
+/** Espace du parrain (`GET /referrals/me`). */
+export type ReferrerSpace = ReferralOverviewData & {
+  referrer: { id: string; code: string; fullName: string | null; createdAt: string };
+};
+
+export type AdminReferrerRow = {
+  id: string;
+  code: string;
+  active: boolean;
+  note: string | null;
+  fullName: string | null;
+  phone: string;
+  createdAt: string;
+  totals: ReferralKindSummary;
+  byKind: Record<ReferralKind, ReferralKindSummary>;
+};
+
+export type AdminReferrerDetail = ReferralOverviewData & {
+  referrer: { id: string; code: string; active: boolean; note: string | null; fullName: string | null; phone: string; createdAt: string };
+};
+
+export const referralsApi = {
+  me: () => api.get<ReferrerSpace>(`${P}/referrals/me`),
+};
+
+export const adminReferralsApi = {
+  list: () => api.get<AdminReferrerRow[]>(`${P}/admin/referrals`),
+  create: (body: { fullName: string; phone: string; note?: string }) =>
+    api.post<{ id: string; userId: string; code: string; fullName: string; phone: string; active: boolean }>(`${P}/admin/referrals`, body),
+  detail: (id: string) => api.get<AdminReferrerDetail>(`${P}/admin/referrals/${id}`),
+  update: (id: string, body: { active?: boolean; note?: string }) => api.patch<AdminReferrerDetail>(`${P}/admin/referrals/${id}`, body),
+  attach: (id: string, phone: string) => api.post<AdminReferrerDetail>(`${P}/admin/referrals/${id}/attach`, { phone }),
+  detach: (userId: string) => api.delete<AdminReferrerDetail>(`${P}/admin/referrals/referral/${userId}`),
 };
 
 export const adminApi = {

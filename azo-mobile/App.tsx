@@ -52,6 +52,8 @@ import DevMenuScreen, { ScreenId } from "./screens/DevMenuScreen";
 import ProviderOnboardingScreen from "./screens/ProviderOnboardingScreen";
 import ProviderStatusScreen from "./screens/ProviderStatusScreen";
 import AdminProvidersScreen from "./screens/AdminProvidersScreen";
+import AdminReferralsScreen from "./screens/AdminReferralsScreen";
+import ReferrerHomeScreen from "./screens/ReferrerHomeScreen";
 import {
   getToken,
   notificationsApi,
@@ -85,7 +87,7 @@ type Route = ScreenId | "menu";
 
 /* ---------- Navigation : historique et reprise ---------- */
 // Écrans d'entrée / racines : y aller efface l'historique (on repart de zéro) et on ne revient jamais « en arrière » vers eux.
-const ROOT_ROUTES = new Set<Route>(["admin-finance", "admin-support", "home", "splash", "otp", "assist-offer", "language", "driver-home", "courier-home", "agency-dashboard", "admin-providers", "admin-dashboard"]);
+const ROOT_ROUTES = new Set<Route>(["admin-finance", "admin-support", "admin-referrals", "referrer-home", "home", "splash", "otp", "assist-offer", "language", "driver-home", "courier-home", "agency-dashboard", "admin-providers", "admin-dashboard"]);
 // Écrans d'entrée (onboarding, connexion) : jamais empilés dans l'historique
 const ENTRY_ROUTES = new Set<Route>(["splash", "otp", "assist-offer", "language"]);
 // Écrans du client où le bouton retour (et le bouton retour du téléphone) ramène à la page précédente
@@ -108,6 +110,8 @@ function routeFor(
   switch (normRole) {
     case "ADMIN":
       return "admin-providers";
+    case "REFERRER":
+      return "referrer-home";
     case "AGENCY":
     case "AGENCE":
       return "agency-dashboard";
@@ -305,7 +309,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
 
   /** Barre du bas de l'administrateur : un onglet = un écran. */
   const goToAdminTab = useCallback(
-    (tab: AdminTab) => goTo(tab === "providers" ? "admin-providers" : tab === "dashboard" ? "admin-dashboard" : tab === "finance" ? "admin-finance" : "admin-support"),
+    (tab: AdminTab) => goTo(tab === "providers" ? "admin-providers" : tab === "dashboard" ? "admin-dashboard" : tab === "finance" ? "admin-finance" : tab === "referrals" ? "admin-referrals" : "admin-support"),
     [goTo]
   );
 
@@ -795,6 +799,8 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
         {route === "support" && <SupportScreen onBack={() => goBack()} />}
         {route === "admin-support" && <AdminSupportScreen onBack={() => goTo("admin-providers")} onNavigateTab={goToAdminTab} />}
         {route === "admin-finance" && <AdminFinanceScreen onNavigateTab={goToAdminTab} />}
+        {route === "admin-referrals" && <AdminReferralsScreen onNavigateTab={goToAdminTab} />}
+        {route === "referrer-home" && <ReferrerHomeScreen onLogout={handleLogout} />}
 
         {route === "messages" && (
           <MessagesScreen onBack={() => goBack()} onNavigateTab={goTo} />

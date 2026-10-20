@@ -15,6 +15,7 @@ import { AgenciesModule } from "./agencies/agencies.module";
 import { AdminModule } from "./admin/admin.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ProvidersModule } from "./providers/providers.module";
+import { ReferralsModule } from "./referrals/referrals.module";
 import { PricingModule } from "./pricing/pricing.module";
 import { HealthController } from "./health.controller";
 import { RegistrationModule } from "./common/registration.module";
@@ -39,6 +40,7 @@ import { LanguageMiddleware } from "./common/language.middleware";
     AdminModule,
     NotificationsModule,
     ProvidersModule,
+    ReferralsModule,
     PricingModule,
   ],
   controllers: [HealthController],

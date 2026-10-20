@@ -1,3 +1,4 @@
+import { ReferralsModule } from "../referrals/referrals.module";
 import { Global, Module } from "@nestjs/common";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
@@ -15,6 +16,7 @@ import { SessionRefreshInterceptor } from "./session-refresh.interceptor";
   imports: [
     PassportModule,
     ProvidersModule,
+    ReferralsModule,
     JwtModule.register({
       secret: getJwtSecret(),
       signOptions: { expiresIn: SESSION_EXPIRES_IN },

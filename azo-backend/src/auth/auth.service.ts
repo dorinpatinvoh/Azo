@@ -1,9 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, Optional } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProvidersService } from "../providers/providers.module";
 import { beninPhoneVariants, extractLocalBeninDigits, normalizeBeninPhone } from "../common/phone";
 import { toUserProfile } from "../common/registration-profile";
+import { ReferralsService } from "../referrals/referrals.module";
 
 const MAX_OTP_REQUESTS_WINDOW = 15;
 const OTP_WINDOW_MS = 10 * 60 * 1000; // 10 min
@@ -47,7 +48,8 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
-    private providers: ProvidersService
+    private providers: ProvidersService,
+    @Optional() private referrals?: ReferralsService
   ) {}
 
   private assertValidBeninPhone(rawPhone: string): { phone: string; variants: string[] } {
@@ -169,7 +171,7 @@ export class AuthService {
     });
   }
 
-  async verifyOtp(rawPhone: string, code: string, profile?: string) {
+  async verifyOtp(rawPhone: string, code: string, profile?: string, referralCode?: string) {
     const { phone, variants } = this.assertValidBeninPhone(rawPhone);
 
     const isSimBypass = process.env.SMS_PROVIDER !== "live" && code.trim() === "0000";
@@ -213,6 +215,15 @@ export class AuthService {
       provider = await this.providers.statusOf(user.id);
     }
 
+    // Parrainage : un prestataire qui s'inscrit peut saisir le code de son parrain (jamais bloquant)
+    let referralStatus: "APPLIED" | "INVALID" | null = null;
+    if (proKind && this.referrals) {
+      const result = await this.referrals.attachByCode(user.id, referralCode).catch(() => "INVALID" as const);
+      referralStatus = result === "IGNORED" ? null : result;
+    }
+    // Compte parrain (créé par l'administrateur) : l'application ouvre l'espace parrain
+    const referrer = this.referrals ? await this.referrals.referrerOf(user.id).catch(() => null) : null;
+
     const token = await this.jwt.signAsync({ sub: user.id, role: user.role, phone: user.phone });
     return {
       token,
@@ -231,6 +242,8 @@ export class AuthService {
         npiLast4: user.npiLast4,
       }),
       signupKind: user.signupKind ?? null,
+      referralStatus,
+      referrer,
       provider: provider ? { id: provider.id, type: provider.type, status: provider.status } : null,
     };
   }

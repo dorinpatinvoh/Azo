@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, Length } from "class-validator";
+import { IsIn, IsOptional, IsString, Length, MaxLength } from "class-validator";
 
 export class VerifyOtpDto {
   @IsString()
@@ -13,4 +13,10 @@ export class VerifyOtpDto {
   @IsOptional()
   @IsIn(["CLIENT", "DRIVER", "COURIER", "AGENCY"])
   profile?: "CLIENT" | "DRIVER" | "COURIER" | "AGENCY";
+
+  // Code de parrainage saisi à l'inscription d'un prestataire (facultatif)
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  referralCode?: string;
 }
