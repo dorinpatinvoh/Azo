@@ -13,7 +13,7 @@ export const KIND_INFO: Record<ReferralKind, { label: string; plural: string; ic
   COURSIER_PERSONNEL: { label: "Coursier personnel", plural: "Coursiers personnels", icon: "directions-run" },
   LIVREUR_EXPRESS: { label: "Livreur express", plural: "Livreurs express", icon: "local-shipping" },
 };
-const KINDS: ReferralKind[] = ["SPEEDER", "AGENCE", "COURSIER_PERSONNEL", "LIVREUR_EXPRESS"];
+export const REFERRAL_KINDS: ReferralKind[] = ["SPEEDER", "AGENCE", "COURSIER_PERSONNEL", "LIVREUR_EXPRESS"];
 
 const STATUS_INFO: Record<ReferralStatus, { label: string; bg: string; fg: string }> = {
   ACTIF: { label: "Actif", bg: "#DDF3E4", fg: "#146C2E" },
@@ -23,7 +23,7 @@ const STATUS_INFO: Record<ReferralStatus, { label: string; bg: string; fg: strin
   SUSPENDU: { label: "Suspendu", bg: colors.errorContainer, fg: colors.error },
 };
 
-type StatusFilter = "ALL" | "ACTIF" | "INACTIF" | "EN_ATTENTE" | "RECHARGE";
+export type StatusFilter = "ALL" | "ACTIF" | "INACTIF" | "EN_ATTENTE" | "RECHARGE";
 const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
   { id: "ALL", label: "Tous" },
   { id: "ACTIF", label: "Actifs" },
@@ -34,41 +34,27 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 
-type Props = {
+/* ------------------------------------------------------------------------------------------------------------------ */
+/*  Chiffres : par catégorie, vue d'ensemble, recharges                                                               */
+/* ------------------------------------------------------------------------------------------------------------------ */
+
+type SummaryProps = {
   data: ReferralOverviewData;
-  /** Administrateur : bouton pour retirer un filleul du parrain. */
-  onDetach?: (item: ReferralItem) => void;
+  /** Catégorie sélectionnée (mise en évidence) ; `onSelectKind` est appelé au toucher d'une carte. */
+  kind?: ReferralKind | "ALL";
+  onSelectKind?: (kind: ReferralKind | "ALL") => void;
 };
 
-/**
- * Suivi des filleuls d'un parrain : chiffres par catégorie (Speeders, agences, coursiers personnels, livreurs express),
- * actifs / inactifs / en attente / ont rechargé, puis la fiche de chacun. Partagé entre l'espace du parrain et la console admin.
- */
-export default function ReferralOverview({ data, onDetach }: Props) {
-  const [status, setStatus] = useState<StatusFilter>("ALL");
-  const [kind, setKind] = useState<ReferralKind | "ALL">("ALL");
-  const { summary, referrals } = data;
+export function ReferralSummary({ data, kind = "ALL", onSelectKind }: SummaryProps) {
+  const { summary } = data;
   const t = summary.totals;
-
-  const filtered = useMemo(
-    () =>
-      referrals.filter((r) => {
-        if (kind !== "ALL" && r.kind !== kind) return false;
-        if (status === "RECHARGE") return r.recharged;
-        if (status === "ALL") return true;
-        return r.status === status;
-      }),
-    [referrals, status, kind]
-  );
-
   return (
     <View style={{ gap: spacing.md }}>
-      {/* Chiffres par catégorie */}
       <View style={styles.kindGrid}>
-        {KINDS.map((k) => {
+        {REFERRAL_KINDS.map((k) => {
           const s = summary.byKind[k];
           return (
-            <Pressable key={k} style={[styles.kindCard, kind === k && styles.kindCardActive]} onPress={() => setKind(kind === k ? "ALL" : k)} accessibilityRole="button">
+            <Pressable key={k} style={[styles.kindCard, kind === k && styles.kindCardActive]} onPress={() => onSelectKind?.(kind === k ? "ALL" : k)} disabled={!onSelectKind} accessibilityRole="button">
               <View style={styles.kindIcon}>
                 <MaterialIcons name={KIND_INFO[k].icon} size={20} color={colors.primary} />
               </View>
@@ -81,9 +67,8 @@ export default function ReferralOverview({ data, onDetach }: Props) {
         })}
       </View>
 
-      {/* Vue d'ensemble */}
       <View style={styles.stats}>
-        <Stat value={t.total} label="Parrainés" />
+        <Stat value={t.total} label="Recrutés" />
         <Stat value={t.actifs} label="Actifs" color="#146C2E" />
         <Stat value={t.inactifs} label="Inactifs" color={colors.secondary} />
         <Stat value={t.enAttente} label="En attente" color={colors.tertiary} />
@@ -98,31 +83,84 @@ export default function ReferralOverview({ data, onDetach }: Props) {
       <Text style={styles.note}>
         « Actif » : au moins une course ou livraison terminée ces {summary.activeWindowDays} derniers jours. « Inactif » : dossier validé, mais aucune activité récente.
       </Text>
+    </View>
+  );
+}
 
-      {/* Filtres */}
+/* ------------------------------------------------------------------------------------------------------------------ */
+/*  Liste des recrues avec filtres                                                                                    */
+/* ------------------------------------------------------------------------------------------------------------------ */
+
+type ListProps = {
+  data: ReferralOverviewData;
+  kind: ReferralKind | "ALL";
+  onKindChange: (kind: ReferralKind | "ALL") => void;
+  status: StatusFilter;
+  onStatusChange: (status: StatusFilter) => void;
+  /** Administrateur : bouton pour retirer une recrue de ce commercial. */
+  onDetach?: (item: ReferralItem) => void;
+  /** Version réduite (accueil) : sans filtres ni compteur. */
+  compact?: boolean;
+};
+
+export function ReferralList({ data, kind, onKindChange, status, onStatusChange, onDetach, compact }: ListProps) {
+  const { referrals } = data;
+  const filtered = useMemo(
+    () =>
+      referrals.filter((r) => {
+        if (kind !== "ALL" && r.kind !== kind) return false;
+        if (status === "RECHARGE") return r.recharged;
+        if (status === "ALL") return true;
+        return r.status === status;
+      }),
+    [referrals, status, kind]
+  );
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      {compact ? null : (
+        <>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
         {STATUS_FILTERS.map((f) => (
-          <Pressable key={f.id} style={[styles.chip, status === f.id && styles.chipActive]} onPress={() => setStatus(f.id)} accessibilityRole="button">
+          <Pressable key={f.id} style={[styles.chip, status === f.id && styles.chipActive]} onPress={() => onStatusChange(f.id)} accessibilityRole="button">
             <Text style={[styles.chipText, status === f.id && styles.chipTextActive]}>{f.label}</Text>
           </Pressable>
         ))}
       </ScrollView>
-      {kind !== "ALL" ? (
-        <Pressable style={styles.kindFilter} onPress={() => setKind("ALL")} accessibilityRole="button">
-          <MaterialIcons name={KIND_INFO[kind].icon} size={16} color={colors.primary} />
-          <Text style={styles.kindFilterText}>{KIND_INFO[kind].plural} seulement · toucher pour tout voir</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        <Pressable style={[styles.chip, kind === "ALL" && styles.chipActive]} onPress={() => onKindChange("ALL")} accessibilityRole="button">
+          <Text style={[styles.chipText, kind === "ALL" && styles.chipTextActive]}>Toutes catégories</Text>
         </Pressable>
-      ) : null}
+        {REFERRAL_KINDS.map((k) => (
+          <Pressable key={k} style={[styles.chip, kind === k && styles.chipActive]} onPress={() => onKindChange(kind === k ? "ALL" : k)} accessibilityRole="button">
+            <Text style={[styles.chipText, kind === k && styles.chipTextActive]}>{KIND_INFO[k].plural}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+      <Text style={styles.count}>{filtered.length} {filtered.length > 1 ? "recrues" : "recrue"}</Text>
+        </>
+      )}
 
-      {/* Fiches */}
       {filtered.length === 0 ? (
         <View style={styles.empty}>
           <MaterialIcons name="people-outline" size={30} color={colors.outline} />
-          <Text style={styles.emptyText}>{referrals.length === 0 ? "Aucun filleul pour le moment." : "Aucun filleul dans cette vue."}</Text>
+          <Text style={styles.emptyText}>{referrals.length === 0 ? "Aucune recrue pour le moment." : "Aucune recrue dans cette vue."}</Text>
         </View>
       ) : (
         filtered.map((r) => <Row key={r.userId} item={r} onDetach={onDetach} />)
       )}
+    </View>
+  );
+}
+
+/** Chiffres puis liste (console administrateur). */
+export default function ReferralOverview({ data, onDetach }: { data: ReferralOverviewData; onDetach?: (item: ReferralItem) => void }) {
+  const [status, setStatus] = useState<StatusFilter>("ALL");
+  const [kind, setKind] = useState<ReferralKind | "ALL">("ALL");
+  return (
+    <View style={{ gap: spacing.md }}>
+      <ReferralSummary data={data} kind={kind} onSelectKind={setKind} />
+      <ReferralList data={data} kind={kind} onKindChange={setKind} status={status} onStatusChange={setStatus} onDetach={onDetach} />
     </View>
   );
 }
@@ -147,7 +185,9 @@ function Row({ item: r, onDetach }: { item: ReferralItem; onDetach?: (item: Refe
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.rowName} numberOfLines={1}>{r.name}</Text>
-          <Text style={styles.rowSub} numberOfLines={1}>{k?.label ?? "Prestataire"} · {r.phone.startsWith("+") ? formatBeninPhoneDisplay(r.phone) : r.phone}{r.city ? ` · ${r.city}` : ""}</Text>
+          <Text style={styles.rowSub} numberOfLines={1}>
+            {k?.label ?? "Prestataire"} · {r.phone.startsWith("+") ? formatBeninPhoneDisplay(r.phone) : r.phone}{r.city ? ` · ${r.city}` : ""}
+          </Text>
         </View>
         <View style={[styles.pill, { backgroundColor: st.bg }]}>
           <Text style={[styles.pillText, { color: st.fg }]} numberOfLines={1}>{st.label}</Text>
@@ -170,7 +210,7 @@ function Row({ item: r, onDetach }: { item: ReferralItem; onDetach?: (item: Refe
       {onDetach ? (
         <Pressable style={styles.detach} onPress={() => onDetach(r)} accessibilityRole="button">
           <MaterialIcons name="link-off" size={16} color={colors.error} />
-          <Text style={styles.detachText}>Retirer de ce parrain</Text>
+          <Text style={styles.detachText}>Retirer de ce commercial</Text>
         </Pressable>
       ) : null}
     </View>
@@ -198,8 +238,7 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
   chipTextActive: { color: "#fff" },
-  kindFilter: { flexDirection: "row", alignItems: "center", gap: 6 },
-  kindFilterText: { ...typography.bodySm, color: colors.primary, fontWeight: "700" },
+  count: { ...typography.labelMd, color: colors.onSurfaceVariant, fontWeight: "700" },
   empty: { alignItems: "center", gap: 6, paddingVertical: spacing.lg },
   emptyText: { ...typography.bodyMd, color: colors.onSurfaceVariant },
   row: { backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.sm + 2, gap: spacing.xs + 2, borderWidth: 1, borderColor: colors.surfaceContainer },

@@ -8,14 +8,15 @@ import { AdminReferrerDetail, AdminReferrerRow, ReferralItem, adminReferralsApi,
 import { cleanBeninDigits, formatBeninPhoneDisplay, formatBeninPhoneInput, isValidBeninPhone } from "../utils/phone";
 import AdminTabBar, { type AdminTab } from "../components/AdminTabBar";
 import ReferralOverview from "../components/ReferralOverview";
+import CommercialPromoCard, { promoMessage } from "../components/CommercialPromoCard";
 import { BrandAlert } from "../components/BrandAlert";
 import { fcfa } from "../utils/rideDisplay";
 
 type Props = { onNavigateTab?: (tab: AdminTab) => void };
 
 /**
- * Parrainage (console administrateur) : l'administrateur crée les parrains, voit leurs chiffres, et peut rattacher ou retirer
- * un prestataire. Un parrain se connecte avec son numéro et suit ses filleuls dans son espace.
+ * Commerciaux (console administrateur) : l'administrateur crée les commerciaux, voit leur code promo COM-AZO…, leur lien personnel
+ * et leurs chiffres, et peut rattacher ou retirer un prestataire. Un commercial se connecte avec son numéro et suit ses recrues dans son espace.
  */
 export default function AdminReferralsScreen({ onNavigateTab }: Props) {
   const [rows, setRows] = useState<AdminReferrerRow[]>([]);
@@ -25,7 +26,7 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Création d'un parrain
+  // Création d'un commercial
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -66,7 +67,7 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
     loadDetail(selected);
   }, [selected, loadDetail]);
 
-  // Le bouton retour du téléphone ferme d'abord la fiche d'un parrain
+  // Le bouton retour du téléphone ferme d'abord la fiche d'un commercial
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (selected) {
@@ -97,10 +98,10 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
       setNote("");
       await loadList();
       BrandAlert.alert(
-        "Parrain créé ✅",
-        `${created.fullName} (${formatBeninPhoneDisplay(created.phone)})\nCode de parrainage : ${created.code}\n\nIl se connecte avec ce numéro et retrouve son espace parrain.`,
+        "Commercial créé ✅",
+        `${created.fullName} (${formatBeninPhoneDisplay(created.phone)})\nCode promo : ${created.code}\nLien : ${created.link}\n\nIl se connecte avec ce numéro et retrouve son code, son lien et ses recrues.`,
         [
-          { text: "Partager le code", onPress: () => { Share.share({ message: `Parrain AZƆ̀ : ${created.fullName}. Code de parrainage : ${created.code}` }).catch(() => undefined); } },
+          { text: "Partager son lien", onPress: () => { Share.share({ message: promoMessage(created.code, created.link, created.fullName) }).catch(() => undefined); } },
           { text: "OK" },
         ]
       );
@@ -127,7 +128,7 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
   }
 
   function confirmDetach(item: ReferralItem) {
-    BrandAlert.alert("Retirer ce filleul", `${item.name} ne sera plus parrainé par ${detail?.referrer.fullName ?? "ce parrain"}.`, [
+    BrandAlert.alert("Retirer cette recrue", `${item.name} ne sera plus rattaché à ${detail?.referrer.fullName ?? "ce commercial"}.`, [
       { text: "Non", style: "cancel" },
       {
         text: "Retirer",
@@ -147,7 +148,7 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
   function toggleActive() {
     if (!detail) return;
     const next = !detail.referrer.active;
-    BrandAlert.alert(next ? "Réactiver ce parrain" : "Désactiver ce parrain", next ? "Il retrouve son espace et son code redevient valable." : "Il n'accède plus à son espace et son code n'est plus accepté pour de nouvelles inscriptions. Ses filleuls restent rattachés.", [
+    BrandAlert.alert(next ? "Réactiver ce commercial" : "Désactiver ce commercial", next ? "Il retrouve son espace et son code promo redevient valable." : "Il n'accède plus à son espace et son code promo n'est plus accepté pour de nouvelles inscriptions. Ses recrues restent rattachées.", [
       { text: "Annuler", style: "cancel" },
       {
         text: next ? "Réactiver" : "Désactiver",
@@ -173,9 +174,9 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
           </Pressable>
         ) : null}
         <View style={{ flex: 1 }}>
-          <Text style={styles.title} numberOfLines={1}>{selected ? detail?.referrer.fullName ?? "Parrain" : "Parrainage"}</Text>
+          <Text style={styles.title} numberOfLines={1}>{selected ? detail?.referrer.fullName ?? "Commercial" : "Commerciaux"}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            {selected ? (detail ? `${formatBeninPhoneDisplay(detail.referrer.phone)} · ${detail.referrer.code}` : "Chargement…") : "Les parrains et leurs filleuls"}
+            {selected ? (detail ? `${formatBeninPhoneDisplay(detail.referrer.phone)} · ${detail.referrer.code}` : "Chargement…") : "Les commerciaux et leurs recrues"}
           </Text>
         </View>
         {!selected ? (
@@ -202,8 +203,8 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
             rows.length === 0 && !error ? (
               <View style={styles.empty}>
                 <MaterialIcons name="groups" size={40} color={colors.outline} />
-                <Text style={styles.emptyTitle}>Aucun parrain pour le moment</Text>
-                <Text style={styles.emptyText}>Appuie sur « Ajouter » : tu saisis son nom et son numéro, il reçoit un code de parrainage et un espace pour suivre ses filleuls.</Text>
+                <Text style={styles.emptyTitle}>Aucun commercial pour le moment</Text>
+                <Text style={styles.emptyText}>Appuie sur « Ajouter » : tu saisis son nom et son numéro, il reçoit un code promo COM-AZO… avec son lien de téléchargement personnel, et un espace pour suivre ses recrues.</Text>
               </View>
             ) : (
               rows.map((r) => (
@@ -231,6 +232,7 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
             )
           ) : detail ? (
             <>
+              <CommercialPromoCard code={detail.referrer.code} link={detail.referrer.link} name={detail.referrer.fullName} />
               <View style={styles.actions}>
                 <Pressable style={styles.action} onPress={() => setAttaching(true)} accessibilityRole="button">
                   <MaterialIcons name="link" size={18} color={colors.primary} />
@@ -250,13 +252,13 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
 
       <AdminTabBar active="referrals" onNavigate={onNavigateTab} />
 
-      {/* Ajouter un parrain */}
+      {/* Ajouter un commercial */}
       <Modal visible={creating} transparent animationType="fade" onRequestClose={() => setCreating(false)}>
         <View style={styles.backdrop}>
           <ScrollView contentContainerStyle={styles.modalWrap} keyboardShouldPersistTaps="handled">
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Ajouter un parrain</Text>
-              <Text style={styles.modalSub}>Il reçoit un code de parrainage et un espace pour suivre les prestataires qu'il parraine.</Text>
+              <Text style={styles.modalTitle}>Ajouter un commercial</Text>
+              <Text style={styles.modalSub}>Il reçoit un code promo COM-AZO…, son lien personnel de téléchargement et un espace pour suivre les prestataires qu'il recrute.</Text>
               <Text style={styles.fieldLabel}>Nom complet</Text>
               <View style={styles.field}>
                 <TextInput style={styles.fieldInput} value={name} onChangeText={setName} placeholder="Ex. Kossi Adjovi" placeholderTextColor={colors.outline} autoCapitalize="words" maxLength={80} />
@@ -271,10 +273,10 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
               </View>
               <Text style={styles.fieldLabel}>Note (facultatif)</Text>
               <View style={styles.field}>
-                <TextInput style={styles.fieldInput} value={note} onChangeText={setNote} placeholder="Ex. Responsable de quartier" placeholderTextColor={colors.outline} maxLength={300} />
+                <TextInput style={styles.fieldInput} value={note} onChangeText={setNote} placeholder="Ex. Zone Cotonou" placeholderTextColor={colors.outline} maxLength={300} />
               </View>
               <Pressable style={[styles.primary, !canCreate && { opacity: 0.5 }]} disabled={!canCreate} onPress={submitCreate}>
-                {busy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryText}>Créer le parrain</Text>}
+                {busy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.primaryText}>Créer le commercial</Text>}
               </Pressable>
               <Pressable style={styles.cancel} onPress={() => setCreating(false)}>
                 <Text style={styles.cancelText}>Annuler</Text>
@@ -290,7 +292,7 @@ export default function AdminReferralsScreen({ onNavigateTab }: Props) {
           <ScrollView contentContainerStyle={styles.modalWrap} keyboardShouldPersistTaps="handled">
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Rattacher un prestataire</Text>
-              <Text style={styles.modalSub}>Numéro d'un Speeder, d'une agence, d'un livreur express ou d'un coursier déjà inscrit et sans parrain.</Text>
+              <Text style={styles.modalSub}>Numéro d'un Speeder, d'une agence, d'un livreur express ou d'un coursier déjà inscrit et sans commercial.</Text>
               <View style={[styles.field, isValidBeninPhone(attachPhone) && { borderColor: colors.primary }]}>
                 <Text style={styles.prefix}>+229</Text>
                 <TextInput style={styles.fieldInput} value={attachPhone} onChangeText={(v) => setAttachPhone(formatBeninPhoneInput(v))} placeholder="01 XX XX XX XX" placeholderTextColor={colors.outline} keyboardType="phone-pad" maxLength={14} />

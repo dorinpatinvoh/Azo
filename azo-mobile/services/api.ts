@@ -1354,12 +1354,13 @@ export type ReferralOverviewData = {
 
 /** Espace du parrain (`GET /referrals/me`). */
 export type ReferrerSpace = ReferralOverviewData & {
-  referrer: { id: string; code: string; fullName: string | null; createdAt: string };
+  referrer: { id: string; code: string; link: string; fullName: string | null; phone: string; createdAt: string };
 };
 
 export type AdminReferrerRow = {
   id: string;
   code: string;
+  link: string;
   active: boolean;
   note: string | null;
   fullName: string | null;
@@ -1370,7 +1371,7 @@ export type AdminReferrerRow = {
 };
 
 export type AdminReferrerDetail = ReferralOverviewData & {
-  referrer: { id: string; code: string; active: boolean; note: string | null; fullName: string | null; phone: string; createdAt: string };
+  referrer: { id: string; code: string; link: string; active: boolean; note: string | null; fullName: string | null; phone: string; createdAt: string };
 };
 
 export const referralsApi = {
@@ -1380,7 +1381,7 @@ export const referralsApi = {
 export const adminReferralsApi = {
   list: () => api.get<AdminReferrerRow[]>(`${P}/admin/referrals`),
   create: (body: { fullName: string; phone: string; note?: string }) =>
-    api.post<{ id: string; userId: string; code: string; fullName: string; phone: string; active: boolean }>(`${P}/admin/referrals`, body),
+    api.post<{ id: string; userId: string; code: string; link: string; fullName: string; phone: string; active: boolean }>(`${P}/admin/referrals`, body),
   detail: (id: string) => api.get<AdminReferrerDetail>(`${P}/admin/referrals/${id}`),
   update: (id: string, body: { active?: boolean; note?: string }) => api.patch<AdminReferrerDetail>(`${P}/admin/referrals/${id}`, body),
   attach: (id: string, phone: string) => api.post<AdminReferrerDetail>(`${P}/admin/referrals/${id}/attach`, { phone }),

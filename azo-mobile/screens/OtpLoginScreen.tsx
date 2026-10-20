@@ -104,7 +104,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
 
   // « Créer un compte » depuis l'écran du numéro : le profil est choisi avant le numéro et le code, puis le parcours dédié suit
   const [signupMode, setSignupMode] = useState(false);
-  // Code de parrainage (facultatif) saisi à l'inscription d'un prestataire
+  // Code promo du commercial (facultatif) saisi à l'inscription d'un prestataire
   const [referralCode, setReferralCode] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState(["", "", "", ""]);
@@ -239,20 +239,20 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
         await SecureStore.deleteItemAsync("providerType");
       }
 
-      // Compte parrain (créé par l'administrateur) : espace parrain, sans formulaire d'identité
+      // Compte commercial (créé par l'administrateur) : espace commercial, sans formulaire d'identité
       if (response.referrer) {
-        await SecureStore.setItemAsync("userRole", "REFERRER");
+        await SecureStore.setItemAsync("userRole", "COMMERCIAL");
         await SecureStore.deleteItemAsync("providerStatus");
         await SecureStore.deleteItemAsync("providerType");
         await SecureStore.deleteItemAsync(REGISTRATION_PENDING_KEY);
         await SecureStore.setItemAsync("lastLoginPhone", digits).catch(() => undefined);
-        onVerified("REFERRER", null);
+        onVerified("COMMERCIAL", null);
         return;
       }
 
-      // Code de parrainage refusé : l'inscription continue, sans parrain
+      // Code promo refusé : l'inscription continue, sans commercial
       if (response.referralStatus === "INVALID") {
-        notify("Code de parrainage", "Ce code est inconnu ou n'est plus valable. Ton inscription continue sans parrain.");
+        notify("Code promo", "Ce code est inconnu ou n'est plus valable. Ton inscription continue sans commercial.");
       }
 
       // Compte professionnel sans fiche d'identité : on va directement au dossier dédié
@@ -574,18 +574,18 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
 
               {signupMode && accountKind !== "CLIENT" ? (
                 <View style={{ marginBottom: spacing.md }}>
-                  <Text style={styles.label}>Code de parrainage (facultatif)</Text>
+                  <Text style={styles.label}>Code promo du commercial (facultatif)</Text>
                   <TextInput
                     style={styles.nameInput}
                     value={referralCode}
-                    onChangeText={(v) => setReferralCode(v.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 10))}
-                    placeholder="Ex. AZO-7K4M2Q"
+                    onChangeText={(v) => setReferralCode(v.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 14))}
+                    placeholder="Ex. COM-AZO001"
                     placeholderTextColor={colors.outline}
                     autoCapitalize="characters"
                     autoCorrect={false}
-                    maxLength={10}
+                    maxLength={14}
                   />
-                  <Text style={styles.nameHint}>Tu as été recruté par un parrain AZƆ̀ ? Saisis son code.</Text>
+                  <Text style={styles.nameHint}>Un commercial AZƆ̀ t'a parlé d'AZƆ̀ ? Saisis son code promo.</Text>
                 </View>
               ) : null}
               <View style={styles.operatorsRow}>

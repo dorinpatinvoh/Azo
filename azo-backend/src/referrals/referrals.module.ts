@@ -27,7 +27,9 @@ import {
   REFERRAL_KINDS,
   ReferralKind,
   ReferralStatus,
-  generateReferralCode,
+  commercialCode,
+  nextCommercialNumber,
+  referralLink,
   kindOf,
   maskPhone,
   normalizeReferralCode,
@@ -95,12 +97,10 @@ export class ReferralsService {
     return { phone: normalizeBeninPhone(raw), variants: beninPhoneVariants(raw) };
   }
 
-  private async uniqueCode(): Promise<string> {
-    for (let i = 0; i < 10; i++) {
-      const code = generateReferralCode();
-      if (!(await this.prisma.referrer.findUnique({ where: { code }, select: { id: true } }))) return code;
-    }
-    throw new ConflictException("Impossible de générer un code de parrainage, réessaie.");
+  /** Code promo suivant : COM-AZO001, COM-AZO002… (le plus grand numéro déjà attribué + 1 ; la contrainte d'unicité protège d'une création simultanée). */
+  private async nextCode(): Promise<string> {
+    const rows = await this.prisma.referrer.findMany({ select: { code: true } });
+    return commercialCode(nextCommercialNumber(rows.map((r) => r.code)));
   }
 
   /* ------------------------------------------------------------------ inscription d'un filleul */
@@ -254,11 +254,11 @@ export class ReferralsService {
 
   /** Espace du parrain : ses chiffres et ses filleuls (numéros partiellement masqués). */
   async myOverview(userId: string) {
-    const referrer = await this.prisma.referrer.findUnique({ where: { userId }, include: { user: { select: { fullName: true } } } });
-    if (!referrer) throw new ForbiddenException("Ce compte n'est pas un parrain AZƆ̀.");
-    if (!referrer.active) throw new ForbiddenException("Ton compte parrain est désactivé : contacte AZƆ̀.");
+    const referrer = await this.prisma.referrer.findUnique({ where: { userId }, include: { user: { select: { fullName: true, phone: true } } } });
+    if (!referrer) throw new ForbiddenException("Ce compte n'est pas un commercial AZƆ̀.");
+    if (!referrer.active) throw new ForbiddenException("Ton compte commercial est désactivé : contacte AZƆ̀.");
     const data = await this.overview(referrer.id, { maskPhones: true });
-    return { referrer: { id: referrer.id, code: referrer.code, fullName: referrer.user.fullName, createdAt: referrer.createdAt.toISOString() }, ...data };
+    return { referrer: { id: referrer.id, code: referrer.code, link: referralLink(referrer.code), fullName: referrer.user.fullName, phone: referrer.user.phone, createdAt: referrer.createdAt.toISOString() }, ...data };
   }
 
   /* ------------------------------------------------------------------ administration */
@@ -274,17 +274,17 @@ export class ReferralsService {
       where: { phone: { in: variants } },
       select: { id: true, role: true, profileCompletedAt: true, agencyId: true, provider: { select: { id: true } }, referrerProfile: { select: { id: true } } },
     });
-    if (existing?.referrerProfile) throw new ConflictException("Ce numéro est déjà celui d'un parrain.");
+    if (existing?.referrerProfile) throw new ConflictException("Ce numéro est déjà celui d'un commercial.");
     if (existing && (existing.provider || existing.profileCompletedAt || existing.agencyId || existing.role !== "CLIENT")) {
-      throw new ConflictException("Ce numéro a déjà un compte AZƆ̀ (client inscrit ou prestataire) : utilise un autre numéro pour le parrain.");
+      throw new ConflictException("Ce numéro a déjà un compte AZƆ̀ (client inscrit ou prestataire) : utilise un autre numéro pour le commercial.");
     }
 
-    const code = await this.uniqueCode();
+    const code = await this.nextCode();
     const user = existing
       ? await this.prisma.user.update({ where: { id: existing.id }, data: { fullName, firstName, lastName } })
       : await this.prisma.user.create({ data: { phone, fullName, firstName, lastName, wallet: { create: {} } } });
     const referrer = await this.prisma.referrer.create({ data: { userId: user.id, code, note: dto.note?.trim() || null, createdById: adminId } });
-    return { id: referrer.id, userId: user.id, code, fullName, phone: user.phone, active: true };
+    return { id: referrer.id, userId: user.id, code, link: referralLink(code), fullName, phone: user.phone, active: true };
   }
 
   async listReferrers() {
@@ -299,6 +299,7 @@ export class ReferralsService {
         return {
           id: r.id,
           code: r.code,
+          link: referralLink(r.code),
           active: r.active,
           note: r.note,
           fullName: r.user.fullName,
@@ -313,14 +314,14 @@ export class ReferralsService {
 
   async referrerDetail(id: string) {
     const r = await this.prisma.referrer.findUnique({ where: { id }, include: { user: { select: { fullName: true, phone: true } } } });
-    if (!r) throw new NotFoundException("Parrain introuvable");
+    if (!r) throw new NotFoundException("Commercial introuvable");
     const data = await this.overview(r.id, { maskPhones: false });
-    return { referrer: { id: r.id, code: r.code, active: r.active, note: r.note, fullName: r.user.fullName, phone: r.user.phone, createdAt: r.createdAt.toISOString() }, ...data };
+    return { referrer: { id: r.id, code: r.code, link: referralLink(r.code), active: r.active, note: r.note, fullName: r.user.fullName, phone: r.user.phone, createdAt: r.createdAt.toISOString() }, ...data };
   }
 
   async updateReferrer(id: string, dto: UpdateReferrerDto) {
     const r = await this.prisma.referrer.findUnique({ where: { id } });
-    if (!r) throw new NotFoundException("Parrain introuvable");
+    if (!r) throw new NotFoundException("Commercial introuvable");
     await this.prisma.referrer.update({ where: { id }, data: { ...(dto.active !== undefined ? { active: dto.active } : {}), ...(dto.note !== undefined ? { note: dto.note.trim() || null } : {}) } });
     return this.referrerDetail(id);
   }
@@ -328,20 +329,20 @@ export class ReferralsService {
   /** Rattache un prestataire existant (son numéro) à ce parrain. */
   async attach(referrerId: string, dto: AttachDto) {
     const r = await this.prisma.referrer.findUnique({ where: { id: referrerId } });
-    if (!r) throw new NotFoundException("Parrain introuvable");
+    if (!r) throw new NotFoundException("Commercial introuvable");
     const { variants } = this.validPhone(dto.phone);
     const user = await this.prisma.user.findFirst({
       where: { phone: { in: variants } },
       select: { id: true, referrerId: true, signupKind: true, provider: { select: { id: true } }, referrerProfile: { select: { id: true } } },
     });
     if (!user) throw new NotFoundException("Aucun compte avec ce numéro : le prestataire doit d'abord s'inscrire.");
-    if (user.referrerProfile) throw new ConflictException("Ce numéro est celui d'un parrain.");
-    if (user.id === r.userId) throw new ConflictException("Un parrain ne peut pas se parrainer lui-même.");
+    if (user.referrerProfile) throw new ConflictException("Ce numéro est celui d'un commercial.");
+    if (user.id === r.userId) throw new ConflictException("Un commercial ne peut pas se recruter lui-même.");
     if (!user.provider && user.signupKind !== "DRIVER" && user.signupKind !== "COURIER" && user.signupKind !== "AGENCY") {
-      throw new BadRequestException("Seuls les prestataires (Speeder, agence, livreur, coursier) peuvent être parrainés.");
+      throw new BadRequestException("Seuls les prestataires (Speeder, agence, livreur, coursier) peuvent être rattachés à un commercial.");
     }
-    if (user.referrerId === referrerId) throw new ConflictException("Ce prestataire est déjà parrainé par ce parrain.");
-    if (user.referrerId) throw new ConflictException("Ce prestataire a déjà un parrain : retire-le d'abord.");
+    if (user.referrerId === referrerId) throw new ConflictException("Ce prestataire est déjà rattaché à ce commercial.");
+    if (user.referrerId) throw new ConflictException("Ce prestataire a déjà un commercial : retire-le d'abord.");
     await this.prisma.user.update({ where: { id: user.id }, data: { referrerId, referredAt: new Date() } });
     return this.referrerDetail(referrerId);
   }
@@ -349,7 +350,7 @@ export class ReferralsService {
   async detach(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { referrerId: true } });
     if (!user) throw new NotFoundException("Compte introuvable");
-    if (!user.referrerId) throw new BadRequestException("Ce compte n'a pas de parrain.");
+    if (!user.referrerId) throw new BadRequestException("Ce compte n'a pas de commercial.");
     const referrerId = user.referrerId;
     await this.prisma.user.update({ where: { id: userId }, data: { referrerId: null, referredAt: null } });
     return this.referrerDetail(referrerId);
