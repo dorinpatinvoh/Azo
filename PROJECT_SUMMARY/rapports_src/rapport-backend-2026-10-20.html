@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 20 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">20 octobre 2026 · 2 commits de code poussés sur main (<code>77fa4e64</code>, <code>ede1c603</code>) · 32 suites / 370 tests verts</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">20 octobre 2026 · 3 commits de code poussés sur main (<code>77fa4e64</code>, <code>ede1c603</code>, <code>8f00c7d9</code>) · 33 suites / 379 tests verts</span></div>
 
 <h2>1. En résumé</h2>
 <p>Le <b>commercialage</b> : tables, routes administrateur et commercial, rattachement des prestataires à l'inscription. <code>tsc</code> sans erreur. Une migration (une table, deux colonnes).</p>
@@ -58,8 +58,19 @@
 <li>Le numéro d'un commercial doit être neuf : un client inscrit ou un prestataire ne peut pas le devenir.</li>
 </ul>
 
-<h2>7. Commit</h2>
+<h2>7. Connexion administrateur par mot de passe (nouveau)</h2>
+<ul>
+<li><b>Faille corrigée</b> : tant que <code>SMS_PROVIDER</code> valait « simulation », le code 0000 ouvrait n'importe quel compte, administrateur compris. <code>verifyOtp</code> refuse désormais le rôle ADMIN (« Les comptes administrateur se connectent avec leur mot de passe sur la console web »).</li>
+<li><b>Route</b> <code>POST /auth/admin-login</code> <code>{phone, password}</code> : jeton de 12 h, même message d'erreur pour un numéro inconnu, un mauvais mot de passe ou un compte non administrateur, verrouillage après 5 échecs en 15 minutes (en mémoire, par numéro et par adresse), compte bloqué refusé.</li>
+<li><b>Mot de passe</b> : haché avec scrypt (<code>scrypt$16384$sel$hash</code>), colonne <code>User.passwordHash</code> (migration <code>20261020120000_admin_password</code>, une colonne ajoutée). <code>scripts/create-admin.js</code> lit <code>ADMIN_PASSWORD</code> dans l'environnement (10 caractères minimum, lettre et chiffre) et refuse la base distante sans <code>--allow-remote</code>.</li>
+<li><b>CORS</b> : <code>main.ts</code> autorise uniquement les adresses listées dans la variable <code>CORS_ORIGINS</code> (séparées par des virgules). Vérifié après déploiement : l'en-tête <code>access-control-allow-origin</code> renvoie l'adresse de la console.</li>
+<li><b>Tests</b> : <code>test/admin-login.spec.ts</code> (9 tests : hachage, compatibilité script/serveur, force du mot de passe, succès, messages identiques, verrouillage, compte bloqué, numéro invalide, refus de l'administrateur avec le code 0000). Suite complète : <b>379 tests verts</b>, <code>tsc</code> sans erreur.</li>
+<li><b>Production</b> : le serveur répond à <code>/auth/admin-login</code> (essai : « Numéro ou mot de passe incorrect »). <b>Reste à faire par vous</b> : créer le mot de passe du patron sur la vraie base avec <code>create-admin</code>. L'adresse de la base a circulé dans une conversation : <b>changer le mot de passe de la base</b> sur Render et mettre à jour <code>DATABASE_URL</code> du service.</li>
+</ul>
+
+<h2>8. Commits</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>8f00c7d9</code></td><td>Connexion administrateur par mot de passe (migration <code>20261020120000</code>), CORS configurable, console web</td></tr>
 <tr><td><code>ede1c603</code></td><td>Commerciaux : code COM-AZO001, lien personnel, messages</td></tr>
 <tr><td><code>77fa4e64</code></td><td>Commerciaux (commercialage) : migration <code>20261018100000</code>, routes administrateur et commercial, code à l'inscription</td></tr></table>
 </body></html>

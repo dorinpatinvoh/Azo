@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -206,6 +209,15 @@ function isoToFr(iso: string | null): string {
 export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialType, initialVehicle, signupType, signupCategory }: Props) {
   // Le bas de l'écran reste au-dessus de la barre de navigation Android ; boutons plus compacts sur petit écran
   const insets = useSafeAreaInsets();
+  const [keyboardUp, setKeyboardUp] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", () => setKeyboardUp(true));
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardUp(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   const { width: screenWidth } = useWindowDimensions();
   const compact = screenWidth < 360;
   const [loading, setLoading] = useState(true);
@@ -393,7 +405,6 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             businessPhone: form.businessPhone.trim(),
             businessEmail: form.businessEmail.trim(),
             payoutPhone: form.payoutPhone.trim(),
-            ...(form.fleetSize.trim() ? { fleetSize: Number(form.fleetSize) || 0 } : {}),
           }
         : {}),
     };
@@ -658,6 +669,9 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         ))}
       </View>
 
+      {/* « padding » aussi sur Android : les applications Expo récentes n'ajustent plus la fenêtre, le clavier
+          recouvrirait sinon les champs du bas et les boutons. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* ---------------------------------------------------- 0. Activité */}
         {step === 0 && (
@@ -811,7 +825,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             </Text>
 
             {isAgency ? (
-              <>
+              <FormSection icon="badge" title="Représentant légal" hint="Gérant ou Directeur Général, comme sur sa pièce d'identité.">
                 <View style={styles.twoColRow}>
                   <View style={{ flex: 1 }}>
                     <Field
@@ -870,7 +884,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                   maxLength={12}
                   required
                 />
-              </>
+              </FormSection>
             ) : (
               <Field
                 label="Nom complet (comme sur ta pièce d'identité)"
@@ -911,115 +925,109 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         {step === 2 && (
           <View style={{ gap: spacing.md }}>
             <Text style={styles.title}>
-              {isAgency ? "Informations légales & Flotte" : "Ton véhicule"}
+              {isAgency ? "Ton agence" : "Ton véhicule"}
             </Text>
 
             {isAgency ? (
               <>
                 <Text style={styles.muted}>
-                  Renseigne les identifiants officiels de ton entreprise au Bénin (IFU DGI, RCCM GUFE) ainsi que le compte Mobile Money de reversement de l'agence.
+                  Quelques informations sur ton entreprise. Seuls les champs marqués d'une étoile sont obligatoires.
                 </Text>
-                <Field
-                  label="Raison sociale / Nom commercial de l'agence"
-                  value={form.agencyName}
-                  onChangeText={(agencyName) => setForm((f) => ({ ...f, agencyName }))}
-                  placeholder="Ex. Cotonou Flotte Express SARL"
-                  autoCapitalize="words"
-                  required
-                />
 
-                <View style={{ gap: 6 }}>
-                  <Text style={styles.fieldLabel}>Forme juridique</Text>
-                  <View style={styles.chipRow}>
-                    {LEGAL_FORMS.map((lf) => {
-                      const active = form.legalForm === lf;
-                      return (
-                        <Pressable
-                          key={lf}
-                          style={[styles.roleChip, active && styles.roleChipActive]}
-                          onPress={() => setForm((f) => ({ ...f, legalForm: lf }))}
-                        >
-                          <Text style={[styles.roleChipText, active && styles.roleChipTextActive]}>
-                            {lf}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
+                <FormSection icon="business" title="Ton entreprise" hint="Le nom sous lequel ton agence est connue.">
+                  <Field
+                    label="Raison sociale / Nom commercial"
+                    value={form.agencyName}
+                    onChangeText={(agencyName) => setForm((f) => ({ ...f, agencyName }))}
+                    placeholder="Ex. Cotonou Flotte Express SARL"
+                    autoCapitalize="words"
+                    required
+                  />
+                  <View style={{ gap: 6 }}>
+                    <Text style={styles.fieldLabel}>Forme juridique</Text>
+                    <View style={styles.chipRow}>
+                      {LEGAL_FORMS.map((lf) => {
+                        const active = form.legalForm === lf;
+                        return (
+                          <Pressable
+                            key={lf}
+                            style={[styles.roleChip, active && styles.roleChipActive]}
+                            onPress={() => setForm((f) => ({ ...f, legalForm: lf }))}
+                          >
+                            <Text style={[styles.roleChipText, active && styles.roleChipTextActive]}>
+                              {lf}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
+                </FormSection>
 
-                <Field
-                  label="N° IFU de l'entreprise (13 chiffres — DGI Bénin)"
-                  value={form.ifuNumber}
-                  onChangeText={(v) =>
-                    setForm((f) => ({ ...f, ifuNumber: v.replace(/\D/g, "").slice(0, 13) }))
-                  }
-                  placeholder="Ex. 3202410894512"
-                  keyboardType="number-pad"
-                  maxLength={13}
-                  required
-                />
+                <FormSection icon="gavel" title="Identifiants officiels" hint="Ils sont vérifiés par un administrateur AZƆ̀.">
+                  <Field
+                    label="N° IFU (13 chiffres, DGI Bénin)"
+                    value={form.ifuNumber}
+                    onChangeText={(v) =>
+                      setForm((f) => ({ ...f, ifuNumber: v.replace(/\D/g, "").slice(0, 13) }))
+                    }
+                    placeholder="Ex. 3202410894512"
+                    keyboardType="number-pad"
+                    maxLength={13}
+                    required
+                  />
+                  <Field
+                    label="N° RCCM"
+                    value={form.rccmNumber}
+                    onChangeText={(rccmNumber) => setForm((f) => ({ ...f, rccmNumber }))}
+                    placeholder="Ex. RB/COT/24 B 12345"
+                    autoCapitalize="characters"
+                    hint="Registre du Commerce et du Crédit Mobilier"
+                    required
+                  />
+                  <Field
+                    label="Adresse du siège social"
+                    value={form.headquartersAddress}
+                    onChangeText={(headquartersAddress) =>
+                      setForm((f) => ({ ...f, headquartersAddress }))
+                    }
+                    placeholder="Ex. Cotonou, Ganhi, Ilot 412"
+                    hint="Quartier, ilot ou repère"
+                    required
+                  />
+                </FormSection>
 
-                <Field
-                  label="N° RCCM (Registre du Commerce et du Crédit Mobilier)"
-                  value={form.rccmNumber}
-                  onChangeText={(rccmNumber) => setForm((f) => ({ ...f, rccmNumber }))}
-                  placeholder="Ex. RB/COT/24 B 12345"
-                  autoCapitalize="characters"
-                  required
-                />
+                <FormSection icon="call" title="Contact de l'agence" hint="Pour que l'équipe AZƆ̀ puisse te joindre.">
+                  <Field
+                    label="Téléphone de l'agence"
+                    value={form.businessPhone}
+                    onChangeText={(businessPhone) => setForm((f) => ({ ...f, businessPhone }))}
+                    placeholder="Ex. 01 XX XX XX XX"
+                    keyboardType="number-pad"
+                    maxLength={14}
+                    optional
+                  />
+                  <Field
+                    label="Email"
+                    value={form.businessEmail}
+                    onChangeText={(businessEmail) => setForm((f) => ({ ...f, businessEmail }))}
+                    placeholder="Ex. direction@cotonouflotte.bj"
+                    autoCapitalize="none"
+                    optional
+                  />
+                </FormSection>
 
-                <Field
-                  label="Adresse du siège social (Quartier, Ilot / Repère)"
-                  value={form.headquartersAddress}
-                  onChangeText={(headquartersAddress) =>
-                    setForm((f) => ({ ...f, headquartersAddress }))
-                  }
-                  placeholder="Ex. Cotonou, Quartier Ganhi, Ilot 412, Immeuble Marina"
-                  required
-                />
-
-                <View style={styles.twoColRow}>
-                  <View style={{ flex: 1 }}>
-                    <Field
-                      label="Téléphone pro (01...)"
-                      value={form.businessPhone}
-                      onChangeText={(businessPhone) => setForm((f) => ({ ...f, businessPhone }))}
-                      placeholder="Ex. 01 XX XX XX XX"
-                      keyboardType="number-pad"
-                      maxLength={14}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Field
-                      label="Taille du parc (véhicules)"
-                      value={form.fleetSize}
-                      onChangeText={(v) =>
-                        setForm((f) => ({ ...f, fleetSize: v.replace(/\D/g, "").slice(0, 4) }))
-                      }
-                      placeholder="Ex. 15"
-                      keyboardType="number-pad"
-                      maxLength={4}
-                    />
-                  </View>
-                </View>
-
-                <Field
-                  label="Email professionnel de l'agence"
-                  value={form.businessEmail}
-                  onChangeText={(businessEmail) => setForm((f) => ({ ...f, businessEmail }))}
-                  placeholder="Ex. direction@cotonouflotte.bj"
-                  autoCapitalize="none"
-                />
-
-                <Field
-                  label="Compte Mobile Money Entreprise (Reversements MTN / Moov — 01...)"
-                  value={form.payoutPhone}
-                  onChangeText={(payoutPhone) => setForm((f) => ({ ...f, payoutPhone }))}
-                  placeholder="Ex. 01 XX XX XX XX"
-                  keyboardType="number-pad"
-                  maxLength={14}
-                />
+                <FormSection icon="account-balance-wallet" title="Reversements" hint="Le compte Mobile Money qui reçoit l'argent de l'agence.">
+                  <Field
+                    label="Compte Mobile Money (MTN ou Moov)"
+                    value={form.payoutPhone}
+                    onChangeText={(payoutPhone) => setForm((f) => ({ ...f, payoutPhone }))}
+                    placeholder="Ex. 01 XX XX XX XX"
+                    keyboardType="number-pad"
+                    maxLength={14}
+                    optional
+                  />
+                </FormSection>
               </>
             ) : (
               <>
@@ -1117,16 +1125,13 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                   <SummaryRow label="N° RCCM" value={form.rccmNumber || "—"} />
                   <SummaryRow label="Siège social" value={form.headquartersAddress || "—"} />
                   {form.businessPhone.trim() ? (
-                    <SummaryRow label="Téléphone pro" value={form.businessPhone} />
+                    <SummaryRow label="Téléphone" value={form.businessPhone} />
                   ) : null}
                   {form.businessEmail.trim() ? (
-                    <SummaryRow label="Email pro" value={form.businessEmail} />
+                    <SummaryRow label="Email" value={form.businessEmail} />
                   ) : null}
                   {form.payoutPhone.trim() ? (
                     <SummaryRow label="Reversements MoMo" value={form.payoutPhone} />
-                  ) : null}
-                  {form.fleetSize.trim() ? (
-                    <SummaryRow label="Taille du parc" value={`${form.fleetSize} véhicules`} />
                   ) : null}
                   <SummaryRow
                     label="Formule"
@@ -1196,7 +1201,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}>
+      <View style={[styles.footer, { paddingBottom: keyboardUp ? 10 : Math.max(insets.bottom, 12) + 12 }]}>
         <Pressable style={[styles.secondaryBtn, compact && { paddingHorizontal: 14 }]} onPress={goBack} disabled={busy}>
           <Text style={styles.secondaryText}>{step === 0 ? "Quitter" : "Précédent"}</Text>
         </Pressable>
@@ -1214,6 +1219,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
           )}
         </Pressable>
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -1231,12 +1237,15 @@ function Field(props: {
   autoCapitalize?: "none" | "words" | "characters" | "sentences";
   maxLength?: number;
   required?: boolean;
+  optional?: boolean;
+  hint?: string;
 }) {
   return (
     <View style={{ gap: 6 }}>
       <Text style={styles.fieldLabel}>
         {props.label}
         {props.required ? <Text style={styles.requiredStar}> *</Text> : null}
+        {props.optional ? <Text style={styles.optionalTag}>  facultatif</Text> : null}
       </Text>
       <TextInput
         style={styles.input}
@@ -1248,6 +1257,30 @@ function Field(props: {
         autoCapitalize={props.autoCapitalize ?? "sentences"}
         maxLength={props.maxLength}
       />
+      {props.hint ? <Text style={styles.fieldHint}>{props.hint}</Text> : null}
+    </View>
+  );
+}
+
+/** Bloc de formulaire : pastille d'icône, titre et explication courte, puis les champs sur une carte. */
+function FormSection(props: {
+  icon: React.ComponentProps<typeof MaterialIcons>["name"];
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.formSection}>
+      <View style={styles.formSectionHead}>
+        <View style={styles.formSectionIcon}>
+          <MaterialIcons name={props.icon} size={20} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.formSectionTitle}>{props.title}</Text>
+          {props.hint ? <Text style={styles.formSectionHint}>{props.hint}</Text> : null}
+        </View>
+      </View>
+      <View style={{ gap: spacing.md }}>{props.children}</View>
     </View>
   );
 }
@@ -1477,6 +1510,27 @@ const styles = StyleSheet.create({
 
   fieldLabel: { ...typography.labelMd, color: colors.onSurface, fontWeight: "700" },
   requiredStar: { color: colors.error },
+  optionalTag: { ...typography.labelSm, color: colors.outline, fontWeight: "600" },
+  fieldHint: { ...typography.labelSm, color: colors.onSurfaceVariant },
+  formSection: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.surfaceContainer,
+  },
+  formSectionHead: { flexDirection: "row", alignItems: "center", gap: 12 },
+  formSectionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.primaryFixed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  formSectionTitle: { ...typography.labelLg, color: colors.onSurface, fontWeight: "800" },
+  formSectionHint: { ...typography.labelSm, color: colors.onSurfaceVariant, marginTop: 1 },
   twoColRow: {
     flexDirection: "row",
     gap: 10,

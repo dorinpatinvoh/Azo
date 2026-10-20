@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 20 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">20 octobre 2026 · 2 commits de code poussés sur main (<code>77fa4e64</code>, <code>ede1c603</code>)</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) — pour Sergio</p><span class="tag">20 octobre 2026 · 3 commits de code poussés sur main (<code>77fa4e64</code>, <code>ede1c603</code>, <code>8f00c7d9</code>)</span></div>
 
 <h2>1. En résumé</h2>
 <p>Nouveauté : les <b>commerciaux</b> (commercialage). L'administrateur crée des commerciaux ; un prestataire saisit le code de son commercial à l'inscription ; le commercial suit ses recrues dans un espace dédié. Tout compile (<code>tsc</code> sans erreur).</p>
@@ -46,8 +46,19 @@
 <li>Pour un livreur ou un coursier, la « dernière activité » s'appuie sur la date de la commande (une livraison n'a pas d'heure de fin enregistrée).</li>
 </ul>
 
-<h2>6. Commit</h2>
+<h2>6. Console d'administration sur le web (nouveau)</h2>
+<p>Toutes les fonctions de l'administrateur sont reprises sur un <b>site web séparé</b> (dossier <code>admin-web</code>, Vite + React), qui parle à la même API que l'application.</p>
+<ul>
+<li><b>Écrans</b> : tableau de bord ; dossiers des prestataires (pièces visibles, validation pièce par pièce, validation avec dérogation, refus, demande d'information, suspension, rétablissement) ; utilisateurs (recherche, blocage, remise à zéro des notes, NPI) ; finances (résumé, commissions de 15 % avec Speeder et course, retraits à payer ou annuler) ; commerciaux (création, code et lien à copier, rattachement) ; support (réponses, clôture) ; corrections d'identité ; location de voitures ; journal d'audit.</li>
+<li><b>Connexion</b> : numéro + mot de passe (plus de code SMS pour l'administrateur). Session de 12 h, déconnexion automatique si le serveur refuse le jeton.</li>
+<li><b>Hébergement</b> : site statique envoyé sur Cloudflare (adresse en <code>workers.dev</code>), construit avec l'adresse de l'API de production. Aucun secret dans le site.</li>
+<li><b>Sur l'application mobile</b> : les écrans administrateur existent encore, mais la connexion administrateur par code SMS est refusée (voir rapport backend). Leur retrait est à décider.</li>
+<li><b>Vérifié</b> dans un vrai navigateur sur une base jetable (26 vérifications sur 26, captures d'écran). <b>Non vérifié</b> : usage réel sur la production avec le vrai mot de passe.</li>
+</ul>
+
+<h2>7. Commits</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>8f00c7d9</code></td><td>Console d'administration web + connexion administrateur par mot de passe</td></tr>
 <tr><td><code>ede1c603</code></td><td>Les parrains deviennent des commerciaux : code COM-AZO001, lien personnel, espace à 4 onglets, code et lien visibles de l'administrateur</td></tr>
 <tr><td><code>77fa4e64</code></td><td>Commerciaux (commercialage) : onglet Commerciaux (admin), espace commercial, code à l'inscription</td></tr></table>
 </body></html>

@@ -80,15 +80,15 @@ export const REQUIRED_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   // Spider et conducteurs : plus de permis ni de visite technique à l'inscription ; photo de profil obligatoire.
   DRIVER: ["CNI", "SELFIE", "PROFILE_PHOTO", "CARTE_GRISE", "ASSURANCE", "PHOTO_VEHICULE"],
   COURIER: ["CNI", "SELFIE", "PROFILE_PHOTO", "PERMIS", "PHOTO_VEHICULE"],
-  // Agences : logo obligatoire.
-  AGENCY: ["CNI", "LOGO", "RCCM", "IFU", "STATUTS"],
+  // Agences : logo obligatoire ; ni statuts de la société ni casier judiciaire demandés.
+  AGENCY: ["CNI", "LOGO", "RCCM", "IFU"],
   ARTISAN: ["CNI", "SELFIE"],
 };
 
 export const OPTIONAL_DOCUMENTS: Record<ProviderType, DocumentKind[]> = {
   DRIVER: ["EXTRAIT_CASIER"],
   COURIER: ["CARTE_GRISE", "ASSURANCE", "EXTRAIT_CASIER"],
-  AGENCY: ["EXTRAIT_CASIER"], // facultatif, en dernier dans la liste
+  AGENCY: [],
   ARTISAN: ["EXTRAIT_CASIER"],
 };
 
