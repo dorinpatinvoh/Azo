@@ -1,7 +1,8 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Post, Req } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { RequestOtpDto } from "./dto/request-otp.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
+import { AdminLoginDto } from "./dto/admin-login.dto";
 
 @Controller("auth")
 export class AuthController {
@@ -17,5 +18,11 @@ export class AuthController {
   @Post("verify-otp")
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.auth.verifyOtp(dto.phone, dto.code, dto.profile, dto.referralCode);
+  }
+
+  // POST /auth/admin-login { phone, password } — console web administrateur (mot de passe, sans SMS)
+  @Post("admin-login")
+  adminLogin(@Body() dto: AdminLoginDto, @Req() req: { ip?: string }) {
+    return this.auth.adminLogin(dto.phone, dto.password, req.ip ?? "");
   }
 }

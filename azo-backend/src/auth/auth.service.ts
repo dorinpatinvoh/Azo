@@ -5,8 +5,13 @@ import { ProvidersService } from "../providers/providers.module";
 import { beninPhoneVariants, extractLocalBeninDigits, normalizeBeninPhone } from "../common/phone";
 import { toUserProfile } from "../common/registration-profile";
 import { ReferralsService } from "../referrals/referrals.module";
+import { verifyPassword } from "../common/password";
 
 const MAX_OTP_REQUESTS_WINDOW = 15;
+const ADMIN_MAX_FAILURES = 5;
+const ADMIN_LOCK_WINDOW_MS = 15 * 60 * 1000;
+// Empreinte factice (mot de passe inconnu) pour que la durée de réponse ne révèle pas si le compte existe
+const DUMMY_HASH = "scrypt$16384$00000000000000000000000000000000$" + "00".repeat(64);
 const OTP_WINDOW_MS = 10 * 60 * 1000; // 10 min
 export const OTP_TTL_MS = 60 * 1000; // un code de connexion est valable 1 minute
 export const MAX_VERIFY_ATTEMPTS = 3; // codes erronés tolérés par numéro...
@@ -171,6 +176,44 @@ export class AuthService {
     });
   }
 
+  /** Échecs de connexion administrateur récents, par numéro et par adresse (en mémoire : redémarrage = remise à zéro). */
+  private adminFailures = new Map<string, number[]>();
+
+  private adminLockedFor(keys: string[], now: number): number {
+    let wait = 0;
+    for (const key of keys) {
+      const recent = (this.adminFailures.get(key) ?? []).filter((t) => now - t < ADMIN_LOCK_WINDOW_MS);
+      this.adminFailures.set(key, recent);
+      if (recent.length >= ADMIN_MAX_FAILURES) wait = Math.max(wait, ADMIN_LOCK_WINDOW_MS - (now - recent[0]));
+    }
+    return wait;
+  }
+
+  /**
+   * Connexion de la console web administrateur : numéro + mot de passe. Au plus 5 échecs en 15 minutes par numéro (et 20 par adresse) ;
+   * la même réponse « identifiants incorrects » que le compte existe ou non. Le jeton dure 12 heures.
+   */
+  async adminLogin(rawPhone: string, password: string, ip: string) {
+    const { variants, phone } = this.assertValidBeninPhone(rawPhone);
+    const keys = [`phone:${phone}`, `ip:${ip || "?"}`];
+    const now = Date.now();
+    const wait = this.adminLockedFor(keys, now);
+    if (wait > 0) {
+      throw new ForbiddenException(`Trop de tentatives. Réessaie dans ${Math.max(1, Math.ceil(wait / 60000))} minute(s).`);
+    }
+    const user = await this.prisma.user.findFirst({ where: { phone: { in: variants } }, orderBy: { createdAt: "asc" } });
+    // Même durée de calcul qu'un compte existant : on vérifie toujours une empreinte
+    const ok = verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || user.role !== "ADMIN" || !user.passwordHash || !ok) {
+      for (const key of keys) this.adminFailures.set(key, [...(this.adminFailures.get(key) ?? []), now]);
+      throw new ForbiddenException("Numéro ou mot de passe incorrect.");
+    }
+    if (user.status === "BLOCKED") throw new ForbiddenException("Compte suspendu.");
+    for (const key of keys) this.adminFailures.delete(key);
+    const token = await this.jwt.signAsync({ sub: user.id, role: user.role, phone: user.phone }, { expiresIn: "12h" });
+    return { token, user: { id: user.id, phone: user.phone, fullName: user.fullName, role: user.role } };
+  }
+
   async verifyOtp(rawPhone: string, code: string, profile?: string, referralCode?: string) {
     const { phone, variants } = this.assertValidBeninPhone(rawPhone);
 
@@ -198,6 +241,12 @@ export class AuthService {
 
     if (user.status === "BLOCKED") {
       throw new ForbiddenException("Compte suspendu par AZƆ̀ : contacte le support pour le réactiver");
+    }
+
+    // Un compte administrateur ne s'ouvre pas avec le code de simulation (0000 ou code affiché par l'API) : tant que les SMS réels
+    // ne sont pas branchés, il se connecte par mot de passe sur la console web.
+    if (user.role === "ADMIN" && process.env.SMS_PROVIDER !== "live") {
+      throw new ForbiddenException("Les comptes administrateur se connectent avec leur mot de passe sur la console web.");
     }
 
     // Le profil déclaré à l'inscription ouvre un BROUILLON de dossier prestataire :

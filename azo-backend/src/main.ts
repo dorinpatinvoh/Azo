@@ -6,7 +6,10 @@ import { HttpExceptionFilter } from "./common/http-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors(); // autorise l'app mobile à appeler l'API
+  // CORS : l'application mobile n'est pas concernée (appels natifs). Pour les sites web (console administrateur), CORS_ORIGINS liste les
+  // adresses autorisées, séparées par des virgules (ex. https://admin.angidsnpro.com) ; absente, tout site est accepté (comportement historique).
+  const origins = (process.env.CORS_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean);
+  app.enableCors(origins.length ? { origin: origins } : undefined);
 
   // Augmente la taille maximale des corps JSON pour accepter les photos KYC en base64
   // (contourne le bug multipart de React Native Android sur certains téléphones).
