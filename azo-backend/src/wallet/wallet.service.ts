@@ -1,5 +1,5 @@
 import { NotificationsService } from "../notifications/notifications.module";
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PricingService } from "../pricing/pricing.service";
 import { FedaPayService } from "./fedapay.service";
@@ -53,11 +53,19 @@ export class WalletService {
     // Repli si l'utilisateur n'a pas d'e-mail (inscription par téléphone uniquement).
     const safeEmail = email || `${userId}@azo.placeholder`;
 
-    const { transaction, token } = await this.fedaPay.createTransaction(
-      amount,
-      safeEmail,
-      `Recharge AZO ${amount} FCFA`,
-    );
+    let created: Awaited<ReturnType<FedaPayService["createTransaction"]>>;
+    try {
+      created = await this.fedaPay.createTransaction(amount, safeEmail, `Recharge AZO ${amount} FCFA`);
+    } catch (e) {
+      // Cause réelle dans les logs (jamais de clé), message clair pour l'utilisateur au lieu d'une erreur 500 muette.
+      const detail = String((e as { message?: string })?.message ?? e).slice(0, 300);
+      const errors = JSON.stringify((e as { errors?: unknown })?.errors ?? "").slice(0, 300);
+      new Logger("WalletService").error(`FedaPay a refusé la recharge de ${amount} FCFA : ${detail} ${errors}`);
+      throw new BadRequestException(
+        `Le service de paiement a refusé cette recharge de ${amount.toLocaleString("fr-FR")} FCFA (${detail}). Essaie un montant plus petit ou réessaie dans un instant.`
+      );
+    }
+    const { transaction, token } = created;
     const wallet = await this.getWallet(userId);
     // La transaction est enregistrée comme CREDIT PENDING (et non DEBIT) pour qu'elle
     // apparaisse correctement dans l'historique : c'est un crédit attendu, pas une dépense.
