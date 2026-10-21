@@ -213,8 +213,8 @@ export class AdminService {
   }
 
   /** Supprime (ou anonymise, s'il a un historique) un compte client. Voir client-deletion.ts pour les règles. */
-  deleteClient(adminId: string, userId: string) {
-    return deleteClientAccount(this.prisma, adminId, userId);
+  deleteClient(adminId: string, userId: string, settleBalance = false) {
+    return deleteClientAccount(this.prisma, adminId, userId, { settleBalance });
   }
 
   async getUserNpi(adminId: string, userId: string) {
@@ -325,10 +325,10 @@ export class AdminController {
     return this.svc.resetRatings(u.userId, id);
   }
 
-  // DELETE /admin/users/:id — supprime un compte client (anonymisé s'il a un historique)
+  // DELETE /admin/users/:id[?settle=1] — supprime un compte client (anonymisé s'il a un historique) ; settle=1 remet son solde à zéro
   @Delete("users/:id")
-  deleteClient(@CurrentUser() u, @Param("id") id: string) {
-    return this.svc.deleteClient(u.userId, id);
+  deleteClient(@CurrentUser() u, @Param("id") id: string, @Query("settle") settle?: string) {
+    return this.svc.deleteClient(u.userId, id, settle === "1");
   }
 
   @Post("users/:id/status")
