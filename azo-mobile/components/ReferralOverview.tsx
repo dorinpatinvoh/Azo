@@ -97,13 +97,11 @@ type ListProps = {
   onKindChange: (kind: ReferralKind | "ALL") => void;
   status: StatusFilter;
   onStatusChange: (status: StatusFilter) => void;
-  /** Administrateur : bouton pour retirer une recrue de ce commercial. */
-  onDetach?: (item: ReferralItem) => void;
   /** Version réduite (accueil) : sans filtres ni compteur. */
   compact?: boolean;
 };
 
-export function ReferralList({ data, kind, onKindChange, status, onStatusChange, onDetach, compact }: ListProps) {
+export function ReferralList({ data, kind, onKindChange, status, onStatusChange, compact }: ListProps) {
   const { referrals } = data;
   const filtered = useMemo(
     () =>
@@ -147,20 +145,8 @@ export function ReferralList({ data, kind, onKindChange, status, onStatusChange,
           <Text style={styles.emptyText}>{referrals.length === 0 ? "Aucune recrue pour le moment." : "Aucune recrue dans cette vue."}</Text>
         </View>
       ) : (
-        filtered.map((r) => <Row key={r.userId} item={r} onDetach={onDetach} />)
+        filtered.map((r) => <Row key={r.userId} item={r} />)
       )}
-    </View>
-  );
-}
-
-/** Chiffres puis liste (console administrateur). */
-export default function ReferralOverview({ data, onDetach }: { data: ReferralOverviewData; onDetach?: (item: ReferralItem) => void }) {
-  const [status, setStatus] = useState<StatusFilter>("ALL");
-  const [kind, setKind] = useState<ReferralKind | "ALL">("ALL");
-  return (
-    <View style={{ gap: spacing.md }}>
-      <ReferralSummary data={data} kind={kind} onSelectKind={setKind} />
-      <ReferralList data={data} kind={kind} onKindChange={setKind} status={status} onStatusChange={setStatus} onDetach={onDetach} />
     </View>
   );
 }
@@ -174,7 +160,7 @@ function Stat({ value, label, color }: { value: number; label: string; color?: s
   );
 }
 
-function Row({ item: r, onDetach }: { item: ReferralItem; onDetach?: (item: ReferralItem) => void }) {
+function Row({ item: r }: { item: ReferralItem }) {
   const st = STATUS_INFO[r.status];
   const k = r.kind ? KIND_INFO[r.kind] : null;
   return (
@@ -207,12 +193,6 @@ function Row({ item: r, onDetach }: { item: ReferralItem; onDetach?: (item: Refe
             : "N'a jamais rechargé son compte"}
         </Text>
       </View>
-      {onDetach ? (
-        <Pressable style={styles.detach} onPress={() => onDetach(r)} accessibilityRole="button">
-          <MaterialIcons name="link-off" size={16} color={colors.error} />
-          <Text style={styles.detachText}>Retirer de ce commercial</Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -250,6 +230,4 @@ const styles = StyleSheet.create({
   pillText: { ...typography.labelSm, fontWeight: "800" },
   facts: { gap: 2 },
   fact: { ...typography.bodySm, color: colors.onSurfaceVariant },
-  detach: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingVertical: 4 },
-  detachText: { ...typography.labelMd, color: colors.error, fontWeight: "700" },
 });

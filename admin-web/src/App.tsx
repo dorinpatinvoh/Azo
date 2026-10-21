@@ -25,6 +25,31 @@ function useHash() {
   return { page: parts[0] ?? "tableau-de-bord", id: parts[1] ?? null };
 }
 
+const COMPANY = "ANGI DSN PRO";
+
+/** Sur téléphone, un tableau devient une liste de cartes : chaque cellule reprend le titre de sa colonne (data-label). */
+function useTableLabels(ref: React.RefObject<HTMLElement>) {
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const label = () => {
+      root.querySelectorAll("table").forEach((table) => {
+        const heads = Array.from(table.querySelectorAll("thead th")).map((th) => (th.textContent ?? "").trim());
+        if (!heads.length) return;
+        table.querySelectorAll("tbody tr").forEach((tr) => {
+          Array.from(tr.children).forEach((td, i) => {
+            if (heads[i] && td.getAttribute("data-label") !== heads[i]) td.setAttribute("data-label", heads[i]);
+          });
+        });
+      });
+    };
+    label();
+    const obs = new MutationObserver(label);
+    obs.observe(root, { childList: true, subtree: true });
+    return () => obs.disconnect();
+  }, [ref]);
+}
+
 const NAV: { key: string; label: string; icon: string }[] = [
   { key: "tableau-de-bord", label: "Tableau de bord", icon: "📊" },
   { key: "dossiers", label: "Dossiers", icon: "🛡️" },
@@ -62,6 +87,7 @@ function Login({ onLogged }: { onLogged: (token: string, admin: Admin) => void }
     <div className="login">
       <form className="card" onSubmit={submit}>
         <h1>AZƆ̀</h1>
+        <div className="company">{COMPANY}</div>
         <p className="muted" style={{ marginTop: 0 }}>Console administrateur</p>
         <ErrorBox error={error} />
         <Field label="Numéro de téléphone" hint="10 chiffres, commençant par 01">
@@ -84,6 +110,8 @@ function Shell({ admin, onLogout }: { admin: Admin; onLogout: () => void }) {
   const { page, id } = useHash();
   const [open, setOpen] = useState(false);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const mainRef = React.useRef<HTMLElement>(null);
+  useTableLabels(mainRef);
 
   const refreshCounts = useCallback(async () => {
     const [stats, tickets, corr] = await Promise.allSettled([
@@ -124,7 +152,7 @@ function Shell({ admin, onLogout }: { admin: Admin; onLogout: () => void }) {
       {open ? <div className="scrim" onClick={() => setOpen(false)} /> : null}
       <aside className={`side ${open ? "open" : ""}`}>
         <div className="brand">
-          <span>AZƆ̀<small>Console admin</small></span>
+          <span>AZƆ̀<small>{COMPANY}</small></span>
         </div>
         <nav className="nav">
           {NAV.map((n) => (
@@ -137,6 +165,7 @@ function Shell({ admin, onLogout }: { admin: Admin; onLogout: () => void }) {
         </nav>
         <div className="spacer" />
         <div className="who">
+          <div className="whoco">{COMPANY}</div>
           <b>{admin.fullName ?? "Administrateur"}</b>
           {formatPhone(admin.phone)}
           <div style={{ marginTop: 10 }}>
@@ -147,9 +176,9 @@ function Shell({ admin, onLogout }: { admin: Admin; onLogout: () => void }) {
       <div>
         <div className="topbar">
           <button className="btn ghost sm" onClick={() => setOpen(true)} aria-label="Ouvrir le menu">☰ Menu</button>
-          <b>AZƆ̀ · Console admin</b>
+          <b>AZƆ̀ · {COMPANY}</b>
         </div>
-        <main className="main">{content}</main>
+        <main className="main" ref={mainRef}>{content}</main>
       </div>
     </div>
   );

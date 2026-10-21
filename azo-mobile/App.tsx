@@ -17,7 +17,6 @@ import LanguageScreen from "./screens/LanguageScreen";
 import PersonalInfoScreen from "./screens/PersonalInfoScreen";
 import HelpScreen from "./screens/HelpScreen";
 import SupportScreen from "./screens/SupportScreen";
-import AdminSupportScreen from "./screens/AdminSupportScreen";
 import MessagesScreen from "./screens/MessagesScreen";
 import { clearAvatar } from "./utils/avatar";
 import { useOfferWatcher } from "./hooks/useOfferWatcher";
@@ -40,19 +39,15 @@ import ProfileScreen from "./screens/ProfileScreen";
 import DriverHomeScreen from "./screens/DriverHomeScreen";
 import CourierHomeScreen from "./screens/CourierHomeScreen";
 import AgencyDashboardScreen from "./screens/AgencyDashboardScreen";
-import AdminDashboardScreen from "./screens/AdminDashboardScreen";
-import AdminFinanceScreen from "./screens/AdminFinanceScreen";
 import PersonalCourierScreen from "./screens/PersonalCourierScreen";
 import { POPULAR_PLACES } from "./config/quickPlaces";
 import type { QuickKind } from "./screens/HomeScreen";
-import type { AdminTab } from "./components/AdminTabBar";
 import MarketplaceEscrowScreen from "./screens/MarketplaceEscrowScreen";
 import NotificationsScreen from "./screens/NotificationsScreen";
 import DevMenuScreen, { ScreenId } from "./screens/DevMenuScreen";
 import ProviderOnboardingScreen from "./screens/ProviderOnboardingScreen";
 import ProviderStatusScreen from "./screens/ProviderStatusScreen";
-import AdminProvidersScreen from "./screens/AdminProvidersScreen";
-import AdminReferralsScreen from "./screens/AdminReferralsScreen";
+import AdminOnWebScreen from "./screens/AdminOnWebScreen";
 import CommercialHomeScreen from "./screens/CommercialHomeScreen";
 import {
   getToken,
@@ -87,11 +82,11 @@ type Route = ScreenId | "menu";
 
 /* ---------- Navigation : historique et reprise ---------- */
 // Écrans d'entrée / racines : y aller efface l'historique (on repart de zéro) et on ne revient jamais « en arrière » vers eux.
-const ROOT_ROUTES = new Set<Route>(["admin-finance", "admin-support", "admin-referrals", "commercial-home", "home", "splash", "otp", "assist-offer", "language", "driver-home", "courier-home", "agency-dashboard", "admin-providers", "admin-dashboard"]);
+const ROOT_ROUTES = new Set<Route>(["admin-on-web", "commercial-home", "home", "splash", "otp", "assist-offer", "language", "driver-home", "courier-home", "agency-dashboard"]);
 // Écrans d'entrée (onboarding, connexion) : jamais empilés dans l'historique
 const ENTRY_ROUTES = new Set<Route>(["splash", "otp", "assist-offer", "language"]);
 // Écrans du client où le bouton retour (et le bouton retour du téléphone) ramène à la page précédente
-const BACK_ROUTES = new Set<Route>(["courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "delivery", "personal-courier", "rental", "marketplace", "provider-onboarding", "provider-status", "admin-support"]);
+const BACK_ROUTES = new Set<Route>(["courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "delivery", "personal-courier", "rental", "marketplace", "provider-onboarding", "provider-status"]);
 // Écrans retrouvés à la reconnexion (ceux qui n'ont besoin d'aucun état en mémoire : pas de course en cours, etc.)
 const RESTORABLE_ROUTES = new Set<Route>(["provider-onboarding", "provider-status", "courses", "wallet", "profile", "profile-info", "messages", "notifications", "help", "support", "delivery", "personal-courier", "rental", "marketplace"]);
 const clientRoutesSet = new Set<Route>(["home", "courses", "wallet", "profile", "profile-info", "help", "support", "messages", "notifications", "ride-request", "ride-tracking", "ride-rating", "delivery", "personal-courier", "rental", "marketplace", "provider-onboarding", "provider-status"]);
@@ -108,8 +103,8 @@ function routeFor(
   const normRole = (role || "").toUpperCase().trim();
   const normType = (providerType || "").toUpperCase().trim();
   switch (normRole) {
-    case "ADMIN":
-      return "admin-providers";
+    case "ADMIN": // l'administration se fait sur la console web
+      return "admin-on-web";
     case "REFERRER": // ancien nom enregistré par les premières versions
     case "COMMERCIAL":
       return "commercial-home";
@@ -308,12 +303,6 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
     setRoute(r);
   }, []);
 
-  /** Barre du bas de l'administrateur : un onglet = un écran. */
-  const goToAdminTab = useCallback(
-    (tab: AdminTab) => goTo(tab === "providers" ? "admin-providers" : tab === "dashboard" ? "admin-dashboard" : tab === "finance" ? "admin-finance" : tab === "referrals" ? "admin-referrals" : "admin-support"),
-    [goTo]
-  );
-
   /** Retour : dernière page visitée (jamais la page actuelle), sinon l'accueil. */
   const goBack = useCallback((fallback: Route = "home") => {
     const current = routeRef.current;
@@ -386,8 +375,8 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
 
       // Sans course : l'écran du sujet
       if (type === "payment" || event.startsWith("wallet-") || event.startsWith("agency-fund") || event.startsWith("agency-withdraw")) goTo("wallet");
-      else if (type === "support") goTo(role === "ADMIN" ? "admin-support" : "support");
-      else if (type.startsWith("PROVIDER_") || event.startsWith("provider-")) goTo(role === "ADMIN" ? "admin-providers" : "provider-status");
+      else if (type === "support") goTo("support");
+      else if (type.startsWith("PROVIDER_") || event.startsWith("provider-")) goTo("provider-status");
       else if (type === "AGENCY") goTo(role === "AGENCY" ? "agency-dashboard" : workspace);
       else if (type === "security") goTo("profile-info");
       else if (type === "ride" || type === "chat" || type === "DELIVERY") goTo("courses");
@@ -798,9 +787,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
 
         {route === "help" && <HelpScreen onBack={() => goBack("profile")} onOpenSupport={() => goTo("support")} />}
         {route === "support" && <SupportScreen onBack={() => goBack()} />}
-        {route === "admin-support" && <AdminSupportScreen onBack={() => goTo("admin-providers")} onNavigateTab={goToAdminTab} />}
-        {route === "admin-finance" && <AdminFinanceScreen onNavigateTab={goToAdminTab} />}
-        {route === "admin-referrals" && <AdminReferralsScreen onNavigateTab={goToAdminTab} />}
+        {route === "admin-on-web" && <AdminOnWebScreen onLogout={handleLogout} />}
         {route === "commercial-home" && <CommercialHomeScreen onLogout={handleLogout} />}
 
         {route === "messages" && (
@@ -842,15 +829,6 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
           />
         )}
 
-        {route === "admin-providers" && (
-          <AdminProvidersScreen
-            onBack={handleLogout}
-            onOpenDashboard={() => goTo("admin-dashboard")}
-            onOpenSupport={() => goTo("admin-support")}
-            onNavigateTab={goToAdminTab}
-          />
-        )}
-
         {route === "driver-home" && (
           <DriverHomeScreen
             onLogout={handleLogout}
@@ -880,14 +858,6 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
             onOpenWallet={() => goTo("wallet")}
             onOpenSupport={() => goTo("support")}
             onOpenInfo={() => goTo("profile-info")}
-          />
-        )}
-
-        {route === "admin-dashboard" && (
-          <AdminDashboardScreen
-            onBack={() => goTo("admin-providers")}
-            onOpenProviders={() => goTo("admin-providers")}
-            onNavigateTab={goToAdminTab}
           />
         )}
 

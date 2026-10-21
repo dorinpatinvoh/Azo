@@ -843,13 +843,6 @@ export const supportApi = {
   list: () => api.get<{ tickets: SupportTicketSummary[] }>(`${P}/support/tickets`),
   get: (id: string) => api.get<SupportTicket>(`${P}/support/tickets/${id}`),
   reply: (id: string, text: string) => api.post<SupportMessage>(`${P}/support/tickets/${id}/messages`, { text }),
-  admin: {
-    list: (status?: SupportStatus) =>
-      api.get<{ tickets: SupportTicketSummary[] }>(`${P}/admin/support/tickets${status ? `?status=${status}` : ""}`),
-    get: (id: string) => api.get<SupportTicket>(`${P}/admin/support/tickets/${id}`),
-    reply: (id: string, text: string) => api.post<SupportMessage>(`${P}/admin/support/tickets/${id}/reply`, { text }),
-    close: (id: string) => api.post<{ id: string; status: SupportStatus }>(`${P}/admin/support/tickets/${id}/close`),
-  },
 };
 
 export const rentalApi = {
@@ -1216,94 +1209,6 @@ export const agenciesApi = {
 
 /* ==================== TABLEAU DE BORD ADMINISTRATEUR ==================== */
 
-export type AdminGlobalStats = {
-  users: number;
-  rides: number;
-  completedRides: number;
-  deliveries?: number;
-  completedDeliveries?: number;
-  commissionsRevenue: number;
-  agencies: number;
-  providersPending?: number;
-  providersApproved?: number;
-  blockedUsers?: number;
-};
-
-/** Gains de l'entreprise (calculés par le serveur) et montant disponible au retrait. */
-export type AdminFinanceSummary = {
-  currency: string;
-  sources: { key: string; label: string; total: number; thisMonth: number }[];
-  total: number;
-  thisMonth: number;
-  months: { month: string; total: number }[];
-  withdrawn: number;
-  pendingWithdrawals: number;
-  paidWithdrawals: number;
-  available: number;
-  minWithdrawal: number;
-};
-
-/** Commission de l'entreprise sur une course ou une livraison terminée. */
-export type AdminCommissionRow = {
-  kind: "RIDE" | "DELIVERY" | "PERSONAL";
-  id: string;
-  ref: string;
-  date: string;
-  who: string | null;
-  vehicle: string | null;
-  amount: number;
-  commission: number;
-  pct: number;
-  /** Détail de la course (renvoyé par le serveur depuis le 17/10/2026) */
-  driverName?: string | null;
-  driverPhone?: string | null;
-  agencyName?: string | null;
-  independent?: boolean;
-  clientName?: string | null;
-  clientPhone?: string | null;
-  origin?: string | null;
-  dest?: string | null;
-  distanceKm?: number | null;
-};
-
-export type AdminCompanyWithdrawal = {
-  id: string;
-  amount: number;
-  phone: string;
-  method: string | null;
-  note: string | null;
-  status: "REQUESTED" | "PAID" | "CANCELLED";
-  reference: string | null;
-  paidAt: string | null;
-  createdAt: string;
-};
-
-export type AdminUserItem = {
-  id: string;
-  phone: string;
-  fullName: string | null;
-  role: string;
-  status: "ACTIVE" | "PENDING_VALIDATION" | "BLOCKED";
-  createdAt: string;
-  wallet?: { balance: number } | null;
-  provider?: { id: string; type: ProviderType; status: ProviderStatus; kycScore: number } | null;
-  agency?: { id: string; name: string; plan: string } | null;
-};
-
-export type AdminAuditEvent = {
-  id: string;
-  type: string;
-  comment: string | null;
-  actorId: string | null;
-  createdAt: string;
-  provider: {
-    id: string;
-    type: ProviderType;
-    name: string;
-    phone: string;
-  };
-};
-
 /* ==================== PARRAINAGE ==================== */
 
 export type ReferralKind = "SPEEDER" | "AGENCE" | "COURSIER_PERSONNEL" | "LIVREUR_EXPRESS";
@@ -1357,127 +1262,10 @@ export type ReferrerSpace = ReferralOverviewData & {
   referrer: { id: string; code: string; link: string; fullName: string | null; phone: string; createdAt: string };
 };
 
-export type AdminReferrerRow = {
-  id: string;
-  code: string;
-  link: string;
-  active: boolean;
-  note: string | null;
-  fullName: string | null;
-  phone: string;
-  createdAt: string;
-  totals: ReferralKindSummary;
-  byKind: Record<ReferralKind, ReferralKindSummary>;
-};
-
-export type AdminReferrerDetail = ReferralOverviewData & {
-  referrer: { id: string; code: string; link: string; active: boolean; note: string | null; fullName: string | null; phone: string; createdAt: string };
-};
-
 export const referralsApi = {
   me: () => api.get<ReferrerSpace>(`${P}/referrals/me`),
 };
 
-export const adminReferralsApi = {
-  list: () => api.get<AdminReferrerRow[]>(`${P}/admin/referrals`),
-  create: (body: { fullName: string; phone: string; note?: string }) =>
-    api.post<{ id: string; userId: string; code: string; link: string; fullName: string; phone: string; active: boolean }>(`${P}/admin/referrals`, body),
-  detail: (id: string) => api.get<AdminReferrerDetail>(`${P}/admin/referrals/${id}`),
-  update: (id: string, body: { active?: boolean; note?: string }) => api.patch<AdminReferrerDetail>(`${P}/admin/referrals/${id}`, body),
-  attach: (id: string, phone: string) => api.post<AdminReferrerDetail>(`${P}/admin/referrals/${id}/attach`, { phone }),
-  detach: (userId: string) => api.delete<AdminReferrerDetail>(`${P}/admin/referrals/referral/${userId}`),
-};
-
-export const adminApi = {
-  stats: () => api.get<AdminGlobalStats>(`${P}/admin/stats`),
-  users: (params: { q?: string; role?: string } = {}) => {
-    const qs = new URLSearchParams();
-    if (params.q) qs.set("q", params.q);
-    if (params.role) qs.set("role", params.role);
-    const query = qs.toString();
-    return api.get<AdminUserItem[]>(`${P}/admin/users${query ? `?${query}` : ""}`);
-  },
-  setUserStatus: (userId: string, status: "ACTIVE" | "BLOCKED", reason?: string) =>
-    api.post<AdminUserItem>(`${P}/admin/users/${userId}/status`, {
-      status,
-      ...(reason ? { reason } : {}),
-    }),
-  auditLog: () => api.get<AdminAuditEvent[]>(`${P}/admin/audit-log`),
-  /** Finances de l'entreprise : gains par source et par mois, retraits, disponible. */
-  financeSummary: () => api.get<AdminFinanceSummary>(`${P}/admin/finance`),
-  withdrawals: () => api.get<AdminCompanyWithdrawal[]>(`${P}/admin/finance/withdrawals`),
-  /** Commission prélevée sur chaque course et livraison (montant, pourcentage, somme). */
-  commissions: (limit = 50) => api.get<AdminCommissionRow[]>(`${P}/admin/finance/commissions?limit=${limit}`),
-  requestWithdrawal: (body: { amount: number; phone: string; method?: string; note?: string }) =>
-    api.post<AdminCompanyWithdrawal>(`${P}/admin/finance/withdrawals`, body),
-  markWithdrawalPaid: (id: string, reference?: string) =>
-    api.post<AdminCompanyWithdrawal>(`${P}/admin/finance/withdrawals/${id}/paid`, { ...(reference ? { reference } : {}) }),
-  cancelWithdrawal: (id: string) => api.post<AdminCompanyWithdrawal>(`${P}/admin/finance/withdrawals/${id}/cancel`),
-};
-
 /* ---- Console administrateur (validation des dossiers) ---- */
 
-export type AdminProviderItem = ProviderDossier & {
-  user: {
-    id: string;
-    phone: string;
-    fullName: string | null;
-    role: string;
-    status: string;
-    createdAt: string;
-  };
-};
-
-export type AdminProviderQueue = {
-  items: AdminProviderItem[];
-  total: number;
-  page: number;
-  perPage: number;
-  pages: number;
-  counts: Record<string, number>;
-};
-
-export type AdminProviderDetail = AdminProviderItem & {
-  agency: { id: string; name: string; plan: string; commissionRate: number; maxAccounts: number } | null;
-  timeline: ProviderTimelineEntry[];
-};
-
-export type AdminProviderStats = {
-  byStatus: Record<string, number>;
-  byType: Record<string, number>;
-  pending: number;
-  overdue: number;
-  slaHours: number;
-  averageReviewHours: number | null;
-  approved: number;
-  suspended: number;
-};
-
 export type ProviderDecision = "APPROVE" | "REJECT" | "NEED_INFO" | "SUSPEND";
-
-export const adminProvidersApi = {
-  queue: (params: { status?: ProviderStatus; type?: ProviderType; city?: string; page?: number } = {}) => {
-    const q = new URLSearchParams();
-    if (params.status) q.set("status", params.status);
-    if (params.type) q.set("type", params.type);
-    if (params.city) q.set("city", params.city);
-    if (params.page) q.set("page", String(params.page));
-    const qs = q.toString();
-    return api.get<AdminProviderQueue>(`${P}/admin/providers${qs ? `?${qs}` : ""}`);
-  },
-  stats: () => api.get<AdminProviderStats>(`${P}/admin/providers/stats`),
-  detail: (id: string) => api.get<AdminProviderDetail>(`${P}/admin/providers/${id}`),
-  startReview: (id: string) => api.post<AdminProviderDetail>(`${P}/admin/providers/${id}/start-review`),
-  decideDocument: (id: string, documentId: string, decision: "VALID" | "INVALID", note?: string) =>
-    api.post<ProviderDocumentView>(`${P}/admin/providers/${id}/documents/${documentId}/decision`, {
-      decision,
-      ...(note ? { note } : {}),
-    }),
-  decide: (id: string, decision: ProviderDecision, reason?: string, overrideDocuments?: boolean) =>
-    api.post<ProviderDossier>(`${P}/admin/providers/${id}/decision`, {
-      decision,
-      ...(reason ? { reason } : {}),
-      ...(overrideDocuments ? { overrideDocuments: true } : {}),
-    }),
-  reinstate: (id: string) => api.post<ProviderDossier>(`${P}/admin/providers/${id}/reinstate`),
-};

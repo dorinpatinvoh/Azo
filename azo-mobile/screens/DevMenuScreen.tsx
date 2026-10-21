@@ -9,9 +9,9 @@ export type ScreenId =
   | "splash" | "otp" | "home" | "ride-request" | "ride-tracking" | "ride-rating"
   | "delivery" | "rental" | "wallet" | "courses" | "profile"
   | "driver-home" | "courier-home" | "agency-dashboard"
-  | "provider-onboarding" | "provider-status" | "admin-providers"
-  | "admin-dashboard" | "marketplace" | "notifications"
-  | "assist-offer" | "language" | "profile-info" | "help" | "messages" | "support" | "admin-support" | "admin-finance" | "admin-referrals" | "commercial-home" | "personal-courier";
+  | "provider-onboarding" | "provider-status"
+  | "marketplace" | "notifications"
+  | "assist-offer" | "language" | "profile-info" | "help" | "messages" | "support" | "commercial-home" | "personal-courier" | "admin-on-web";
 
 const SCREENS: { id: ScreenId; label: string; group: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
   { id: "splash", label: "1. Splash / Onboarding", group: "Client", icon: "rocket-launch" },
@@ -31,12 +31,10 @@ const SCREENS: { id: ScreenId; label: string; group: string; icon: keyof typeof 
   { id: "driver-home", label: "12. Espace Speeder / Chauffeur", group: "Professionnel", icon: "two-wheeler" },
   { id: "courier-home", label: "12c. Espace Coursier / Livreur", group: "Professionnel", icon: "local-shipping" },
   { id: "agency-dashboard", label: "13. Mon agence & flotte", group: "Agence", icon: "apartment" },
-  { id: "admin-providers", label: "14a. Validation des prestataires", group: "Admin", icon: "verified-user" },
-  { id: "admin-dashboard", label: "14. Pilotage administrateur", group: "Admin", icon: "admin-panel-settings" },
   { id: "notifications", label: "15. Notifications", group: "Commun", icon: "notifications" },
 ];
 
-const GROUPS = ["Client", "V2", "Professionnel", "Agence", "Admin", "Commun"];
+const GROUPS = ["Client", "V2", "Professionnel", "Agence", "Commun"];
 
 type Props = { onSelect: (id: ScreenId) => void };
 
