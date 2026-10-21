@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Injectable,
   Module,
@@ -23,6 +24,7 @@ import { PricingModule, PricingService } from "../pricing/pricing.module";
 import { UsersModule } from "../users/users.module";
 import { NpiCryptoService } from "../common/npi-crypto.service";
 import { FinanceService, MIN_COMPANY_WITHDRAWAL } from "./finance.service";
+import { deleteClientAccount } from "./client-deletion";
 
 class MonthlySettlementDto {
   /** Mois à prélever, format AAAA-MM (par défaut : mois en cours). */
@@ -210,6 +212,11 @@ export class AdminService {
     return updated;
   }
 
+  /** Supprime (ou anonymise, s'il a un historique) un compte client. Voir client-deletion.ts pour les règles. */
+  deleteClient(adminId: string, userId: string) {
+    return deleteClientAccount(this.prisma, adminId, userId);
+  }
+
   async getUserNpi(adminId: string, userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -316,6 +323,12 @@ export class AdminController {
   @Post("users/:id/ratings-reset")
   resetRatings(@CurrentUser() u, @Param("id") id: string) {
     return this.svc.resetRatings(u.userId, id);
+  }
+
+  // DELETE /admin/users/:id — supprime un compte client (anonymisé s'il a un historique)
+  @Delete("users/:id")
+  deleteClient(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.deleteClient(u.userId, id);
   }
 
   @Post("users/:id/status")

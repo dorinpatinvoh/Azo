@@ -11,7 +11,7 @@ const USER_STATUS: Record<string, { label: string; tone: string }> = {
   BLOCKED: { label: "Bloqué", tone: "err" },
 };
 
-type Action = null | { kind: "block" | "unblock" | "ratings"; user: UserRow } | { kind: "npi"; user: UserRow };
+type Action = null | { kind: "block" | "unblock" | "ratings" | "delete"; user: UserRow } | { kind: "npi"; user: UserRow };
 
 export default function Users() {
   const toast = useToast();
@@ -35,7 +35,7 @@ export default function Users() {
 
   return (
     <>
-      <PageHead title="Utilisateurs" subtitle="Rechercher un compte, le bloquer, remettre ses notes à zéro, consulter son NPI">
+      <PageHead title="Utilisateurs" subtitle="Rechercher un compte, le bloquer, supprimer un client, remettre ses notes à zéro, consulter son NPI">
         <button className="btn ghost sm" onClick={reload}>Actualiser</button>
       </PageHead>
       <div className="toolbar">
@@ -84,6 +84,9 @@ export default function Users() {
                         ) : null}
                         <button className="btn ghost sm" onClick={() => setAction({ kind: "ratings", user: u })}>Notes à zéro</button>
                         <button className="btn ghost sm" onClick={() => setAction({ kind: "npi", user: u })}>NPI</button>
+                        {u.role === "CLIENT" && !u.provider && !u.agency && !u.phone.startsWith("supprime-") ? (
+                          <button className="btn danger sm" onClick={() => setAction({ kind: "delete", user: u })}>Supprimer</button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -101,6 +104,12 @@ export default function Users() {
       {action && action.kind === "unblock" ? (
         <ConfirmModal title={`Débloquer ${action.user.fullName ?? phone(action.user.phone)}`} confirmLabel="Débloquer" onClose={() => setAction(null)}
           onConfirm={() => api.post(`/admin/users/${action.user.id}/status`, { status: "ACTIVE" }).then(() => { toast("Compte débloqué."); return reload(); })} />
+      ) : null}
+      {action && action.kind === "delete" ? (
+        <ConfirmModal title={`Supprimer ${action.user.fullName ?? phone(action.user.phone)}`} danger confirmLabel="Supprimer le compte"
+          message={<>Le compte client de <b>{phone(action.user.phone)}</b> sera supprimé. S'il a déjà des courses, des livraisons ou des mouvements d'argent, ils sont conservés pour la comptabilité mais son nom, son numéro et son NPI sont effacés. Si c'est un commercial, son code disparaît et les prestataires qu'il a recrutés restent sans commercial. Cette action est définitive. Le portefeuille doit être à zéro et aucune course ne doit être en cours.</>}
+          onClose={() => setAction(null)}
+          onConfirm={() => api.delete<{ mode: "deleted" | "anonymized" }>(`/admin/users/${action.user.id}`).then((r) => { toast(r.mode === "deleted" ? "Compte supprimé." : "Compte supprimé (historique conservé, données personnelles effacées)."); return reload(); })} />
       ) : null}
       {action && action.kind === "ratings" ? (
         <ConfirmModal title="Remettre les notes à zéro" confirmLabel="Remettre à zéro" message={`Les avis reçus par ${action.user.fullName ?? phone(action.user.phone)} avant aujourd'hui ne comptent plus (cela lève aussi une éventuelle restriction due à une mauvaise note).`} onClose={() => setAction(null)}
