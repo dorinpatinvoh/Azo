@@ -40,6 +40,17 @@ describe("inscription professionnelle : agence réservée à l'inscription, supp
     await expect(service(prisma).saveApplication("u1", { type: "AGENCY" } as any)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it("refuse une voiture à un livreur express : les voitures ne livrent pas de colis", async () => {
+    for (const vehicleType of ["GAZELLE", "KOALA", "LEOPARD"]) {
+      const prisma = {
+        user: { findUnique: jest.fn().mockResolvedValue({ id: "u1", status: "ACTIVE", provider: null, signupKind: "COURIER" }) },
+        providerProfile: { create: jest.fn() },
+      };
+      await expect(service(prisma).saveApplication("u1", { type: "COURIER", categoryId: "COURSIER_EXPRESS", vehicleType } as any)).rejects.toThrow(/voitures ne font plus de livraison/);
+      expect(prisma.providerProfile.create).not.toHaveBeenCalled();
+    }
+  });
+
   it("supprime un brouillon du propriétaire", async () => {
     const prisma = {
       providerProfile: {

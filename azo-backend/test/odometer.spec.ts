@@ -130,3 +130,71 @@ describe("odometerStep : petits déplacements réels (vitesse du téléphone)", 
     expect(total).toBeLessThan(65);
   });
 });
+
+describe("odometerStep en mode strict (coursier personnel, livreur express)", () => {
+  const strict = { strict: true };
+  /** Rejoue une série de positions : renvoie la distance comptée. */
+  function replay(samples: { meters: number; speed?: number; acc?: number }[], stepMs = 1_500) {
+    let anchor = odometerStep(null, pointAtMeters(0, 1_000), 8, undefined, strict)!.point;
+    let total = 0;
+    samples.forEach((s, i) => {
+      const step = odometerStep(anchor, pointAtMeters(s.meters, 1_000 + (i + 1) * stepMs), s.acc ?? 8, s.speed, strict);
+      if (step?.accepted) {
+        total += step.meters;
+        anchor = step.point;
+      }
+    });
+    return total;
+  }
+
+  it("ne compte rien pour un téléphone posé dont le GPS dérive de ±40 m pendant 10 minutes (vitesse proche de 0)", () => {
+    const samples = Array.from({ length: 400 }, (_, i) => ({ meters: [0, 35, -20, 45, -38, 25][i % 6], speed: [0, 0.1, 0.4, 0.2][i % 4] }));
+    expect(replay(samples)).toBe(0);
+  });
+
+  it("ne compte rien quand la vitesse GPS est inconnue et que la position dérive de ±25 m", () => {
+    const samples = Array.from({ length: 400 }, (_, i) => ({ meters: [0, 25, -15, 22, -25, 12][i % 6] }));
+    expect(replay(samples)).toBe(0);
+  });
+
+  it("ne compte rien quand la vitesse GPS parasite reste sous 1 m/s malgré une position qui bouge de ±30 m", () => {
+    const samples = Array.from({ length: 400 }, (_, i) => ({ meters: [0, 30, -28, 33, -30][i % 5], speed: 0.9 }));
+    expect(replay(samples)).toBe(0);
+  });
+
+  it("mesure un vrai trajet de moto de 2 km à 8 m/s à ±3 %", () => {
+    const samples = Array.from({ length: 167 }, (_, i) => ({ meters: (i + 1) * 12, speed: 8 }));
+    const total = replay(samples);
+    expect(total).toBeGreaterThan(1_940);
+    expect(total).toBeLessThan(2_060);
+  });
+
+  it("ne perd pas un trajet lent : 300 m parcourus à 1 m/s sont comptés (à moins de 120 m près)", () => {
+    const samples = Array.from({ length: 200 }, (_, i) => ({ meters: (i + 1) * 1.5, speed: 1 }));
+    const total = replay(samples);
+    expect(total).toBeGreaterThan(180);
+    expect(total).toBeLessThanOrEqual(300);
+  });
+
+  it("ignore un saut de GPS incohérent avec la vitesse mesurée, sans perdre le vrai trajet qui suit", () => {
+    // moto à 8 m/s (12 m toutes les 1,5 s), un point aberrant 100 m plus loin au 11e relevé, puis le trajet reprend normalement
+    const samples = Array.from({ length: 21 }, (_, i) => ({ meters: i === 10 ? 12 * (i + 1) + 100 : 12 * (i + 1), speed: 8 }));
+    const total = replay(samples);
+    expect(total).toBeGreaterThan(230);
+    expect(total).toBeLessThan(260);
+  });
+
+  it("une vitesse parasite de 2 m/s sans aucun déplacement de la position ne fait rien monter", () => {
+    const samples = Array.from({ length: 400 }, () => ({ meters: 0, speed: 2 }));
+    expect(replay(samples)).toBe(0);
+  });
+
+  it("compte bien l'arrêt puis la reprise : 500 m, 5 min immobile avec GPS qui danse, puis 500 m", () => {
+    const go1 = Array.from({ length: 42 }, (_, i) => ({ meters: (i + 1) * 12, speed: 8 }));
+    const wait = Array.from({ length: 200 }, (_, i) => ({ meters: 504 + [0, 30, -25, 38, -20][i % 5], speed: 0.1 }));
+    const go2 = Array.from({ length: 42 }, (_, i) => ({ meters: 504 + (i + 1) * 12, speed: 8 }));
+    const total = replay([...go1, ...wait, ...go2]);
+    expect(total).toBeGreaterThan(960);
+    expect(total).toBeLessThan(1_060);
+  });
+});

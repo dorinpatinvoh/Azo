@@ -392,6 +392,49 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     es: t("Buscando un nuevo mensajero", "El mensajero tuvo que retirarse. Tu entrega se ofrece de nuevo a los mensajeros disponibles."),
     de: t("Neuer Kurier wird gesucht", "Der Kurier musste absagen. Deine Lieferung wird den verfügbaren Kurieren erneut angeboten."),
   },
+  /* ---------- Coursier personnel : une course, pas une livraison ---------- */
+  NOTIFICATION_PERSONAL_ASSIGNED: {
+    fr: t("Ton coursier arrive 🏍️", "Un coursier personnel AZƆ̀ a accepté ta réservation. Ouvre l'application pour voir le code de départ."),
+    en: t("Your courier is on the way 🏍️", "An AZƆ̀ personal courier accepted your booking. Open the app to see the start code."),
+    es: t("Tu mensajero va en camino 🏍️", "Un mensajero personal AZƆ̀ aceptó tu reserva. Abre la aplicación para ver el código de inicio."),
+    de: t("Dein Kurier ist unterwegs 🏍️", "Ein persönlicher AZƆ̀-Kurier hat deine Buchung angenommen. Öffne die App, um den Startcode zu sehen."),
+  },
+  NOTIFICATION_PERSONAL_ARRIVED: {
+    fr: t("Ton coursier est arrivé 🏍️", "Ton coursier personnel est au point de rendez-vous. Donne-lui ton code de départ affiché dans l'application."),
+    en: t("Your courier has arrived 🏍️", "Your personal courier is at the meeting point. Give them the start code shown in the app."),
+    es: t("Tu mensajero ha llegado 🏍️", "Tu mensajero personal está en el punto de encuentro. Dale el código de inicio que aparece en la aplicación."),
+    de: t("Dein Kurier ist da 🏍️", "Dein persönlicher Kurier ist am Treffpunkt. Gib ihm den Startcode aus der App."),
+  },
+  NOTIFICATION_PERSONAL_STARTED: {
+    fr: t("Course démarrée ✅", "Ton coursier a validé le code de départ : la course est en cours et les kilomètres comptent à partir de maintenant. Le code de fin est dans l'application."),
+    en: t("Ride started ✅", "Your courier confirmed the start code: the ride is under way and the kilometres count from now on. The end code is in the app."),
+    es: t("Carrera iniciada ✅", "Tu mensajero validó el código de inicio: la carrera está en curso y los kilómetros cuentan desde ahora. El código de fin está en la aplicación."),
+    de: t("Fahrt gestartet ✅", "Dein Kurier hat den Startcode bestätigt: Die Fahrt läuft und die Kilometer zählen ab jetzt. Der Endcode steht in der App."),
+  },
+  NOTIFICATION_PERSONAL_DONE: {
+    fr: t("Course terminée 🎉", "Ta course avec ton coursier personnel est terminée."),
+    en: t("Ride completed 🎉", "Your ride with your personal courier is finished."),
+    es: t("Carrera terminada 🎉", "Tu carrera con tu mensajero personal ha terminado."),
+    de: t("Fahrt beendet 🎉", "Deine Fahrt mit deinem persönlichen Kurier ist beendet."),
+  },
+  NOTIFICATION_PERSONAL_PAID_COURIER: {
+    fr: t("Paiement reçu", "Course personnelle {amount} FCFA · {pct} % de la course (−{commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +{net} FCFA."),
+    en: t("Payment received", "Personal ride {amount} FCFA · {pct}% of the ride (−{commission} F) goes to the AZƆ̀ company · you receive +{net} FCFA."),
+    es: t("Pago recibido", "Carrera personal {amount} FCFA · el {pct} % de la carrera (−{commission} F) se paga a la empresa AZƆ̀ · recibes +{net} FCFA."),
+    de: t("Zahlung erhalten", "Persönliche Fahrt {amount} FCFA · {pct} % der Fahrt (−{commission} F) gehen an das Unternehmen AZƆ̀ · du erhältst +{net} FCFA."),
+  },
+  NOTIFICATION_PERSONAL_CANCELLED: {
+    fr: t("Course annulée", "Le client a annulé la réservation."),
+    en: t("Ride cancelled", "The customer cancelled the booking."),
+    es: t("Carrera cancelada", "El cliente canceló la reserva."),
+    de: t("Fahrt storniert", "Der Kunde hat die Buchung storniert."),
+  },
+  NOTIFICATION_PERSONAL_REASSIGN: {
+    fr: t("Recherche d'un nouveau coursier", "Le coursier a dû se désister. Ta réservation est reproposée aux coursiers disponibles."),
+    en: t("Looking for a new courier", "The courier had to withdraw. Your booking is offered again to available couriers."),
+    es: t("Buscando un nuevo mensajero", "El mensajero tuvo que retirarse. Tu reserva se ofrece de nuevo a los mensajeros disponibles."),
+    de: t("Neuer Kurier wird gesucht", "Der Kurier musste absagen. Deine Buchung wird den verfügbaren Kurieren erneut angeboten."),
+  },
   NOTIFICATION_SETTLEMENT_CONFIRM: {
     fr: t("Confirme ton arrivée", "Le Spider indique t'avoir déposé. Confirme dans {minutes} minutes ou signale un problème."),
     en: t("Confirm your arrival", "The driver says they dropped you off. Confirm within {minutes} minutes or report a problem."),

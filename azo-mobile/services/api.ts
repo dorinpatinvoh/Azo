@@ -706,6 +706,8 @@ export type Delivery = {
   bookingHours?: number | null;
   bookedFrom?: string | null;
   bookedUntil?: string | null;
+  /** Coursier personnel : le coursier a signalé son arrivée chez le client. */
+  courierArrivedAt?: string | null;
   scheduledAt?: string | null;
   distanceKm?: number | null;
   traveledMeters?: number;
@@ -798,6 +800,8 @@ export const deliveryApi = {
   accept: (id: string, pos?: { latitude: number; longitude: number }) =>
     api.post<Delivery>(`${P}/deliveries/${id}/accept`, pos ? { lat: pos.latitude, lng: pos.longitude } : {}),
   withdrawOffer: (id: string) => api.post<{ deliveryId: string; status: string }>(`${P}/deliveries/${id}/withdraw-offer`),
+  /** Coursier personnel : « Je suis arrivé » (le client est prévenu et donne son code de départ). */
+  arrive: (id: string) => api.post<Delivery>(`${P}/deliveries/${id}/arrive`),
   confirmPickup: (id: string, code: string) =>
     api.post<Delivery>(`${P}/deliveries/${id}/confirm-pickup`, { code }),
   confirmDelivery: (id: string, code: string) =>

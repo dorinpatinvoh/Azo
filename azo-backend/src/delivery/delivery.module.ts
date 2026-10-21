@@ -398,10 +398,12 @@ export class DeliveryService {
 
     await this.notifications.push(
       fresh.clientId,
-      "Coursier en route 📦",
-      `Un coursier AZƆ̀ a accepté ta livraison vers ${fresh.dropAddress}. Ouvre l'application pour voir le code de ramassage.`,
+      fresh.mode === "PERSONAL" ? "Ton coursier arrive 🏍️" : "Coursier en route 📦",
+      fresh.mode === "PERSONAL"
+        ? "Un coursier personnel AZƆ̀ a accepté ta réservation. Ouvre l'application pour voir le code de départ."
+        : `Un coursier AZƆ̀ a accepté ta livraison vers ${fresh.dropAddress}. Ouvre l'application pour voir le code de ramassage.`,
       "DELIVERY",
-      { titleKey: "NOTIFICATION_DELIVERY_ASSIGNED", params: { address: fresh.dropAddress }, data: { event: "delivery", deliveryId: fresh.id } }
+      { titleKey: fresh.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_ASSIGNED" : "NOTIFICATION_DELIVERY_ASSIGNED", params: { address: fresh.dropAddress }, data: { event: "delivery", deliveryId: fresh.id } }
     );
 
     const [enriched] = await this.enrich([fresh]);
@@ -652,7 +654,7 @@ export class DeliveryService {
     // Distance parcourue depuis le ramassage : coursier personnel (prix final) et livreur express (information), même calcul que la course simple
     if (d.status === "IN_PROGRESS") {
       const previous = d.odoLat !== null && d.odoLng !== null && d.odoAt ? { lat: d.odoLat, lng: d.odoLng, at: d.odoAt.getTime(), cred: d.odoCred ?? 0 } : null;
-      const step = odometerStep(previous, { lat: dto.latitude, lng: dto.longitude, at: now }, dto.accuracy, dto.speed);
+      const step = odometerStep(previous, { lat: dto.latitude, lng: dto.longitude, at: now }, dto.accuracy, dto.speed, { strict: true });
       if (step?.accepted) {
         data.odoLat = step.point.lat;
         data.odoLng = step.point.lng;
@@ -683,6 +685,39 @@ export class DeliveryService {
     };
   }
 
+  /**
+   * Coursier personnel : « Je suis arrivé ». Comme un Speeder sur une course simple, le coursier signale son arrivée chez le client,
+   * qui est prévenu et lui donne son code de départ. Idempotent (double appui, renvoi après une coupure réseau).
+   */
+  async arrive(courierId: string, id: string) {
+    const d = await this.prisma.delivery.findUnique({ where: { id }, include: { client: { select: { fullName: true, phone: true } } } });
+    if (!d) throw new NotFoundException("Réservation introuvable");
+    if (d.courierId !== courierId) throw new ForbiddenException("Cette course n'est pas la tienne");
+    if (d.mode !== "PERSONAL") throw new BadRequestException("Seule une course de coursier personnel se signale arrivée.");
+    if (d.status !== "MATCHED") {
+      throw new BadRequestException("Seul un coursier en route vers son client peut signaler son arrivée.");
+    }
+    if (d.courierArrivedAt) {
+      const [enrichedAgain] = await this.enrich([d]);
+      return enrichedAgain;
+    }
+    const { count } = await this.prisma.delivery.updateMany({ where: { id, courierId, status: "MATCHED", courierArrivedAt: null }, data: { courierArrivedAt: new Date() } });
+    const fresh = await this.prisma.delivery.findUniqueOrThrow({ where: { id }, include: { client: { select: { fullName: true, phone: true } } } });
+    if (count === 1) {
+      await this.notifications
+        .push(
+          d.clientId,
+          "Ton coursier est arrivé 🏍️",
+          "Ton coursier personnel est au point de rendez-vous. Donne-lui ton code de départ affiché dans l'application.",
+          "DELIVERY",
+          { sendPush: true, titleKey: "NOTIFICATION_PERSONAL_ARRIVED", data: { event: "delivery", deliveryId: d.id } }
+        )
+        .catch(() => null);
+    }
+    const [enriched] = await this.enrich([fresh]);
+    return enriched;
+  }
+
   // Étape 1 : le coursier saisit le code de ramassage à 4 chiffres donné par l'expéditeur
   async confirmPickup(userId: string, id: string, code: string) {
     const d = await this.prisma.delivery.findUnique({
@@ -695,6 +730,10 @@ export class DeliveryService {
     }
     if (!["PENDING", "MATCHED"].includes(d.status)) {
       throw new BadRequestException("Cette livraison a déjà démarré ou est terminée");
+    }
+    // Coursier personnel : comme sur une course simple, on signale d'abord son arrivée avant de démarrer avec le code
+    if (d.mode === "PERSONAL" && !d.courierArrivedAt) {
+      throw new BadRequestException("Signale d'abord ton arrivée avec « Je suis arrivé » : ton client te donnera ensuite son code de départ.");
     }
     if (d.pickupCode !== code.trim()) {
       throw new BadRequestException("Code de ramassage invalide : demande les 4 chiffres à l'expéditeur");
@@ -717,10 +756,12 @@ export class DeliveryService {
 
     await this.notifications.push(
       d.clientId,
-      "Colis pris en charge ✅",
-      `Le coursier a validé le code de ramassage et se dirige vers ${d.dropAddress}. Ouvre l'application pour voir le code de remise.`,
+      d.mode === "PERSONAL" ? "Course démarrée ✅" : "Colis pris en charge ✅",
+      d.mode === "PERSONAL"
+        ? "Ton coursier a validé le code de départ : la course est en cours et les kilomètres comptent à partir de maintenant. Le code de fin est dans l'application."
+        : `Le coursier a validé le code de ramassage et se dirige vers ${d.dropAddress}. Ouvre l'application pour voir le code de remise.`,
       "DELIVERY",
-      { titleKey: "NOTIFICATION_DELIVERY_PICKED_UP", params: { address: d.dropAddress }, data: { event: "delivery", deliveryId: d.id } }
+      { titleKey: d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_STARTED" : "NOTIFICATION_DELIVERY_PICKED_UP", params: { address: d.dropAddress }, data: { event: "delivery", deliveryId: d.id } }
     );
 
     const [enriched] = await this.enrich([updated]);
@@ -780,12 +821,20 @@ export class DeliveryService {
     if (courierId !== d.clientId && finalPrice > 0) {
       const pct = Math.round((commission / finalPrice) * 1000) / 10;
       await this.notifications
-        .push(courierId, "Paiement reçu", `Livraison ${finalPrice} FCFA · ${pct} % de la livraison (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${net} FCFA.`, "payment", {
-          titleKey: "NOTIFICATION_DELIVERY_PAID_COURIER",
-          bodyKey: "NOTIFICATION_DELIVERY_PAID_COURIER",
+        .push(
+          courierId,
+          "Paiement reçu",
+          d.mode === "PERSONAL"
+            ? `Course personnelle ${finalPrice} FCFA · ${pct} % de la course (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${net} FCFA.`
+            : `Livraison ${finalPrice} FCFA · ${pct} % de la livraison (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${net} FCFA.`,
+          "payment",
+          {
+          titleKey: d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_PAID_COURIER" : "NOTIFICATION_DELIVERY_PAID_COURIER",
+          bodyKey: d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_PAID_COURIER" : "NOTIFICATION_DELIVERY_PAID_COURIER",
           params: { amount: finalPrice, pct, commission, net },
           data: { event: "delivery-paid", deliveryId: d.id },
-        })
+        }
+        )
         .catch(() => null);
     }
 
@@ -805,10 +854,10 @@ export class DeliveryService {
 
     await this.notifications.push(
       d.clientId,
-      "Livraison terminée 🎉",
-      `Ton colis à destination de ${d.dropAddress} a bien été remis avec le code OTP.`,
+      d.mode === "PERSONAL" ? "Course terminée 🎉" : "Livraison terminée 🎉",
+      d.mode === "PERSONAL" ? "Ta course avec ton coursier personnel est terminée." : `Ton colis à destination de ${d.dropAddress} a bien été remis avec le code OTP.`,
       "DELIVERY",
-      { titleKey: "NOTIFICATION_DELIVERY_DONE", params: { address: d.dropAddress }, data: { event: "delivery", deliveryId: d.id } }
+      { titleKey: d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_DONE" : "NOTIFICATION_DELIVERY_DONE", params: { address: d.dropAddress }, data: { event: "delivery", deliveryId: d.id } }
     );
 
     const [enriched] = await this.enrich([updated]);
@@ -837,10 +886,10 @@ export class DeliveryService {
       if (d.courierId) {
         await this.notifications.push(
           d.courierId,
-          "Livraison annulée",
-          `Le client a annulé la livraison vers ${d.dropAddress}.`,
+          d.mode === "PERSONAL" ? "Course annulée" : "Livraison annulée",
+          d.mode === "PERSONAL" ? "Le client a annulé la réservation." : `Le client a annulé la livraison vers ${d.dropAddress}.`,
           "DELIVERY",
-          { titleKey: "NOTIFICATION_DELIVERY_CANCELLED", params: { address: d.dropAddress }, data: { event: "delivery", deliveryId: d.id } }
+          { titleKey: d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_CANCELLED" : "NOTIFICATION_DELIVERY_CANCELLED", params: { address: d.dropAddress }, data: { event: "delivery", deliveryId: d.id } }
         );
       }
       const [enriched] = await this.enrich([updated]);
@@ -860,15 +909,15 @@ export class DeliveryService {
       }
       const updated = await this.prisma.delivery.update({
         where: { id },
-        data: { status: "PENDING", courierId: null, bookedFrom: null, bookedUntil: null },
+        data: { status: "PENDING", courierId: null, bookedFrom: null, bookedUntil: null, courierArrivedAt: null },
         include: { client: { select: { fullName: true, phone: true } } },
       });
       await this.notifications.push(
         d.clientId,
         "Recherche d'un nouveau coursier",
-        "Le coursier a dû se désister. Ta livraison est reproposée aux coursiers disponibles.",
+        d.mode === "PERSONAL" ? "Le coursier a dû se désister. Ta réservation est reproposée aux coursiers disponibles." : "Le coursier a dû se désister. Ta livraison est reproposée aux coursiers disponibles.",
         "DELIVERY",
-        { titleKey: "NOTIFICATION_DELIVERY_REASSIGN", data: { event: "delivery", deliveryId: d.id } }
+        { titleKey: d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_REASSIGN" : "NOTIFICATION_DELIVERY_REASSIGN", data: { event: "delivery", deliveryId: d.id } }
       );
       const [enriched] = await this.enrich([updated]);
       return { ...enriched, pickupCode: "••••", deliveryCode: "••••" };
@@ -963,6 +1012,11 @@ export class DeliveryController {
   @Get(":id/track")
   track(@CurrentUser() u, @Param("id") id: string) {
     return this.svc.track(u.userId, id);
+  }
+
+  @Post(":id/arrive")
+  arrive(@CurrentUser() u, @Param("id") id: string) {
+    return this.svc.arrive(u.userId, id);
   }
 
   @Post(":id/confirm-pickup")

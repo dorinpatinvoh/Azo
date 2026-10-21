@@ -1,0 +1,73 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 21 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) et la console web (<code>admin-web</code>) — pour Sergio</p><span class="tag">21 octobre 2026 · 7 commits poussés sur main (<code>8f00c7d9</code> à <code>a00f5b00</code>) · une partie du travail reste à commiter (voir § 9)</span></div>
+
+<h2>1. En résumé</h2>
+<p>L'administration est entièrement sortie de l'application et vit sur la <b>console web</b> (au nom d'ANGI DSN PRO, adaptée au téléphone). Les prestataires peuvent <b>demander un retrait</b> vers Mobile Money. L'inscription est repensée : le type de Speeder, de coursier ou d'agence se choisit à la création du compte. Le parcours du coursier personnel suit celui d'une course de Speeder. Le kilométrage des livraisons ne grimpe plus à l'arrêt. <code>tsc</code> sans erreur.</p>
+<div class="box warn"><b>À savoir avant de tester :</b> rien n'a été essayé sur un téléphone. L'APK doit être regénéré pour contenir les derniers changements, et <b>le serveur doit être redéployé avant</b> (nouvelle colonne en base, nouvelles routes). Priorités de test : connexion, retrait, « Je suis arrivé » du coursier personnel, inscription d'un livreur express, kilométrage à l'arrêt.</div>
+
+<h2>2. Administration retirée de l'application</h2>
+<ul>
+<li>Supprimés : les 5 écrans administrateur (tableau de bord, finances, validation des dossiers, commerciaux, support) et leur barre du bas, soit environ 2 900 lignes, ainsi que les appels d'administration de <code>api.ts</code>.</li>
+<li>Un compte administrateur qui se connecte quand même voit l'écran <code>AdminOnWebScreen</code> : « L'administration est sur la console web », avec un bouton de déconnexion.</li>
+<li>Le bouton « Retirer de ce commercial » (réservé à l'administrateur) a disparu de la liste des recrues ; l'espace du commercial est inchangé.</li>
+</ul>
+
+<h2>3. Console web</h2>
+<ul>
+<li><b>ANGI DSN PRO</b> s'affiche sur la connexion, dans le menu, sous le nom de l'administrateur, dans la barre du haut sur téléphone et dans le titre de l'onglet.</li>
+<li><b>Version téléphone</b> : chaque ligne de tableau devient une carte avec le titre de la colonne devant chaque valeur (cela vaut pour toutes les pages), fenêtres qui montent du bas avec boutons pleine largeur, boutons d'au moins 44 px, champs à 16 px (pas de zoom automatique sur iPhone), onglets qui défilent, tableau de bord en 2 colonnes. Essayé dans Chrome à 390 px de large : aucun débordement horizontal.</li>
+<li><b>Suppression d'un client</b> : bouton « Supprimer » sur chaque client (page Utilisateurs). Sans historique, le compte est effacé ; avec des courses ou des mouvements d'argent, il est <b>anonymisé</b> (historique gardé, nom, numéro et NPI effacés, numéro libéré). Un portefeuille non nul demande « Solder et supprimer » : le solde est remis à zéro par une écriture conservée.</li>
+<li><b>Page « Retraits prestataires »</b> avec compteur dans le menu : demandes à payer, numéro Mobile Money à copier, « Marquer payé » (référence facultative) ou « Refuser » (motif obligatoire, le montant est rendu).</li>
+<li>Le dossier à envoyer sur Cloudflare est reconstruit à chaque changement (<code>azo-admin-web</code> sur le Bureau).</li>
+</ul>
+
+<h2>4. Retrait des prestataires (écran Portefeuille)</h2>
+<ul>
+<li>Bouton <b>« Retirer »</b> pour les Speeders, coursiers et agences (<code>WalletScreen.tsx</code>) : montant (minimum 1 000 F), numéro Mobile Money prérempli avec le numéro de connexion, frais et net calculés par le serveur à chaque montant saisi.</li>
+<li>La demande est en attente jusqu'à ce que l'équipe verse l'argent ; le prestataire est prévenu par notification (payé ou refusé). Textes en français, anglais, espagnol et allemand.</li>
+<li><b>Limite</b> : le versement est manuel, aucun virement automatique n'est branché.</li>
+</ul>
+
+<h2>5. Inscription : le type se choisit à la création du compte</h2>
+<ul>
+<li>Sous « Type de compte », nouvelle liste (<code>SignupChoicePicker.tsx</code>) : <b>Speeder</b> (moto essence, moto électrique, tricycle, Gazelle, Koala, Léopard), <b>coursier personnel</b> (mêmes 6 choix), <b>livreur express</b> (moto essence, moto électrique, tricycle seulement), <b>agence</b> (niveau Pro à Elite avec frais, commission et plafond).</li>
+<li>Le choix est <b>obligatoire</b> : le bouton d'envoi du code reste bloqué sans choix. Il est mémorisé jusqu'au dépôt du dossier.</li>
+<li>Le dossier démarre directement à <b>l'identité</b> (4 étapes au lieu de 5 ; « Quitter » remplace « Précédent » sur la première). Un client qui devient prestataire plus tard garde l'étape « Activité ».</li>
+<li><b>Les voitures disparaissent pour le livreur express</b> (elles ne livrent plus de colis) ; le coursier personnel les garde.</li>
+<li>Les listes de véhicules et de niveaux sont partagées dans <code>utils/providerChoices.ts</code>.</li>
+</ul>
+
+<h2>6. Inscription d'une agence : design et pièces</h2>
+<ul>
+<li>Formulaire en cartes à pastille d'icône (<code>FormSection</code>) : Ton entreprise, Identifiants officiels, Contact, Reversements ; l'identité du représentant est aussi dans une carte.</li>
+<li>« Email professionnel » devient <b>« Email »</b>, facultatif, avec la mention « facultatif » ; <b>« Taille du parc » est supprimée</b>.</li>
+<li>Pièces de l'agence : <b>statuts de la société et casier judiciaire retirés</b> (reste : carte d'identité, logo, RCCM, IFU).</li>
+<li><b>Clavier</b> : l'écran « Devenir prestataire » est protégé (<code>KeyboardAvoidingView</code>), les champs du bas et les boutons ne sont plus cachés.</li>
+<li>Document pour les agences : <code>DOCUMENTS_AGENCES_AZO.pdf</code> (pièces, informations, niveaux, étapes).</li>
+</ul>
+
+<h2>7. Coursier personnel : une course, pas une livraison</h2>
+<ul>
+<li>Écran du coursier : titre « Course personnelle », étapes « Rejoindre → En course → Fin », « Rendez-vous avec ton client », destination « à convenir avec ton client », « Réservé jusqu'au … ».</li>
+<li><b>« Je suis arrivé »</b> comme un Speeder : le client est prévenu et donne son <b>code de départ</b> ; le coursier saisit ce code pour <b>« Démarrer la course »</b>, puis le <b>code de fin</b> pour <b>« Terminer la course »</b>. Le départ est refusé sans arrivée signalée. Côté client : « Ton coursier est arrivé : donne-lui ton code de départ ».</li>
+<li>Les notifications et les messages parlent de course et plus de colis, en 4 langues. La livraison express garde son parcours.</li>
+<li><b>Limite</b> : les écrans ne sont pas ceux du Speeder à l'identique (écran de 1 700 lignes lié au modèle de course) : mêmes étapes et mêmes mots ; pas de demande d'arrêt en route.</li>
+</ul>
+
+<h2>8. APK et audit</h2>
+<ul>
+<li><b>APK allégé</b> : 50 Mo (<code>AZO-leger.apk</code>) pour tous les vrais téléphones (arm64 et armeabi-v7a), contre 97 Mo. Réduction du code (R8) et des ressources activée : <b>à tester sur au moins deux téléphones</b> avant diffusion. Version arm64 seule : 48 Mo, hors téléphones 32 bits. Le réglage est dans <code>android/gradle.properties</code>, dossier non suivi par Git (il peut être écrasé si le dossier est régénéré).</li>
+<li><b>Audit complet</b> de l'application : voir le rapport backend (§ 8). Pour le mobile : 69 erreurs avalées sans message, 12 <code>console.log</code>, textes de l'inscription prestataire écrits en dur en français (les 785 autres textes sont traduits dans les 4 langues), menu de développement inaccessible mais encore dans l'application, <code>usesCleartextTraffic</code> à <code>true</code> dans <code>app.json</code> (à passer à <code>false</code>).</li>
+</ul>
+
+<h2>9. Commits et état</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>a00f5b00</code></td><td>Retrait des prestataires vers Mobile Money (écran Portefeuille, page console)</td></tr>
+<tr><td><code>46262e4b</code></td><td>Administration retirée du mobile, console au nom d'ANGI DSN PRO et adaptée au téléphone</td></tr>
+<tr><td><code>03ce4956</code></td><td>« Solder et supprimer » pour un client dont le portefeuille n'est pas à zéro</td></tr>
+<tr><td><code>69748e1a</code></td><td>Suppression d'un compte client (console web et script)</td></tr>
+<tr><td><code>df5ac739</code></td><td>Inscription d'agence refaite, pièces sans statuts ni casier, clavier</td></tr>
+<tr><td><code>7adc8eb1</code></td><td>Recharge FedaPay refusée : la cause est affichée à l'utilisateur</td></tr>
+<tr><td><code>8f00c7d9</code></td><td>Console web et connexion administrateur par mot de passe</td></tr></table>
+<div class="box warn"><b>Pas encore commité</b> (dans le dossier de travail) : parcours du coursier personnel (« Je suis arrivé », vocabulaire de course, notifications), choix du type à l'inscription et suppression des voitures pour le livreur express, kilométrage durci, nouvelle colonne <code>courierArrivedAt</code> et sa migration <code>20261021120000</code>. Le serveur doit être redéployé avant le prochain APK.</div>
+</body></html>

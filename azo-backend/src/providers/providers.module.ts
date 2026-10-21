@@ -664,6 +664,16 @@ export class ProvidersService {
 
     let provider = user.provider;
 
+    // Les voitures ne livrent pas de colis : un livreur express choisit une moto ou un tricycle (refusé avant d'ouvrir le dossier)
+    {
+      const nextType = dto.type ?? provider?.type;
+      const nextCategory = String(dto.categoryId ?? provider?.categoryId ?? "");
+      const nextVehicle = String(dto.vehicleType ?? provider?.vehicleType ?? "");
+      if (nextType === "COURIER" && ["COURSIER_EXPRESS", "LIVREUR_COLIS"].includes(nextCategory) && ["GAZELLE", "KOALA", "LEOPARD"].includes(nextVehicle)) {
+        throw new BadRequestException("Les voitures ne font plus de livraison : un livreur express choisit une moto ou un tricycle.");
+      }
+    }
+
     if (!provider) {
       if (!dto.type) throw new BadRequestException("Choisis un type d'activité pour ouvrir un dossier");
       this.assertTypeEnabled(dto.type);

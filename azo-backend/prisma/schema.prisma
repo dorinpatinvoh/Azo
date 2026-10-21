@@ -414,6 +414,8 @@ model Delivery {
   clientLocatedAt DateTime?
   // Distance parcourue : mètres déjà comptés grâce à la vitesse du téléphone depuis le point d'ancrage (évite de les compter deux fois)
   odoCred       Float    @default(0)
+  // Coursier personnel : le coursier a signalé son arrivée chez le client (« Je suis arrivé ») ; le départ n'est possible qu'ensuite
+  courierArrivedAt DateTime?
 }
 
 model RentalBooking {

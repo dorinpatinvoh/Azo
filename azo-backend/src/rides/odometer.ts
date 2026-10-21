@@ -35,6 +35,20 @@ const STATIONARY_SPEED_MPS = 0.5;
 /** Durée maximale (s) d'un intervalle compté à partir de la vitesse : au-delà, les données sont trop anciennes. */
 const MAX_SPEED_INTERVAL_S = 5;
 
+/** Mode strict (coursier personnel, livreur express) : vitesse (m/s) à partir de laquelle le téléphone est considéré en mouvement (≈ 5,4 km/h). */
+const STRICT_MOVING_SPEED_MPS = 1.5;
+/** Mode strict : en dessous de cette vitesse (m/s), le téléphone est pratiquement à l'arrêt. */
+const STRICT_SLOW_SPEED_MPS = 1;
+
+export type OdometerOptions = {
+  /**
+   * Mode strict : sans vitesse mesurée supérieure à 5,4 km/h, un déplacement n'est compté que s'il est franchement grand
+   * (au moins 80 m à l'arrêt, 40 m si la vitesse est inconnue). Un GPS immobile qui dérive de 10 à 60 m ne fait plus monter le compteur ;
+   * un vrai trajet lent n'est pas perdu : la distance depuis le point d'ancrage est comptée dès qu'elle dépasse ce seuil.
+   */
+  strict?: boolean;
+};
+
 /** Arrondi au millimètre. */
 const mm = (meters: number) => Math.round(meters * 1000) / 1000;
 
@@ -50,7 +64,8 @@ export function odometerStep(
   previous: OdometerPoint | null,
   current: OdometerPoint,
   accuracy: number | undefined,
-  speed?: number
+  speed?: number,
+  options?: OdometerOptions
 ): OdometerResult | null {
   if (
     !Number.isFinite(current.lat) ||
@@ -77,6 +92,22 @@ export function odometerStep(
 
   // Zone d'incertitude : les deux points peuvent être décalés de leur précision chacun
   const noise = Math.max(MIN_STEP_METERS, (previous.acc ?? accuracy) + accuracy);
+  if (options?.strict) {
+    const speedKnown = typeof speed === "number" && Number.isFinite(speed);
+    const moving = speedKnown && (speed as number) >= STRICT_MOVING_SPEED_MPS;
+    if (!moving) {
+      const nearlyStopped = speedKnown && (speed as number) < STRICT_SLOW_SPEED_MPS;
+      const required = nearlyStopped ? Math.min(150, Math.max(80, noise * 5)) : Math.min(100, Math.max(40, noise * 3));
+      if (distance < required) return { point: previous, meters: 0, accepted: false };
+      return { point, meters: mm(Math.max(0, distance - (previous.cred ?? 0))), accepted: true };
+    }
+    // En mouvement : on ne compte que par la position, jamais par la seule vitesse (une vitesse parasite de 2 m/s à l'arrêt ferait
+    // monter le compteur). Le déplacement doit dépasser le bruit du GPS ET rester cohérent avec la vitesse mesurée : un « saut » de
+    // quelques dizaines de mètres en une ou deux secondes alors que le téléphone annonce 2 m/s n'est pas un trajet. Un vrai trajet
+    // n'est pas perdu : la distance depuis le point d'ancrage est comptée dès qu'elle dépasse le seuil.
+    if (distance < noise || distance > (speed as number) * (elapsedMs / 1000) * 1.5 + 8) return { point: previous, meters: 0, accepted: false };
+    return { point, meters: mm(Math.max(0, distance - (previous.cred ?? 0))), accepted: true };
+  }
   const stationary = typeof speed === "number" && Number.isFinite(speed) && speed < STATIONARY_SPEED_MPS;
   if (distance < noise || (stationary && distance < noise * 3)) {
     // La position ne suffit pas à mesurer ce petit déplacement (le GPS bouge de 10 à 30 m à l'arrêt), mais la vitesse mesurée

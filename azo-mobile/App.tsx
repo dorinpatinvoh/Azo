@@ -94,6 +94,7 @@ const LAST_ROUTE_KEY = "lastRoute";
 const LAST_PHONE_KEY = "lastLoginPhone";
 const SIGNUP_TYPE_KEY = "signupProviderType";
 const SIGNUP_CATEGORY_KEY = "signupProviderCategory";
+const SIGNUP_CHOICE_KEY = "signupProviderChoice";
 
 function routeFor(
   role: string,
@@ -234,6 +235,8 @@ function AppInner() {
                             setSignupType(null);
                             SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
 SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
+SecureStore.deleteItemAsync(SIGNUP_CHOICE_KEY).catch(() => undefined);
+setSignupChoice(null);
                             BrandAlert.alert("Inscription supprimée", "Ton inscription en cours a été supprimée.");
                           })
                           .catch(() => BrandAlert.alert("Suppression impossible", "Vérifie ta connexion et réessaie."));
@@ -262,6 +265,11 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
   const [signupType, setSignupType] = useState<ProviderType | null>(null);
   // Spécialité du coursier choisie à l'inscription (Coursier personnel ou Livreur express)
   const [signupCategory, setSignupCategory] = useState<string | null>(null);
+  // Type de véhicule (Speeder, coursier) ou niveau d'agence choisi à la création du compte
+  const [signupChoice, setSignupChoice] = useState<string | null>(null);
+  useEffect(() => {
+    SecureStore.getItemAsync(SIGNUP_CHOICE_KEY).then((v) => setSignupChoice(v || null)).catch(() => undefined);
+  }, []);
   useEffect(() => {
     SecureStore.getItemAsync(SIGNUP_CATEGORY_KEY).then((v) => setSignupCategory(v || null)).catch(() => undefined);
   }, []);
@@ -566,6 +574,8 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
     setSignupType(null);
     SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
 SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
+SecureStore.deleteItemAsync(SIGNUP_CHOICE_KEY).catch(() => undefined);
+setSignupChoice(null);
     try {
       await SecureStore.deleteItemAsync("userRole");
       await SecureStore.deleteItemAsync("userToken");
@@ -674,7 +684,7 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
         {route === "otp" && (
           <OtpLoginScreen
             resumeRegistration={resumeRegistration}
-            onVerified={(role?: string | null, provider?: ProviderRef | null, startType?: ProviderType | null, startCategory?: string | null) => {
+            onVerified={(role?: string | null, provider?: ProviderRef | null, startType?: ProviderType | null, startCategory?: string | null, startChoice?: string | null) => {
               setResumeRegistration(false);
               setSessionToken(getToken());
               // Inscription avec une activité (Speeder, coursier, agence) : on enchaîne sur le dossier dédié (mémorisé jusqu'au dépôt)
@@ -684,6 +694,9 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
                 setSignupCategory(startCategory ?? null);
                 if (startCategory) SecureStore.setItemAsync(SIGNUP_CATEGORY_KEY, startCategory).catch(() => undefined);
                 else SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
+                setSignupChoice(startChoice ?? null);
+                if (startChoice) SecureStore.setItemAsync(SIGNUP_CHOICE_KEY, startChoice).catch(() => undefined);
+                else SecureStore.deleteItemAsync(SIGNUP_CHOICE_KEY).catch(() => undefined);
                 goTo("provider-onboarding");
                 return;
               }              void resolveStartRoute(routeFor(role ?? "", provider?.status ?? null, provider?.type ?? null)).then(goTo);
@@ -798,11 +811,14 @@ SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
           <ProviderOnboardingScreen
             signupType={signupType ?? undefined}
             signupCategory={signupCategory ?? undefined}
+            signupChoice={signupChoice ?? undefined}
             initialType={signupType ?? undefined}
             onSubmitted={() => {
               setSignupType(null);
               SecureStore.deleteItemAsync(SIGNUP_TYPE_KEY).catch(() => undefined);
 SecureStore.deleteItemAsync(SIGNUP_CATEGORY_KEY).catch(() => undefined);
+SecureStore.deleteItemAsync(SIGNUP_CHOICE_KEY).catch(() => undefined);
+setSignupChoice(null);
               goTo("provider-status");
             }}
             onBack={() => {

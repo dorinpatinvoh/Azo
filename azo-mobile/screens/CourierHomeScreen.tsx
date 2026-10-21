@@ -163,6 +163,8 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
   useEffect(() => setLiveMeters(null), [activeDelivery?.id, activeDelivery?.status]);
   useCourierTracking(activeDelivery && ["MATCHED", "IN_PROGRESS"].includes(activeDelivery.status) ? activeDelivery.id : null, setLiveMeters);
   const doneMeters = Math.max(liveMeters ?? 0, activeDelivery?.traveledMeters ?? 0);
+  // Coursier personnel : c'est une course (on accompagne un client), pas une livraison de colis
+  const personalMission = activeDelivery?.mode === "PERSONAL";
 
   const currentSimCode = useMemo(() => {
     if (!activeDelivery) return null;
@@ -291,11 +293,26 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
     }
   }
 
+  // Coursier personnel : « Je suis arrivé » (le client est prévenu et donne son code de départ), comme un Speeder sur une course simple
+  async function handleArrive() {
+    if (!activeDelivery) return;
+    setBusy(true);
+    try {
+      await deliveryApi.arrive(activeDelivery.id);
+      await loadAccount();
+      BrandAlert.alert("Arrivée signalée ✅", "Ton client a été prévenu. Demande-lui son code de départ à 4 chiffres, puis appuie sur « Démarrer la course ».");
+    } catch (e) {
+      BrandAlert.alert("Impossible de confirmer l'arrivée", errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleConfirmOtp() {
     if (!activeDelivery) return;
     const clean = otpInput.replace(/\D/g, "");
     if (clean.length !== 4) {
-      BrandAlert.alert("Code à 4 chiffres", "Saisis le code à 4 chiffres fourni par le client ou le destinataire.");
+      BrandAlert.alert("Code à 4 chiffres", personalMission ? "Saisis le code à 4 chiffres donné par ton client." : "Saisis le code à 4 chiffres fourni par le client ou le destinataire.");
       return;
     }
     setBusy(true);
@@ -305,8 +322,10 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
         setOtpInput("");
         await loadAccount();
         BrandAlert.alert(
-          "Ramassage validé ✅",
-          "Colis pris en charge ! Dirige-toi vers l'adresse de livraison et demande le code de remise à 4 chiffres au destinataire."
+          personalMission ? "Course démarrée ✅" : "Ramassage validé ✅",
+          personalMission
+            ? "Les kilomètres comptent à partir de maintenant. Quand vous avez terminé, demande à ton client le code de fin à 4 chiffres."
+            : "Colis pris en charge ! Dirige-toi vers l'adresse de livraison et demande le code de remise à 4 chiffres au destinataire."
         );
       } else {
         // Le prix final (coursier personnel : kilomètres réellement parcourus) vient de la réponse du serveur
@@ -316,7 +335,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
         const gross = done.price ?? activeDelivery.price;
         const commission = done.commission ?? Math.round(gross * 0.15);
         BrandAlert.alert(
-          "Livraison terminée 🎉",
+          personalMission ? "Course terminée 🎉" : "Livraison terminée 🎉",
           commissionNotice(gross, commission)
         );
       }
@@ -330,8 +349,8 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
   function handleCancelMission() {
     if (!activeDelivery) return;
     BrandAlert.alert(
-      "Annuler cette mission",
-      "Veux-tu vraiment te désister ? La mission sera reproposée aux autres coursiers.",
+      personalMission ? "Annuler cette course" : "Annuler cette mission",
+      personalMission ? "Veux-tu vraiment te désister ? La réservation sera reproposée aux autres coursiers." : "Veux-tu vraiment te désister ? La mission sera reproposée aux autres coursiers.",
       [
         { text: "Continuer la mission", style: "cancel" },
         {
@@ -421,11 +440,11 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
             <View style={styles.activeCard}>
               <View style={styles.activeHeader}>
                 <View style={styles.activeBadge}>
-                  <MaterialIcons name="local-shipping" size={16} color="#fff" />
+                  <MaterialIcons name={personalMission ? "directions-run" : "local-shipping"} size={16} color="#fff" />
                   <Text style={styles.activeBadgeText}>
                     {activeDelivery.status === "MATCHED"
-                      ? "ÉTAPE 1/2 · ALLER AU RAMASSAGE"
-                      : "ÉTAPE 2/2 · EN LIVRAISON"}
+                      ? personalMission ? (activeDelivery.courierArrivedAt ? "ÉTAPE 1/2 · ARRIVÉ · CODE DE DÉPART" : "ÉTAPE 1/2 · REJOINS TON CLIENT") : "ÉTAPE 1/2 · ALLER AU RAMASSAGE"
+                      : personalMission ? "ÉTAPE 2/2 · COURSE EN COURS" : "ÉTAPE 2/2 · EN LIVRAISON"}
                   </Text>
                 </View>
                 <Text style={styles.activePrice}>
@@ -438,7 +457,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
               </View>
 
               <Text style={styles.packageTitle}>
-                {PACKAGE_META[activeDelivery.packageType]?.label ?? "Mission de livraison"}
+                {personalMission ? "Course personnelle" : PACKAGE_META[activeDelivery.packageType]?.label ?? "Mission de livraison"}
               </Text>
 
               {/* Barre de progression visuelle en 3 étapes */}
@@ -454,7 +473,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                   }}
                 >
                   <Text style={{ ...typography.labelSm, color: "#fff", fontFamily: FONT.extrabold, fontSize: 10 }}>
-                    1. Ramassage
+                    {personalMission ? "1. Rejoindre" : "1. Ramassage"}
                   </Text>
                 </View>
                 <MaterialIcons name="chevron-right" size={16} color={colors.primary} />
@@ -479,7 +498,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                       fontSize: 10,
                     }}
                   >
-                    2. En route
+                    {personalMission ? "2. En course" : "2. En route"}
                   </Text>
                 </View>
                 <MaterialIcons name="chevron-right" size={16} color={colors.outline} />
@@ -494,7 +513,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                   }}
                 >
                   <Text style={{ ...typography.labelSm, color: colors.onSurfaceVariant, fontFamily: FONT.bold, fontSize: 10 }}>
-                    3. Encaissement
+                    {personalMission ? "3. Fin" : "3. Encaissement"}
                   </Text>
                 </View>
               </View>
@@ -503,7 +522,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                 <View style={styles.routeStep}>
                   <MaterialIcons name="trip-origin" size={16} color={colors.primary} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.routeLabel}>Ramassage (Expéditeur)</Text>
+                    <Text style={styles.routeLabel}>{personalMission ? "Rendez-vous avec ton client" : "Ramassage (Expéditeur)"}</Text>
                     <Text style={styles.routeAddress}>{activeDelivery.pickupAddress}</Text>
                   </View>
                 </View>
@@ -511,11 +530,17 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                 <View style={styles.routeStep}>
                   <MaterialIcons name="place" size={16} color={colors.secondary} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.routeLabel}>Remise (Destinataire)</Text>
-                    <Text style={styles.routeAddress}>{activeDelivery.dropAddress}</Text>
+                    <Text style={styles.routeLabel}>{personalMission ? "Destination" : "Remise (Destinataire)"}</Text>
+                    <Text style={styles.routeAddress}>{personalMission ? "À convenir avec ton client pendant la course" : activeDelivery.dropAddress}</Text>
                   </View>
                 </View>
               </View>
+
+              {personalMission && activeDelivery.bookedUntil ? (
+                <Text style={styles.routeLabel}>
+                  Réservé jusqu'au {new Date(activeDelivery.bookedUntil).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </Text>
+              ) : null}
 
               {/* Où est le client : sa position est partagée pendant la mission, comme sur une course simple */}
               <ClientTrackMap
@@ -552,7 +577,26 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                 </View>
               ) : null}
 
-              {/* Saisie du code OTP de ramassage ou de remise */}
+              {/* Coursier personnel, avant l'arrivée : « Je suis arrivé » d'abord, le code de départ ensuite */}
+              {personalMission && activeDelivery.status === "MATCHED" && !activeDelivery.courierArrivedAt ? (
+                <View style={styles.otpBox}>
+                  <Text style={styles.otpTitle}>Rejoins ton client</Text>
+                  <Text style={styles.muted}>
+                    Rejoins le point de rendez-vous, puis appuie sur « Je suis arrivé ». Ton client recevra une notification et te donnera son code de départ.
+                  </Text>
+                  <Pressable style={[styles.otpConfirmBtn, busy && { opacity: 0.6 }]} disabled={busy} onPress={handleArrive}>
+                    {busy ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <MaterialIcons name="where-to-vote" size={18} color="#fff" />
+                        <Text style={styles.otpConfirmText}>Je suis arrivé</Text>
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              ) : (
+              /* Saisie du code OTP de ramassage ou de remise */
               <View style={styles.otpBox}>
                 {simBannerCode ? (
                   <Pressable
@@ -585,8 +629,8 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                 ) : null}
                 <Text style={styles.otpTitle}>
                   {activeDelivery.status === "MATCHED"
-                    ? "Code de ramassage (4 chiffres de l'expéditeur)"
-                    : "Code de remise finale (4 chiffres du destinataire)"}
+                    ? personalMission ? "Code de départ (4 chiffres donnés par ton client)" : "Code de ramassage (4 chiffres de l'expéditeur)"
+                    : personalMission ? "Code de fin de course (4 chiffres donnés par ton client)" : "Code de remise finale (4 chiffres du destinataire)"}
                 </Text>
                 <View style={styles.otpRow}>
                   <TextInput
@@ -610,18 +654,19 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                         <MaterialIcons name="verified" size={18} color="#fff" />
                         <Text style={styles.otpConfirmText}>
                           {activeDelivery.status === "MATCHED"
-                            ? "Valider ramassage"
-                            : "Livrer & encaisser"}
+                            ? personalMission ? "Démarrer la course" : "Valider ramassage"
+                            : personalMission ? "Terminer la course" : "Livrer & encaisser"}
                         </Text>
                       </>
                     )}
                   </Pressable>
                 </View>
               </View>
+              )}
 
               {activeDelivery.status === "MATCHED" ? (
                 <Pressable style={styles.cancelLink} onPress={handleCancelMission} disabled={busy}>
-                  <Text style={styles.cancelLinkText}>Se désister de cette mission</Text>
+                  <Text style={styles.cancelLinkText}>{personalMission ? "Se désister de cette course" : "Se désister de cette mission"}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -793,7 +838,9 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
               <View style={styles.ongoingTop}>
                 <MaterialIcons name={activeDelivery.mode === "PERSONAL" ? "directions-run" : "local-shipping"} size={20} color={colors.onPrimary} />
                 <Text style={styles.ongoingTitle}>{activeDelivery.mode === "PERSONAL" ? "Course personnelle en cours" : "Livraison en cours"}</Text>
-                <Text style={styles.ongoingState}>{activeDelivery.status === "MATCHED" ? "En route vers le ramassage" : "En livraison"}</Text>
+                <Text style={styles.ongoingState}>{personalMission
+                  ? activeDelivery.status === "MATCHED" ? (activeDelivery.courierArrivedAt ? "Arrivé chez le client" : "En route vers le client") : "Course démarrée"
+                  : activeDelivery.status === "MATCHED" ? "En route vers le ramassage" : "En livraison"}</Text>
               </View>
               <Text style={styles.ongoingRoute} numberOfLines={1}>De : {activeDelivery.pickupAddress}</Text>
               <Text style={styles.ongoingRoute} numberOfLines={1}>Vers : {activeDelivery.dropAddress}</Text>

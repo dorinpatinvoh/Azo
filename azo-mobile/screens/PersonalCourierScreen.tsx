@@ -148,7 +148,7 @@ export default function PersonalCourierScreen({ onBack, onRecharge, onBooked, in
         {bookings.map((b) => (
           <View key={b.id} style={styles.bookingCard}>
             <Text style={styles.bookingTitle}>
-              {b.status === "PENDING" ? "Recherche de ton coursier…" : b.status === "MATCHED" ? "Ton coursier arrive" : "Course en cours"}
+              {b.status === "PENDING" ? "Recherche de ton coursier…" : b.status === "MATCHED" ? (b.courierArrivedAt ? "Ton coursier est arrivé" : "Ton coursier arrive") : "Course en cours"}
             </Text>
             <Text style={styles.priceNote}>De : {b.pickupAddress}</Text>
             {b.dropAddress ? <Text style={styles.priceNote}>Vers : {b.dropAddress}</Text> : null}

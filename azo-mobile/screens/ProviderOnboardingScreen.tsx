@@ -20,6 +20,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { agencyLevelPricing, tarification, type AgencyLevel } from "../services/tarification";
 import { agencyPlanName } from "../utils/agencyPlan";
+import { AGENCY_LEVEL_CHOICES, vehicleIcon } from "../utils/providerChoices";
 import {
   AgencyPlanChoice,
   DocumentKind,
@@ -42,6 +43,8 @@ type Props = {
   signupType?: ProviderType;
   /** Spécialité du coursier choisie à l'inscription (COURSIER_PERSONNEL ou COURSIER_EXPRESS) : elle est préremplie et seule proposée. */
   signupCategory?: string;
+  /** Type de véhicule (Speeder, coursier) ou niveau d'agence choisi à la création du compte : l'étape « Activité » est alors sautée. */
+  signupChoice?: string;
   initialVehicle?: VehicleType;
 };
 
@@ -100,19 +103,6 @@ const EMPTY_FORM: Form = {
   fleetSize: "",
 };
 
-// Une agence choisit directement son niveau : Pro, Silver, Or, Diamant, Platine ou Elite. Montants et plafonds viennent de la grille
-// officielle partagée (jamais codés en dur ici).
-const AGENCY_LEVEL_CHOICES = (Object.keys(tarification().agencyLevels) as AgencyLevel[]).map((plan) => {
-  const rules = agencyLevelPricing(plan);
-  return {
-    plan: plan as AgencyPlanChoice,
-    label: agencyPlanName(plan),
-    hint:
-      `Activation unique : ${rules.activationFee.toLocaleString("fr-FR")} F · Jusqu'à ${rules.maxAccounts.toLocaleString("fr-FR")} comptes · ` +
-      `Commission : ${String(rules.commissionPct).replace(".", ",")} % · Frais de retrait : ${String(rules.withdrawalFeePct).replace(".", ",")} %`,
-  };
-});
-
 const REPRESENTATIVE_ROLES = [
   "Gérant",
   "Directeur Général",
@@ -145,15 +135,6 @@ const DEFAULT_DRIVER_VEHICLES: VehicleChoice[] = [
   { value: "KOALA", label: "Koala — Voiture climatisée", hint: "Voiture intermédiaire, confort avec climatisation", family: "CAR" },
   { value: "LEOPARD", label: "Léopard — Berline premium climatisée", hint: "Berline haut de gamme climatisée, trajets VIP", family: "CAR" },
 ];
-
-/** Icône MaterialIcons d'un véhicule (moto essence / moto électrique / voiture). */
-function vehicleIcon(value: VehicleType): keyof typeof MaterialIcons.glyphMap {
-  if (value === "ZEM_ELECTRIC") return "electric-moped";
-  if (value === "ZEM_TRICYCLE") return "electric-rickshaw";
-  if (value === "ZEM_ESSENCE") return "two-wheeler";
-  if (value === "LEOPARD") return "local-taxi";
-  return "directions-car";
-}
 
 // Filière coursier / livreur : choix inchangés pour l'instant (harmonisation à venir).
 const DEFAULT_COURIER_VEHICLES: VehicleChoice[] = [
@@ -206,7 +187,7 @@ function isoToFr(iso: string | null): string {
   return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
 }
 
-export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialType, initialVehicle, signupType, signupCategory }: Props) {
+export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialType, initialVehicle, signupType, signupCategory, signupChoice }: Props) {
   // Le bas de l'écran reste au-dessus de la barre de navigation Android ; boutons plus compacts sur petit écran
   const insets = useSafeAreaInsets();
   const [keyboardUp, setKeyboardUp] = useState(false);
@@ -293,6 +274,10 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
   const currentType = (form.type ?? dossier?.type ?? null) as ProviderType | null;
   const isAgency = currentType === "AGENCY";
   const isCourier = currentType === "COURIER";
+  // Les voitures ne livrent pas de colis : un livreur express n'a le choix qu'entre motos et tricycle
+  const isExpressCourier = isCourier && !!form.categoryId && form.categoryId !== "COURSIER_PERSONNEL";
+  // Type de véhicule ou niveau d'agence déjà choisi à la création du compte : l'étape « Activité » n'est plus proposée
+  const skipActivity = !!signupType && (signupType === "AGENCY" ? !!form.plan : !!form.vehicleType);
 
   const typeConfig = useMemo(
     () => availableTypes.find((t) => t.type === currentType) ?? null,
@@ -355,7 +340,16 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
             if (item.expiresAt) setExpiryDraft((s) => ({ ...s, [item.kind]: isoToFr(item.expiresAt) }));
           }
         } else {
-          setForm((f) => ({ ...f, type: initialType ?? null, vehicleType: initialVehicle ?? null, categoryId: signupCategory ?? f.categoryId }));
+          // Choix fait à la création du compte : véhicule (Speeder, coursier) ou niveau d'agence ; le dossier démarre alors à l'identité
+          const agencySignup = initialType === "AGENCY";
+          setForm((f) => ({
+            ...f,
+            type: initialType ?? null,
+            vehicleType: !agencySignup && signupChoice ? (signupChoice as VehicleType) : initialVehicle ?? null,
+            ...(agencySignup && signupChoice ? { plan: signupChoice as AgencyPlanChoice, agencyType: signupChoice } : {}),
+            categoryId: signupCategory ?? f.categoryId,
+          }));
+          if (signupChoice) setStep(1);
         }
       } catch (e) {
         if (alive) setLoadError(errorMessage(e));
@@ -366,7 +360,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     return () => {
       alive = false;
     };
-  }, [initialType, initialVehicle]);
+  }, [initialType, initialVehicle, signupChoice]);
 
   /* -------------------------------------------------------------- actions */
 
@@ -494,7 +488,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
   }
 
   function goBack() {
-    if (step === 0) return onBack();
+    if (step === 0 || (step === 1 && skipActivity)) return onBack();
     setStep((s) => s - 1);
   }
 
@@ -654,7 +648,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Devenir prestataire AZƆ̀</Text>
           <Text style={styles.headerSub}>
-            Étape {step + 1}/{TOTAL_STEPS} · {stepLabel}
+            Étape {skipActivity ? step : step + 1}/{skipActivity ? TOTAL_STEPS - 1 : TOTAL_STEPS} · {stepLabel}
           </Text>
         </View>
         <View style={styles.kycBadge}>
@@ -664,9 +658,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
       </View>
 
       <View style={styles.progressRow}>
-        {STEP_LABELS.map((label, i) => (
-          <View key={label} style={[styles.progressDot, i <= step && styles.progressDotActive]} />
-        ))}
+        {STEP_LABELS.map((label, i) => (i === 0 && skipActivity ? null : <View key={label} style={[styles.progressDot, i <= step && styles.progressDotActive]} />))}
       </View>
 
       {/* « padding » aussi sur Android : les applications Expo récentes n'ajustent plus la fenêtre, le clavier
@@ -773,9 +765,11 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
                     {
                       key: "CAR",
                       title: isCourier ? "Voiture" : "Speeder voiture",
-                      items: choices.filter((v) =>
-                        v.family ? v.family === "CAR" : v.value === "GAZELLE" || v.value === "KOALA" || v.value === "LEOPARD"
-                      ),
+                      items: isExpressCourier
+                        ? []
+                        : choices.filter((v) =>
+                            v.family ? v.family === "CAR" : v.value === "GAZELLE" || v.value === "KOALA" || v.value === "LEOPARD"
+                          ),
                     },
                   ];
                   return groups.map((group) =>
@@ -1203,7 +1197,7 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
 
       <View style={[styles.footer, { paddingBottom: keyboardUp ? 10 : Math.max(insets.bottom, 12) + 12 }]}>
         <Pressable style={[styles.secondaryBtn, compact && { paddingHorizontal: 14 }]} onPress={goBack} disabled={busy}>
-          <Text style={styles.secondaryText}>{step === 0 ? "Quitter" : "Précédent"}</Text>
+          <Text style={styles.secondaryText}>{step === 0 || (step === 1 && skipActivity) ? "Quitter" : "Précédent"}</Text>
         </Pressable>
         <Pressable
           style={[styles.primaryBtn, { flex: 1, minWidth: 0 }, compact && { paddingHorizontal: 12 }, busy && styles.btnDisabled]}

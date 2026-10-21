@@ -104,6 +104,14 @@ export default function DeliveryTrackingCard({ delivery: d, onChanged }: Props) 
         </Text>
       ) : null}
 
+      {personal && d.status === "MATCHED" ? (
+        <Text style={[styles.meta, d.courierArrivedAt ? { fontWeight: "800", color: colors.primary } : null]}>
+          {d.courierArrivedAt
+            ? "Ton coursier est arrivé : donne-lui ton code de départ pour démarrer la course."
+            : "Ton coursier est en route vers toi. Tu seras prévenu dès son arrivée."}
+        </Text>
+      ) : null}
+
       {["MATCHED", "IN_PROGRESS"].includes(d.status) ? <CourierTrackMap deliveryId={d.id} perKm={perKm} /> : null}
 
       {active ? (

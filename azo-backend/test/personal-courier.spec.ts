@@ -330,6 +330,56 @@ describe("Réservation d'un coursier personnel", () => {
     });
   });
 
+  describe("« Je suis arrivé » (coursier personnel, comme un Speeder)", () => {
+    const matched = { id: "d1", clientId: "c1", courierId: "k1", mode: "PERSONAL", status: "MATCHED", courierArrivedAt: null, pickupCode: "1234", deliveryCode: "9876", payer: "SENDER", price: 1500, dropAddress: "Fidjrossè" };
+    const withRow = (row: Record<string, unknown>) => {
+      const ctx = make();
+      ctx.prisma.delivery.findUnique.mockResolvedValue({ ...matched, ...row });
+      ctx.prisma.delivery.findUniqueOrThrow.mockResolvedValue({ ...matched, ...row, courierArrivedAt: new Date() });
+      ctx.prisma.delivery.update = jest.fn().mockResolvedValue({ ...matched, ...row, status: "IN_PROGRESS" });
+      return ctx;
+    };
+
+    it("enregistre l'arrivée et prévient le client", async () => {
+      const { service, prisma, notifications } = withRow({});
+      await service.arrive("k1", "d1");
+      expect(prisma.delivery.updateMany.mock.calls[0][0].data.courierArrivedAt).toBeInstanceOf(Date);
+      expect(notifications.push).toHaveBeenCalledWith("c1", expect.stringContaining("arrivé"), expect.any(String), "DELIVERY", expect.objectContaining({ titleKey: "NOTIFICATION_PERSONAL_ARRIVED" }));
+    });
+
+    it("est idempotent : un second appui ne renotifie pas le client", async () => {
+      const { service, prisma, notifications } = withRow({ courierArrivedAt: new Date() });
+      await service.arrive("k1", "d1");
+      expect(prisma.delivery.updateMany).not.toHaveBeenCalled();
+      expect(notifications.push).not.toHaveBeenCalled();
+    });
+
+    it("refuse un autre coursier, une livraison express et une course déjà démarrée", async () => {
+      await expect(withRow({}).service.arrive("autre", "d1")).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(withRow({ mode: "EXPRESS" }).service.arrive("k1", "d1")).rejects.toBeInstanceOf(BadRequestException);
+      await expect(withRow({ status: "IN_PROGRESS" }).service.arrive("k1", "d1")).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("le départ avec le code est refusé tant que le coursier n'a pas signalé son arrivée", async () => {
+      const { service, prisma } = withRow({});
+      await expect(service.confirmPickup("k1", "d1", "1234")).rejects.toThrow(/Je suis arrivé/);
+      expect(prisma.delivery.update).not.toHaveBeenCalled();
+    });
+
+    it("après l'arrivée, le bon code démarre la course et un mauvais code est refusé", async () => {
+      const arrived = withRow({ courierArrivedAt: new Date() });
+      await expect(arrived.service.confirmPickup("k1", "d1", "0000")).rejects.toThrow(/invalide/);
+      await arrived.service.confirmPickup("k1", "d1", "1234");
+      expect(arrived.prisma.delivery.update.mock.calls[0][0].data.status).toBe("IN_PROGRESS");
+    });
+
+    it("une livraison express n'a pas besoin de signaler d'arrivée", async () => {
+      const { service, prisma } = withRow({ mode: "EXPRESS" });
+      await service.confirmPickup("k1", "d1", "1234");
+      expect(prisma.delivery.update.mock.calls[0][0].data.status).toBe("IN_PROGRESS");
+    });
+  });
+
   describe("distance parcourue d'une mission (coursier personnel et livreur express)", () => {
     const base = { clientId: "c1", courierId: "k1", price: 1000, odoLat: 6.37, odoLng: 2.39, odoCred: 0 };
     const send = async (row: Record<string, unknown>, dto: Record<string, unknown>) => {
@@ -340,12 +390,25 @@ describe("Réservation d'un coursier personnel", () => {
       return prisma.delivery.update.mock.calls[0][0].data;
     };
 
-    it("compte un petit déplacement réel grâce à la vitesse du téléphone (livreur express comme coursier personnel)", async () => {
+    it("compte un déplacement réel confirmé par la vitesse du téléphone, 20 m en 2 s à 8 m/s (livreur express comme coursier personnel)", async () => {
+      for (const mode of ["EXPRESS", "PERSONAL"]) {
+        const data = await send({ mode, status: "IN_PROGRESS", odoAt: new Date(Date.now() - 2000) }, { speed: 8, latitude: 6.37 + 20 / 111_195 });
+        expect(data.traveledMeters.increment).toBeGreaterThan(19);
+        expect(data.traveledMeters.increment).toBeLessThan(21);
+      }
+    });
+
+    it("ne compte pas 1 m « mesuré par la vitesse » : sous le bruit du GPS, seule la position compte", async () => {
+      for (const mode of ["EXPRESS", "PERSONAL"]) {
+        const data = await send({ mode, status: "IN_PROGRESS", odoAt: new Date(Date.now() - 2000) }, { speed: 1.6 });
+        expect(data.traveledMeters).toBeUndefined();
+      }
+    });
+
+    it("ne compte pas un petit mouvement sous 5,4 km/h : c'est trop proche de la dérive d'un GPS immobile", async () => {
       for (const mode of ["EXPRESS", "PERSONAL"]) {
         const data = await send({ mode, status: "IN_PROGRESS", odoAt: new Date(Date.now() - 2000) }, { speed: 1.2 });
-        expect(data.traveledMeters.increment).toBeGreaterThan(2);
-        expect(data.traveledMeters.increment).toBeLessThan(2.6);
-        expect(data.odoCred).toBeCloseTo(data.traveledMeters.increment, 3);
+        expect(data.traveledMeters).toBeUndefined();
       }
     });
 

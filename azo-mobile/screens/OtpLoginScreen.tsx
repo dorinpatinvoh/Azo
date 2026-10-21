@@ -21,6 +21,7 @@ import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import PrimaryButton from "../components/PrimaryButton";
 import AccountKindPicker, { type AccountKind } from "../components/AccountKindPicker";
+import SignupChoicePicker from "../components/SignupChoicePicker";
 import { useI18n, type MessageKey } from "../i18n";
 import { speakKey, speakText, stopSpeaking, type VoiceKey } from "../i18n/voice";
 import {
@@ -57,7 +58,7 @@ import { BrandAlert } from "../components/BrandAlert";
 type Step = "phone" | "code" | "register";
 
 type Props = {
-  onVerified: (role: string, provider?: ProviderRef | null, startType?: ProviderType | null, startCategory?: string | null) => void;
+  onVerified: (role: string, provider?: ProviderRef | null, startType?: ProviderType | null, startCategory?: string | null, startChoice?: string | null) => void;
   /** Plus utilisé : l'écran de connexion n'a plus de retour vers l'onboarding. */
   onBack?: () => void;
   /** Application rouverte alors que l'inscription n'était pas terminée (session déjà ouverte). */
@@ -74,6 +75,8 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
   const [step, setStep] = useState<Step>(resumeRegistration ? "register" : "phone");
   // Type de compte choisi à l'inscription : « Agence » ouvre ensuite le dossier d'agence (seul endroit où l'on peut en créer une)
   const [accountKind, setAccountKind] = useState<AccountKind>("CLIENT");
+  // Type de Speeder / de coursier (véhicule) ou niveau d'agence, choisi à la création du compte
+  const [signupChoice, setSignupChoice] = useState<string | null>(null);
   // Bouton retour du téléphone : code → numéro ; sur le numéro et pendant l'inscription (étape obligatoire) il quitte l'application
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -197,6 +200,10 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
       notify(t("auth.alert.phoneTitle"), t("auth.alert.phoneBody"));
       return;
     }
+    if (signupMode && accountKind !== "CLIENT" && !signupChoice) {
+      notify(t("auth.alert.phoneTitle"), t("auth.choice.required"));
+      return;
+    }
     setSending(true);
     try {
       const normalized = toBeninE164(digits);
@@ -266,7 +273,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
           return;
         }
         const category = proKind === "COURIER" && accountKind === "COURIER_PERSONAL" ? "COURSIER_PERSONNEL" : proKind === "COURIER" && accountKind === "COURIER_EXPRESS" ? "COURSIER_EXPRESS" : null;
-        onVerified("CLIENT", null, proKind as ProviderType, category);
+        onVerified("CLIENT", null, proKind as ProviderType, category, signupChoice);
         return;
       }
 
@@ -516,7 +523,14 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
                     <MaterialIcons name="how-to-reg" size={16} color={colors.primary} />
                     <Text style={styles.kindLabel}>{t("auth.kind.title")}</Text>
                   </View>
-                  <AccountKindPicker value={accountKind} onChange={setAccountKind} />
+                  <AccountKindPicker
+                    value={accountKind}
+                    onChange={(kind) => {
+                      setAccountKind(kind);
+                      setSignupChoice(null);
+                    }}
+                  />
+                  <SignupChoicePicker kind={accountKind} value={signupChoice} onChange={setSignupChoice} />
                   {accountKind !== "CLIENT" ? (
                     <View style={styles.kindHint}>
                       <MaterialIcons name="info-outline" size={16} color={colors.primary} />
@@ -527,6 +541,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
                     onPress={() => {
                       setSignupMode(false);
                       setAccountKind("CLIENT");
+                      setSignupChoice(null);
                     }}
                     accessibilityRole="button"
                     style={styles.signupSwitch}
@@ -708,7 +723,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
             label={step === "phone" ? t("auth.phone.send") : step === "code" ? t("auth.code.verify") : t("auth.register.submit")}
             onPress={step === "phone" ? handleSendCode : step === "code" ? handleVerify : handleRegister}
             loading={sending}
-            disabled={step === "phone" ? !isPhoneValid : step === "code" ? code.join("").length < 4 : !!registrationProblem}
+            disabled={step === "phone" ? !isPhoneValid || (signupMode && accountKind !== "CLIENT" && !signupChoice) : step === "code" ? code.join("").length < 4 : !!registrationProblem}
             icon={step === "phone" ? "sms" : step === "code" ? "check" : "arrow-forward"}
           />
 

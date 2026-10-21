@@ -1,0 +1,84 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 21 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">21 octobre 2026 · 7 commits poussés sur main (<code>8f00c7d9</code> à <code>a00f5b00</code>) · 33 suites / 396 tests verts · une partie reste à commiter (voir § 10)</span></div>
+
+<h2>1. En résumé</h2>
+<p>Connexion administrateur par mot de passe en production, suppression de clients, <b>retraits des prestataires</b>, erreurs FedaPay visibles, kilométrage des livraisons durci, étape « Je suis arrivé » du coursier personnel, pièces d'agence allégées. Un <b>audit complet</b> a été fait (§ 8) : il reste des points critiques avant un lancement public. <code>tsc</code> sans erreur.</p>
+<div class="box warn"><b>Déploiement :</b> <code>/health</code> affichait <code>a00f5b00</code> en production. Le travail non commité (§ 10) apporte une migration (<code>20261021120000</code>, une colonne) : <code>render:start</code> exécute <code>prisma migrate deploy</code> avant le démarrage.</div>
+
+<h2>2. Connexion administrateur et console web</h2>
+<ul>
+<li><code>POST /auth/admin-login</code> (numéro + mot de passe haché scrypt, verrouillage après 5 échecs en 15 min, jeton de 12 h). Le code SMS de simulation <code>0000</code> n'ouvre plus un compte administrateur.</li>
+<li><code>CORS_ORIGINS</code> (adresses autorisées, séparées par des virgules) est active en production : l'en-tête <code>access-control-allow-origin</code> renvoie l'adresse de la console, vérifié.</li>
+<li><code>scripts/create-admin.js</code> lit <code>ADMIN_PASSWORD</code> dans l'environnement ; l'administrateur doit créer son mot de passe sur la vraie base.</li>
+</ul>
+
+<h2>3. Suppression d'un compte client</h2>
+<ul>
+<li><code>src/admin/client-deletion.ts</code> et <code>DELETE /admin/users/:id[?settle=1]</code>. Refusé pour son propre compte, un compte qui n'est pas client (prestataire, agence, administrateur), un client dont une course ou une livraison est en cours, un portefeuille non nul (sauf <code>settle=1</code>).</li>
+<li>Sans historique : le compte et ses données sont effacés. Avec historique (courses, livraisons, locations, mouvements d'argent) : <b>anonymisation</b> (nom, numéro, NPI, e-mail, appareils effacés ; numéro libéré ; courses et écritures gardées pour la comptabilité). <code>settle=1</code> remet le solde à zéro par une écriture « Solde remis à zéro à la suppression du compte ».</li>
+<li>Un commercial se supprime comme un client (filleuls détachés, profil de parrain supprimé) : <b>modification ajoutée par un autre outil dans mon commit, non testée sur base jetable</b>.</li>
+<li><code>scripts/delete-client.js &lt;numéro&gt; --allow-remote [--confirm] [--solder]</code> : montre le compte, ne supprime que sur <code>--confirm</code>.</li>
+<li><b>Vérifié sur base jetable</b> : client vierge supprimé, client avec historique anonymisé et numéro réinscriptible, refus (solde, course en cours, non-client, soi-même, inconnu), solde soldé avec écriture conservée.</li>
+</ul>
+
+<h2>4. Retrait des prestataires</h2>
+<ul>
+<li><code>POST /wallet/withdraw {amount, phone}</code> réservé aux rôles DRIVER, COURIER et AGENCY ; minimum 1 000 F ; numéro Mobile Money validé. Débit <b>conditionnel au solde</b> dans une transaction (deux demandes simultanées ne rendent plus le solde négatif) ; la demande est enregistrée <b>PENDING</b> avec le numéro à payer, les frais et le net.</li>
+<li>Console : <code>GET /admin/provider-withdrawals[?status=]</code>, <code>POST …/:id/paid {reference?}</code>, <code>POST …/:id/reject {reason}</code>. Payer ou refuser une demande déjà traitée est refusé ; un refus rend le montant au portefeuille <b>une seule fois</b> (la demande passe en <code>TRANSACTION_WITHDRAWAL_REFUSED</code>, donc ses frais ne comptent plus dans les gains). Le prestataire est notifié.</li>
+<li><b>Vérifié sur base jetable</b> : demande, deux retraits simultanés (un seul passe, solde jamais négatif), paiement avec référence, refus avec remboursement, absence de double remboursement, refus du minimum, du numéro invalide et du solde insuffisant.</li>
+<li><b>Limite</b> : le versement Mobile Money reste manuel ; aucun virement sortant FedaPay n'est branché.</li>
+</ul>
+
+<h2>5. Paiements FedaPay</h2>
+<ul>
+<li>Un refus de FedaPay à la création d'une recharge est journalisé (cause, sans clé) et renvoyé à l'utilisateur au lieu d'une erreur muette.</li>
+<li>Les gros dépôts (610 000 F) échouaient, <b>cause non identifiée</b> : le code n'a aucun plafond. À vérifier : <code>FEDAPAY_ENV=live</code>, transactions refusées dans le tableau de bord FedaPay, plafonds des opérateurs.</li>
+</ul>
+
+<h2>6. Livraisons : kilométrage et coursier personnel</h2>
+<ul>
+<li><b>Kilométrage (mode strict, toutes les livraisons)</b> : <code>odometerStep(..., { strict: true })</code>. Cause du défaut : un GPS immobile dérive de 10 à 60 m ; l'ancien calcul comptait tout écart au-dessus du bruit puis déplaçait le point d'ancrage (9 870 m comptés en 10 min à l'arrêt quand la vitesse GPS est inconnue). Désormais : sous 5,4 km/h, un déplacement n'est compté que s'il atteint 80 m (vitesse proche de 0) ou 40 m (vitesse inconnue) ; au-dessus, seule la position compte (jamais la vitesse seule), elle doit dépasser le bruit et rester cohérente avec la vitesse (un saut de 80 m en 1,5 s à 2 m/s est ignoré). Un vrai trajet n'est pas perdu : la distance depuis l'ancrage est comptée dès qu'elle dépasse le seuil. Courses simples des Speeders inchangées.</li>
+<li><b>« Je suis arrivé » (coursier personnel)</b> : <code>POST /deliveries/:id/arrive</code> (idempotent, réservé au coursier de la mission, mode PERSONAL, statut MATCHED), colonne <code>Delivery.courierArrivedAt</code> (migration <code>20261021120000_delivery_courier_arrived</code>, validée sur base jetable, aucun nouvel écart avec le schéma). Le départ avec le code est refusé tant que l'arrivée n'est pas signalée ; la livraison express n'est pas concernée. Pas de nouveau statut (une date, pour ne pas toucher une vingtaine de requêtes).</li>
+<li><b>Notifications</b> en mode course personnelle (arrivée, départ, fin, paiement, annulation, nouvelle recherche) avec clés <code>NOTIFICATION_PERSONAL_*</code> en 4 langues.</li>
+<li><b>Livreur express sans voiture</b> : <code>saveApplication</code> refuse GAZELLE, KOALA et LEOPARD pour un livreur express (avant d'ouvrir le dossier), en cohérence avec « Les voitures ne livrent pas de colis » de la grille tarifaire. Le coursier personnel les garde.</li>
+<li>Pièces d'agence : <code>STATUTS</code> et <code>EXTRAIT_CASIER</code> ne sont plus demandés (reste CNI, LOGO, RCCM, IFU).</li>
+</ul>
+
+<h2>7. Tests</h2>
+<ul>
+<li>396 tests verts sur 33 suites. Nouveaux : 8 tests du kilométrage strict (3 cas de GPS immobile, vitesse parasite sans mouvement, saut de GPS, vrai trajet de 2 km, trajet lent, arrêt puis reprise), 6 de « Je suis arrivé », 1 de la voiture refusée au livreur express, 9 de la connexion administrateur (journée précédente).</li>
+<li>Deux anciens tests ont été changés volontairement : « 1,2 m/s compte un petit déplacement » n'est plus vrai en mode strict ; il est remplacé par « 20 m en 2 s à 8 m/s sont comptés » et « 1 m annoncé par la vitesse n'est pas compté ».</li>
+<li>Non couverts par des tests du projet : retrait, suppression de client (vérifiés par des scripts jetables non conservés).</li>
+</ul>
+
+<h2>8. Audit complet de l'application (21 octobre)</h2>
+<p><b>Verdict : lancement public non recommandé avant les points critiques.</b></p>
+<table><tr><th>Niveau</th><th>Constat</th></tr>
+<tr><td><b>Critique</b></td><td><b>Création d'argent</b> : <code>POST /marketplace/orders</code> ne valide pas les prix des articles ; un prix négatif donne un total négatif et le « débit » crédite le portefeuille. Le séquestre n'est de toute façon jamais versé (fonction inachevée). À verrouiller ou désactiver tout de suite.</td></tr>
+<tr><td><b>Critique</b></td><td><b>Aucun SMS n'est envoyé</b> (pas de passerelle) et le serveur est en mode simulation : <code>0000</code> ouvre tout compte non administrateur, le code réel est renvoyé par l'API. Le changement de numéro écrit son code seulement dans les logs.</td></tr>
+<tr><td><b>Critique</b></td><td>Pas de suppression de compte par l'utilisateur ni de pages légales (exigées par les stores) ; versement des retraits manuel.</td></tr>
+<tr><td>Important</td><td>Solde non réservé : une course ou livraison peut rester bloquée si le client dépense son solde en route (le règlement lève « Solde insuffisant ») ; plusieurs livraisons commandables avec le même solde. <code>wallet.debit</code> n'est pas atomique (utilisé seulement par la boutique).</td></tr>
+<tr><td>Important</td><td>Agences (audit précédent, toujours ouverts) : double débit possible à l'activation, plafond de comptes contournable, livraisons des coursiers d'agence à la commission standard, tableau de bord qui ignore les livraisons.</td></tr>
+<tr><td>Important</td><td><code>schema.prisma</code> et les migrations ne concordent pas : la table <code>RideSettlement</code> (utilisée en SQL direct) n'est pas dans le schéma ; un <code>prisma migrate dev</code> proposerait de la supprimer. Les clés étrangères de <code>RideTip</code> et <code>Agency.activationFee</code> diffèrent aussi. (Les index <code>Ride_clientId_driverId_idx</code> et <code>Ride_scheduledAt_idx</code> existent bien par migration.)</td></tr>
+<tr><td>Important</td><td>Dépendances : 4 vulnérabilités graves côté serveur (<code>multer</code>, <code>axios</code>, <code>@nestjs/platform-express</code>, <code>fedapay</code>) ; 28 côté mobile, surtout des outils de compilation ; 0 pour la console.</td></tr>
+<tr><td>Important</td><td>Exploitation : Render gratuit (le serveur s'endort, les tâches <code>setInterval</code> s'arrêtent avec lui) ; <code>STRICT_PRODUCTION=false</code> (clé JWT par défaut possible si <code>JWT_SECRET</code> manque) ; mot de passe de la base à changer (adresse collée deux fois dans un échange).</td></tr>
+<tr><td>Moyen</td><td>Codes de connexion écrits dans les logs (<code>[OTP DEV]</code>) ; jeton accepté dans l'adresse (<code>?token=</code>) ; pièces de plus de 5 Mo sur le disque éphémère ; pas de limite globale de requêtes ni d'en-têtes <code>helmet</code>.</td></tr>
+<tr><td>Solide</td><td>Contrôle d'accès des courses et livraisons ; état du compte relu à chaque requête ; clés NPI obligatoires ; commission atomique ; prix calculé par le serveur ; migrations appliquées au démarrage ; 396 tests verts.</td></tr></table>
+<p><b>Non vérifié</b> : notifications poussées, temps réel (socket), cartes et iPhone en production, un vrai paiement de bout en bout, l'APK allégé sur un téléphone.</p>
+
+<h2>9. Comptes de test (scripts, à lancer par vous sur la base)</h2>
+<ul>
+<li><code>scripts/create-agency.js</code> (agence activée, niveau au choix, chauffeurs de test), <code>scripts/create-provider.js</code> (Speeder essence ou électrique, voiture, coursier personnel, livreur express), <code>scripts/delete-client.js</code>. Aucun n'est lancé automatiquement ; ils exigent <code>--allow-remote</code> hors base locale. Supprimer ces comptes avant le lancement public.</li>
+</ul>
+
+<h2>10. Commits et état</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>a00f5b00</code></td><td>Retrait des prestataires vers Mobile Money (demande en attente, paiement manuel, refus avec remboursement)</td></tr>
+<tr><td><code>46262e4b</code></td><td>Administration retirée du mobile, console adaptée au téléphone</td></tr>
+<tr><td><code>03ce4956</code></td><td>« Solder et supprimer » (portefeuille non nul)</td></tr>
+<tr><td><code>69748e1a</code></td><td>Suppression d'un compte client, script <code>delete-client.js</code></td></tr>
+<tr><td><code>df5ac739</code></td><td>Inscription d'agence, pièces sans statuts ni casier</td></tr>
+<tr><td><code>7adc8eb1</code></td><td>Recharge FedaPay refusée : cause journalisée et affichée</td></tr>
+<tr><td><code>8f00c7d9</code></td><td>Connexion administrateur par mot de passe</td></tr></table>
+<div class="box warn"><b>Pas encore commité</b> : kilométrage strict (<code>odometer.ts</code>, <code>delivery.module.ts</code>), « Je suis arrivé » et sa migration, notifications de course personnelle, refus des voitures pour le livreur express, tests associés.</div>
+</body></html>
