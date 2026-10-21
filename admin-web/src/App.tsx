@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard";
 import Providers from "./pages/Providers";
 import Users from "./pages/Users";
 import Finance from "./pages/Finance";
+import ProviderWithdrawals from "./pages/ProviderWithdrawals";
 import Commercials from "./pages/Commercials";
 import Support from "./pages/Support";
 import Corrections from "./pages/Corrections";
@@ -55,6 +56,7 @@ const NAV: { key: string; label: string; icon: string }[] = [
   { key: "dossiers", label: "Dossiers", icon: "🛡️" },
   { key: "utilisateurs", label: "Utilisateurs", icon: "👥" },
   { key: "finances", label: "Finances", icon: "💰" },
+  { key: "retraits", label: "Retraits prestataires", icon: "💸" },
   { key: "commerciaux", label: "Commerciaux", icon: "🤝" },
   { key: "support", label: "Support", icon: "🎧" },
   { key: "corrections", label: "Corrections d'identité", icon: "✏️" },
@@ -114,15 +116,17 @@ function Shell({ admin, onLogout }: { admin: Admin; onLogout: () => void }) {
   useTableLabels(mainRef);
 
   const refreshCounts = useCallback(async () => {
-    const [stats, tickets, corr] = await Promise.allSettled([
+    const [stats, tickets, corr, withdrawals] = await Promise.allSettled([
       api.get<GlobalStats>("/admin/stats"),
       api.get<{ tickets: TicketRow[] }>("/admin/support/tickets?status=OPEN"),
       api.get<IdentityCorrection[]>("/admin/identity-corrections"),
+      api.get<unknown[]>("/admin/provider-withdrawals?status=PENDING"),
     ]);
     setCounts({
       dossiers: stats.status === "fulfilled" ? stats.value.providersPending ?? 0 : 0,
       support: tickets.status === "fulfilled" ? tickets.value.tickets.length : 0,
       corrections: corr.status === "fulfilled" ? corr.value.length : 0,
+      retraits: withdrawals.status === "fulfilled" ? withdrawals.value.length : 0,
     });
   }, []);
 
@@ -139,6 +143,7 @@ function Shell({ admin, onLogout }: { admin: Admin; onLogout: () => void }) {
     case "dossiers": content = <Providers id={id} />; break;
     case "utilisateurs": content = <Users />; break;
     case "finances": content = <Finance />; break;
+    case "retraits": content = <ProviderWithdrawals />; break;
     case "commerciaux": content = <Commercials id={id} />; break;
     case "support": content = <Support id={id} />; break;
     case "corrections": content = <Corrections />; break;

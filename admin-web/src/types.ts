@@ -166,6 +166,18 @@ export type Withdrawal = {
   createdAt: string;
 };
 
+export type ProviderWithdrawal = {
+  id: string;
+  createdAt: string;
+  status: "PENDING" | "CONFIRMED" | "FAILED";
+  amount: number;
+  fee: number;
+  netAmount: number;
+  payoutPhone: string | null;
+  user: { id: string; phone: string; fullName: string | null; role: string };
+  note: string | null;
+};
+
 export type ReferralKind = "SPEEDER" | "AGENCE" | "COURSIER_PERSONNEL" | "LIVREUR_EXPRESS";
 export type ReferralStatus = "ACTIF" | "INACTIF" | "EN_ATTENTE" | "REFUSE" | "SUSPENDU";
 export type KindSummary = { total: number; enAttente: number; actifs: number; inactifs: number; autres: number; ontRecharge: number; montantRecharge: number };

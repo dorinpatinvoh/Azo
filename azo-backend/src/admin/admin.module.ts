@@ -12,7 +12,7 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from "class-validator";
 import { Role, UserStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -25,6 +25,14 @@ import { UsersModule } from "../users/users.module";
 import { NpiCryptoService } from "../common/npi-crypto.service";
 import { FinanceService, MIN_COMPANY_WITHDRAWAL } from "./finance.service";
 import { deleteClientAccount } from "./client-deletion";
+
+class ProviderWithdrawalPaidDto {
+  @IsOptional() @IsString() @MaxLength(60) reference?: string;
+}
+
+class ProviderWithdrawalRejectDto {
+  @IsString() @MinLength(5) @MaxLength(200) reason: string;
+}
 
 class MonthlySettlementDto {
   /** Mois à prélever, format AAAA-MM (par défaut : mois en cours). */
@@ -267,7 +275,7 @@ export class AdminService {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
 export class AdminController {
-  constructor(private svc: AdminService, private finance: FinanceService) {}
+  constructor(private svc: AdminService, private finance: FinanceService, private wallet: WalletService) {}
 
   // GET /admin/finance — gains de l'entreprise (par source et par mois), retraits et montant disponible
   @Get("finance")
@@ -334,6 +342,22 @@ export class AdminController {
   @Post("users/:id/status")
   setUserStatus(@CurrentUser() u, @Param("id") id: string, @Body() dto: UpdateUserStatusDto) {
     return this.svc.setUserStatus(u.userId, id, dto);
+  }
+
+  // Retraits demandés par les prestataires : à payer sur leur Mobile Money, puis à marquer payés (ou à refuser : le montant est rendu).
+  @Get("provider-withdrawals")
+  providerWithdrawals(@Query("status") status?: string) {
+    return this.wallet.listProviderWithdrawals(["PENDING", "CONFIRMED", "FAILED"].includes(status ?? "") ? (status as "PENDING" | "CONFIRMED" | "FAILED") : undefined);
+  }
+
+  @Post("provider-withdrawals/:id/paid")
+  providerWithdrawalPaid(@CurrentUser() u, @Param("id") id: string, @Body() dto: ProviderWithdrawalPaidDto) {
+    return this.wallet.markWithdrawalPaid(u.userId, id, dto.reference);
+  }
+
+  @Post("provider-withdrawals/:id/reject")
+  providerWithdrawalReject(@CurrentUser() u, @Param("id") id: string, @Body() dto: ProviderWithdrawalRejectDto) {
+    return this.wallet.rejectWithdrawal(u.userId, id, dto.reason);
   }
 
   @Get("audit-log")

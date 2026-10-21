@@ -14,7 +14,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
-import { IsInt, IsOptional, IsString, Min } from "class-validator";
+import { IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { Webhook } from "fedapay";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -28,7 +28,8 @@ class RechargeDto {
 
 class WithdrawDto {
   @IsInt() @Min(1) amount: number;
-  @IsOptional() @IsString() context?: "AGENCY";
+  /** Numéro Mobile Money (MTN ou Moov) qui recevra l'argent. */
+  @IsString() @MaxLength(20) phone: string;
 }
 
 const PAYMENT_RETURN_PAGE =
@@ -91,7 +92,11 @@ export class WalletController {
   @Post("withdraw")
   @UseGuards(RegistrationCompleteGuard)
   withdraw(@CurrentUser() user, @Body() dto: WithdrawDto) {
-    return this.wallet.withdraw(user.userId, dto.amount);
+    // Seuls les prestataires retirent leur gain : l'argent d'un client est prépayé, il ne se retire pas.
+    if (!["DRIVER", "COURIER", "AGENCY"].includes(user.role)) {
+      throw new ForbiddenException("Le retrait est réservé aux Speeders, coursiers et agences.");
+    }
+    return this.wallet.withdraw(user.userId, dto.amount, dto.phone);
   }
 }
 

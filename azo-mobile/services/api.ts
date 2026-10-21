@@ -340,6 +340,12 @@ export const walletApi = {
   // ⚠️ Simulation côté backend : le vrai paiement (FedaPay / KKiaPay) reste à brancher.
   recharge: (amount: number, method: string) =>
     api.post<{ url: string; transactionId: number }>("/wallet/recharge", { amount, method }),
+  /** Frais et net à recevoir pour un retrait de ce montant. */
+  withdrawalQuote: (amount: number) =>
+    api.get<{ fee: number; feePct: number; netAmount: number }>(`/wallet/withdrawal-quote?amount=${amount}`),
+  /** Demande de retrait vers un compte Mobile Money : le solde est débité, l'équipe AZƆ̀ verse ensuite l'argent. */
+  withdraw: (amount: number, phone: string) =>
+    api.post<{ fee: number; feePct: number; netAmount: number; balance: number; payoutPhone: string; status: "PENDING" }>("/wallet/withdraw", { amount, phone }),
 };
 
 /* ==================== CARTES / ADRESSES ==================== */

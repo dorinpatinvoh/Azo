@@ -6,19 +6,20 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as SecureStore from "expo-secure-store";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
-import { errorMessage, walletApi, WalletTransaction } from "../services/api";
+import { errorMessage, userApi, walletApi, WalletTransaction } from "../services/api";
 import PaymentWebView from "../components/PaymentWebView";
 import ClientTabBar from "../components/ClientTabBar";
 import PillTabBar from "../components/PillTabBar";
 import { ZEM_TABS } from "./DriverHomeScreen";
 import { COURIER_TABS } from "./CourierHomeScreen";
 import { AGENCY_TABS } from "./AgencyDashboardScreen";
-import { MIN_RECHARGE, RECHARGE_POLL_MAX_MS, RECHARGE_POLL_MS, RECHARGE_PRESETS } from "../config/wallet";
+import { MIN_RECHARGE, MIN_WITHDRAWAL, RECHARGE_POLL_MAX_MS, RECHARGE_POLL_MS, RECHARGE_PRESETS } from "../config/wallet";
 import { useI18n, type MessageKey } from "../i18n";
 import { BrandAlert } from "../components/BrandAlert";
 
 const ACTIONS: { id: string; labelKey: MessageKey; icon: keyof typeof MaterialIcons.glyphMap }[] = [
   { id: "recharge", labelKey: "wallet.act.recharge", icon: "add-circle" },
+  { id: "withdraw", labelKey: "wallet.act.withdraw", icon: "payments" },
   { id: "history", labelKey: "wallet.act.history", icon: "receipt-long" },
 ];
 
@@ -43,6 +44,8 @@ export default function WalletScreen({ onBack, onNavigateTab }: Props) {
   const { t, locale } = useI18n();
   // Speeder, conducteurs et coursiers ne rechargent pas AZƆ̀ Pay : leur solde vient des courses (et de leur agence)
   const [canRecharge, setCanRecharge] = useState(true);
+  // Seuls les prestataires (Speeder, coursier, agence) retirent leur gain vers Mobile Money
+  const [canWithdraw, setCanWithdraw] = useState(false);
   // Barre du bas de CE profil (client, Speeder, coursier, agence) : elle ne doit jamais disparaître en ouvrant AZƆ̀ Pay
   const [barKind, setBarKind] = useState<BarKind>(null);
   useEffect(() => {
@@ -51,6 +54,7 @@ export default function WalletScreen({ onBack, onNavigateTab }: Props) {
         const role = (roleRaw ?? "").toUpperCase().trim();
         const type = (typeRaw ?? "").toUpperCase().trim();
         setCanRecharge(role !== "DRIVER");
+        setCanWithdraw(role === "DRIVER" || role === "COURIER" || role === "AGENCY");
         setBarKind(
           role === "CLIENT" ? "client" : role === "AGENCY" || type === "AGENCY" ? "agency" : role === "DRIVER" || role === "COURIER" ? (type === "COURIER" || role === "COURIER" ? "courier" : "zem") : null
         );
@@ -161,6 +165,74 @@ export default function WalletScreen({ onBack, onNavigateTab }: Props) {
     }
   }
 
+  // --- Retrait vers Mobile Money (prestataires) ------------------------------------------------------------------------
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawPhone, setWithdrawPhone] = useState("");
+  const [withdrawBusy, setWithdrawBusy] = useState(false);
+  const [withdrawQuote, setWithdrawQuote] = useState<{ fee: number; feePct: number; netAmount: number } | null>(null);
+  const withdrawValue = Number(withdrawAmount.replace(/\D/g, ""));
+  const withdrawPhoneDigits = withdrawPhone.replace(/\D/g, "");
+  const withdrawPhoneValid = withdrawPhoneDigits.length === 10 && withdrawPhoneDigits.startsWith("01");
+  const withdrawTooMuch = balance !== null && withdrawValue > balance;
+  const withdrawValid = Number.isInteger(withdrawValue) && withdrawValue >= MIN_WITHDRAWAL && !withdrawTooMuch && withdrawPhoneValid;
+
+  // Frais et net à recevoir : calculés par le serveur à chaque montant saisi
+  useEffect(() => {
+    if (!withdrawOpen || !Number.isInteger(withdrawValue) || withdrawValue < MIN_WITHDRAWAL) {
+      setWithdrawQuote(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      walletApi.withdrawalQuote(withdrawValue).then((q) => !cancelled && setWithdrawQuote(q)).catch(() => !cancelled && setWithdrawQuote(null));
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [withdrawOpen, withdrawValue]);
+
+  function handleWithdraw() {
+    if (!canWithdraw) return;
+    setWithdrawAmount("");
+    setWithdrawQuote(null);
+    setWithdrawOpen(true);
+    // Numéro de connexion proposé par défaut : modifiable
+    if (!withdrawPhone) {
+      userApi
+        .me()
+        .then((me) => {
+          const digits = String(me.phone ?? "").replace(/\D/g, "");
+          const local = digits.startsWith("229") ? digits.slice(3) : digits;
+          if (local.length === 10) setWithdrawPhone(local);
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  async function startWithdraw() {
+    if (!withdrawValid) return;
+    setWithdrawBusy(true);
+    try {
+      const res = await walletApi.withdraw(withdrawValue, withdrawPhoneDigits);
+      setWithdrawOpen(false);
+      await load();
+      BrandAlert.alert(
+        t("wallet.withdraw.done.title"),
+        t("wallet.withdraw.done.body", {
+          net: res.netAmount.toLocaleString(locale),
+          phone: withdrawPhoneDigits.replace(/(\d{2})(?=\d)/g, "$1 "),
+          balance: res.balance.toLocaleString(locale),
+        })
+      );
+    } catch (e) {
+      BrandAlert.alert(t("common.error"), errorMessage(e));
+    } finally {
+      setWithdrawBusy(false);
+    }
+  }
+
   function handleRecharge() {
     if (!canRecharge) return;
     setRechargeAmount("");
@@ -212,8 +284,8 @@ export default function WalletScreen({ onBack, onNavigateTab }: Props) {
         </LinearGradient>
 
         <View style={styles.actionsRow}>
-          {ACTIONS.filter((a) => canRecharge || a.id !== "recharge").map((a) => (
-            <Pressable key={a.id} style={styles.actionItem} onPress={() => (a.id === "recharge" ? handleRecharge() : scrollRef.current?.scrollTo({ y: activityY.current, animated: true }))}>
+          {ACTIONS.filter((a) => (canRecharge || a.id !== "recharge") && (canWithdraw || a.id !== "withdraw")).map((a) => (
+            <Pressable key={a.id} style={styles.actionItem} onPress={() => (a.id === "recharge" ? handleRecharge() : a.id === "withdraw" ? handleWithdraw() : scrollRef.current?.scrollTo({ y: activityY.current, animated: true }))}>
               <View style={styles.actionIcon}>
                 <MaterialIcons name={a.icon} size={22} color={colors.primary} />
               </View>
@@ -291,6 +363,59 @@ export default function WalletScreen({ onBack, onNavigateTab }: Props) {
           checkCredited();
         }}
       />
+
+      {/* Retrait vers Mobile Money : montant, numéro, frais calculés par le serveur */}
+      <Modal visible={withdrawOpen} transparent animationType="fade" onRequestClose={() => setWithdrawOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t("wallet.withdraw.title")}</Text>
+            <Text style={styles.modalHint}>{t("wallet.withdraw.available", { amount: (balance ?? 0).toLocaleString(locale) })}</Text>
+            <Text style={styles.modalHint}>{t("wallet.withdraw.amountLabel", { min: MIN_WITHDRAWAL.toLocaleString(locale) })}</Text>
+            <TextInput
+              style={styles.amountInput}
+              value={withdrawAmount}
+              onChangeText={(v) => setWithdrawAmount(v.replace(/\D/g, "").slice(0, 7))}
+              placeholder={t("wallet.recharge.placeholder")}
+              placeholderTextColor={colors.outline}
+              keyboardType="number-pad"
+              maxLength={7}
+            />
+            {withdrawTooMuch ? <Text style={styles.modalError}>{t("wallet.withdraw.tooMuch")}</Text> : null}
+            {withdrawQuote && !withdrawTooMuch ? (
+              <Text style={styles.modalHint}>
+                {t("wallet.withdraw.quote", { fee: withdrawQuote.fee.toLocaleString(locale), pct: withdrawQuote.feePct, net: withdrawQuote.netAmount.toLocaleString(locale) })}
+              </Text>
+            ) : null}
+            <Text style={styles.modalHint}>{t("wallet.withdraw.phoneLabel")}</Text>
+            <TextInput
+              style={styles.amountInput}
+              value={withdrawPhone}
+              onChangeText={(v) => setWithdrawPhone(v.replace(/[^\d ]/g, "").slice(0, 14))}
+              placeholder="01 XX XX XX XX"
+              placeholderTextColor={colors.outline}
+              keyboardType="number-pad"
+              maxLength={14}
+            />
+            {withdrawPhone !== "" && !withdrawPhoneValid ? <Text style={styles.modalError}>{t("wallet.withdraw.invalidPhone")}</Text> : <Text style={styles.modalHint}>{t("wallet.withdraw.help")}</Text>}
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalCancel} onPress={() => setWithdrawOpen(false)}>
+                <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalConfirm, (!withdrawValid || withdrawBusy) && { opacity: 0.6 }]}
+                disabled={!withdrawValid || withdrawBusy}
+                onPress={startWithdraw}
+              >
+                {withdrawBusy ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>{t("wallet.withdraw.send", { amount: `${(withdrawValue || 0).toLocaleString(locale)} F` })}</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Montant de la recharge FedaPay (minimum {MIN_RECHARGE} FCFA) */}
       <Modal visible={rechargeOpen} transparent animationType="fade" onRequestClose={() => setRechargeOpen(false)}>

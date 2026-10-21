@@ -1,8 +1,9 @@
 import { NotificationsService } from "../notifications/notifications.module";
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PricingService } from "../pricing/pricing.service";
 import { FedaPayService } from "./fedapay.service";
+import { extractLocalBeninDigits, normalizeBeninPhone } from "../common/phone";
 import { Prisma, TransactionStatus, TransactionType } from "@prisma/client";
 
 const MONTHLY_ZEM_SETTLEMENT_LABEL = "Prélèvement mensuel Spider";
@@ -12,6 +13,9 @@ const MONTHLY_ZEM_SETTLEMENT_LABELS = [MONTHLY_ZEM_SETTLEMENT_LABEL, "Prélèvem
 
 /** Recharge minimale par FedaPay (FCFA). Le mobile applique la même valeur (config/wallet.ts). */
 export const MIN_RECHARGE = 300;
+
+/** Retrait minimal d'un prestataire vers son Mobile Money (FCFA). */
+export const MIN_PROVIDER_WITHDRAWAL = 1000;
 
 @Injectable()
 export class WalletService {
@@ -492,31 +496,125 @@ export class WalletService {
     return this.pricing.withdrawalFeesFor(rules, amount);
   }
 
-  async withdraw(userId: string, amount: number) {
+  /**
+   * Demande de retrait d'un prestataire (Speeder, coursier, agence) vers son compte Mobile Money.
+   *
+   * Le portefeuille est débité tout de suite (débit conditionnel au solde : deux demandes simultanées ne peuvent pas le
+   * rendre négatif) et la demande est enregistrée EN ATTENTE avec le numéro à payer. L'équipe AZƆ̀ verse l'argent depuis la
+   * console web puis marque la demande payée ; si elle la refuse, le montant est rendu au portefeuille.
+   */
+  async withdraw(userId: string, amount: number, payoutPhone: string) {
+    if (!Number.isInteger(amount) || amount < MIN_PROVIDER_WITHDRAWAL)
+      throw new BadRequestException(`Le retrait minimum est de ${MIN_PROVIDER_WITHDRAWAL.toLocaleString("fr-FR")} FCFA`);
+    const local = extractLocalBeninDigits(payoutPhone);
+    if (!((local.length === 10 && local.startsWith("01")) || (local.length === 8 && !local.startsWith("01"))))
+      throw new BadRequestException("Numéro Mobile Money invalide : 10 chiffres commençant par 01.");
+    const phone = normalizeBeninPhone(payoutPhone);
     const quote = await this.quoteWithdrawal(userId, amount);
     if (quote.netAmount <= 0) throw new BadRequestException("Montant trop faible après prélèvement des frais");
     const wallet = await this.getWallet(userId);
-    if (wallet.balance < amount) throw new BadRequestException("Solde insuffisant");
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.wallet.update({ where: { id: wallet.id }, data: { balance: { decrement: amount } } }),
-      this.prisma.transaction.create({
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const debit = await tx.wallet.updateMany({ where: { id: wallet.id, balance: { gte: amount } }, data: { balance: { decrement: amount } } });
+      if (debit.count !== 1) throw new BadRequestException("Solde insuffisant");
+      const request = await tx.transaction.create({
         data: {
           walletId: wallet.id,
           type: TransactionType.DEBIT,
+          status: TransactionStatus.PENDING,
           amount,
           label: "Retrait AZƆ̀ Pay",
           labelKey: "TRANSACTION_WITHDRAWAL",
-          labelParams: { fee: quote.fee, feePct: quote.feePct, netAmount: quote.netAmount },
-          meta: `Frais ${quote.feePct} % : ${quote.fee} FCFA · Net versé : ${quote.netAmount} FCFA`,
+          labelParams: { fee: quote.fee, feePct: quote.feePct, netAmount: quote.netAmount, phone },
+          meta: `payout:${phone} · Frais ${quote.feePct} % : ${quote.fee} FCFA · Net à verser : ${quote.netAmount} FCFA`,
         },
-      }),
-    ]);
+      });
+      const after = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
+      return { request, balance: after.balance };
+    });
+
     // Chauffeur rattaché à une agence : la part protégée ne dépasse jamais son solde
     try {
-      await this.prisma.$executeRaw`UPDATE "User" SET "agencyProtectedBalance" = LEAST("agencyProtectedBalance", ${updated.balance}) WHERE "id" = ${userId} AND "agencyId" IS NOT NULL`;
+      await this.prisma.$executeRaw`UPDATE "User" SET "agencyProtectedBalance" = LEAST("agencyProtectedBalance", ${result.balance}) WHERE "id" = ${userId} AND "agencyId" IS NOT NULL`;
     } catch {
-      // sans effet sur le retrait déjà effectué
+      // sans effet sur le retrait déjà enregistré
     }
-    return {...quote, balance: updated.balance };
+    return { ...quote, balance: result.balance, requestId: result.request.id, payoutPhone: phone, status: "PENDING" as const };
+  }
+
+  /** Demandes de retrait des prestataires (console administrateur), les plus récentes d'abord. */
+  async listProviderWithdrawals(status?: "PENDING" | "CONFIRMED" | "FAILED") {
+    const rows = await this.prisma.transaction.findMany({
+      where: {
+        type: TransactionType.DEBIT,
+        labelKey: { in: ["TRANSACTION_WITHDRAWAL", "TRANSACTION_WITHDRAWAL_REFUSED"] },
+        ...(status ? { status } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      include: { wallet: { select: { user: { select: { id: true, phone: true, fullName: true, role: true } } } } },
+    });
+    return rows.map((r) => {
+      const params = (r.labelParams ?? {}) as { fee?: number; netAmount?: number; phone?: string };
+      const fromMeta = /payout:(\+?\d+)/.exec(r.meta ?? "")?.[1];
+      return {
+        id: r.id,
+        createdAt: r.createdAt,
+        status: r.status,
+        amount: r.amount,
+        fee: params.fee ?? 0,
+        netAmount: params.netAmount ?? r.amount,
+        payoutPhone: params.phone ?? fromMeta ?? null,
+        user: r.wallet.user,
+        note: r.meta,
+      };
+    });
+  }
+
+  /** L'argent a été versé sur le Mobile Money du prestataire : la demande passe à « payée ». */
+  async markWithdrawalPaid(adminId: string, id: string, reference?: string) {
+    const row = await this.prisma.transaction.findUnique({ where: { id }, include: { wallet: { select: { userId: true } } } });
+    if (!row || row.labelKey !== "TRANSACTION_WITHDRAWAL") throw new NotFoundException("Demande de retrait introuvable");
+    const note = `${row.meta ?? ""} · Payé par ${adminId}${reference ? ` · réf. ${reference.slice(0, 60)}` : ""}`;
+    const done = await this.prisma.transaction.updateMany({ where: { id, status: TransactionStatus.PENDING }, data: { status: TransactionStatus.CONFIRMED, meta: note } });
+    if (done.count !== 1) throw new BadRequestException("Cette demande a déjà été traitée.");
+    const params = (row.labelParams ?? {}) as { netAmount?: number };
+    await this.notifications
+      ?.push(row.wallet.userId, "Retrait payé ✅", `${(params.netAmount ?? row.amount).toLocaleString("fr-FR")} FCFA ont été versés sur ton compte Mobile Money.`, "payment", {
+        sendPush: true,
+        data: { event: "withdrawal-paid", amount: params.netAmount ?? row.amount },
+      })
+      .catch(() => null);
+    return { id, status: "CONFIRMED" as const };
+  }
+
+  /** Demande refusée : le montant est rendu au portefeuille du prestataire (une seule fois) et il est prévenu. */
+  async rejectWithdrawal(adminId: string, id: string, reason: string) {
+    const row = await this.prisma.transaction.findUnique({ where: { id }, include: { wallet: { select: { id: true, userId: true } } } });
+    if (!row || row.labelKey !== "TRANSACTION_WITHDRAWAL") throw new NotFoundException("Demande de retrait introuvable");
+    await this.prisma.$transaction(async (tx) => {
+      const done = await tx.transaction.updateMany({
+        where: { id, status: TransactionStatus.PENDING },
+        data: { status: TransactionStatus.FAILED, labelKey: "TRANSACTION_WITHDRAWAL_REFUSED", label: "Retrait refusé", meta: `${row.meta ?? ""} · Refusé par ${adminId} : ${reason.slice(0, 200)}` },
+      });
+      if (done.count !== 1) throw new BadRequestException("Cette demande a déjà été traitée.");
+      await tx.wallet.update({ where: { id: row.wallet.id }, data: { balance: { increment: row.amount } } });
+      await tx.transaction.create({
+        data: {
+          walletId: row.wallet.id,
+          type: TransactionType.CREDIT,
+          amount: row.amount,
+          label: "Retrait refusé : montant rendu",
+          meta: `Remboursement du retrait ${id}`,
+        },
+      });
+    });
+    await this.notifications
+      ?.push(row.wallet.userId, "Retrait refusé", `Ta demande de retrait n'a pas pu être payée (${reason.slice(0, 120)}). ${row.amount.toLocaleString("fr-FR")} FCFA ont été rendus à ton portefeuille.`, "payment", {
+        sendPush: true,
+        data: { event: "withdrawal-refused", amount: row.amount },
+      })
+      .catch(() => null);
+    return { id, status: "FAILED" as const };
   }
 }

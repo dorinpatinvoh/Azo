@@ -1,6 +1,9 @@
 /** Recharge FedaPay : montant minimum (FCFA). Identique côté serveur (MIN_RECHARGE, wallet.service.ts). */
 export const MIN_RECHARGE = 300;
 
+/** Retrait minimal d'un prestataire vers son Mobile Money (FCFA). Identique côté serveur (MIN_PROVIDER_WITHDRAWAL). */
+export const MIN_WITHDRAWAL = 1000;
+
 /** Montants proposés en un appui. */
 export const RECHARGE_PRESETS = [500, 1000, 2000, 5000, 10000];
 
