@@ -81,7 +81,7 @@ export default function Finance() {
                 <h2>Commissions téléphone à reverser aux boutiques</h2>
                 <span className="muted small">Total : <b>{fcfa(data.phoneCommissions.total)}</b> · ce mois : <b>{fcfa(data.phoneCommissions.thisMonth)}</b> · {data.phoneCommissions.rides} course(s) ou livraison(s)</span>
               </div>
-              <p className="muted small">Prélevées en plus des 15 % sur les Speeders, coursiers et livreurs dont le téléphone a été fourni par une boutique partenaire (4 mois, week-ends). Elles ne comptent pas dans les gains de l'entreprise ci-dessus : elles sont à reverser.</p>
+              <p className="muted small">Prélevées en plus des 15 % sur les Speeders, coursiers et livreurs dont le téléphone a été fourni par une boutique partenaire (4 mois, du lundi au vendredi). Elles ne comptent pas dans les gains de l'entreprise ci-dessus : elles sont à reverser.</p>
               <div className="tablewrap" style={{ marginTop: 8 }}>
                 <table>
                   <thead><tr><th>Prestataire</th><th>Boutique</th><th>Téléphone remis le</th><th className="num">Missions</th><th className="num">À reverser</th></tr></thead>

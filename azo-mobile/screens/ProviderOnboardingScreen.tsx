@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -16,6 +16,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as SecureStore from "expo-secure-store";
+import { fileToDataUri } from "../utils/avatar";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { agencyLevelPricing, tarification, type AgencyLevel } from "../services/tarification";
@@ -167,6 +169,8 @@ const EXPIRY_KINDS: DocumentKind[] = ["CNI", "PERMIS", "ASSURANCE", "VISITE_TECH
 
 const STEP_LABELS = ["Activité", "Identité", "Véhicule", "Pièces", "Confirmation"];
 const TOTAL_STEPS = STEP_LABELS.length;
+/** Pièce dont la photo est en cours de prise (caméra ouverte) : sert à la récupérer si Android ferme l'application. */
+const DOC_PICK_KEY = "docPickPending";
 
 const fcfa = (n: number) => `${n.toLocaleString("fr-FR")} F`;
 
@@ -535,6 +539,8 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     }
     setUploading((s) => ({ ...s, [kind]: true }));
     try {
+      // Repère posé AVANT d'ouvrir la caméra : si Android ferme l'application pendant la prise de photo, la pièce est récupérée au retour
+      await SecureStore.setItemAsync(DOC_PICK_KEY, kind).catch(() => undefined);
       const asset = await pickImage(mode);
       if (!asset) return;
       const uri = asset.uri;
@@ -551,9 +557,43 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
     } catch (e) {
       BrandAlert.alert("Envoi impossible", errorMessage(e));
     } finally {
+      await SecureStore.deleteItemAsync(DOC_PICK_KEY).catch(() => undefined);
       setUploading((s) => ({ ...s, [kind]: false }));
     }
   }
+
+  // Android a fermé l'application pendant que la caméra était ouverte : la photo prise est retrouvée et envoyée à la pièce concernée
+  const recoveredPick = useRef(false);
+  useEffect(() => {
+    if (!dossier?.id || recoveredPick.current) return;
+    recoveredPick.current = true;
+    const dossierId = dossier.id;
+    (async () => {
+      const kind = (await SecureStore.getItemAsync(DOC_PICK_KEY).catch(() => null)) as DocumentKind | null;
+      if (!kind) return;
+      try {
+        const res = await ImagePicker.getPendingResultAsync();
+        const asset = res && !("code" in res) && !res.canceled ? res.assets?.[0] : null;
+        if (!asset) return;
+        const dataUri = asset.base64 ? null : await fileToDataUri(asset.uri);
+        const base64 = asset.base64 ?? dataUri?.split(",")[1];
+        if (!base64) return;
+        setLocalThumbs((prev) => ({ ...prev, [kind]: asset.uri }));
+        await providersApi.uploadDocument(dossierId, kind, {
+          uri: asset.uri,
+          name: asset.fileName || `${kind.toLowerCase()}-${Date.now()}.jpg`,
+          type: asset.mimeType || "image/jpeg",
+          base64,
+        });
+        await refresh();
+        BrandAlert.alert("Photo récupérée", "Ta photo avait été interrompue quand l'application s'est fermée : elle a bien été enregistrée dans ton dossier.");
+      } catch {
+        // rien à récupérer : l'utilisateur reprendra sa photo
+      } finally {
+        await SecureStore.deleteItemAsync(DOC_PICK_KEY).catch(() => undefined);
+      }
+    })();
+  }, [dossier?.id, refresh]);
 
   async function saveExpiry(kind: DocumentKind) {
     if (!dossier) return;

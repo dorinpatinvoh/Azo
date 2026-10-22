@@ -565,7 +565,7 @@ export const fr = {
   "voice.pause": "Mettre la voix en pause",
   "voice.resume": "Reprendre la voix",
   "avatar.title": "Photo de profil",
-  "avatar.note": "La photo reste enregistrée sur ce téléphone.",
+  "avatar.note": "La photo est enregistrée sur ton compte : tu la retrouves même si tu te déconnectes ou si tu changes de téléphone.",
   "avatar.camera": "Prendre une photo",
   "avatar.library": "Choisir dans la galerie",
   "avatar.remove": "Supprimer la photo",

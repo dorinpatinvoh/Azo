@@ -76,7 +76,7 @@ export type PhoneSupport = {
   shop: string | null;
   commissionPct: number;
   durationMonths: number;
-  weekendsOnly: boolean;
+  applyOn: "WEEKDAYS" | "WEEKENDS" | "ALL";
   collected: number;
   rides: number;
 };

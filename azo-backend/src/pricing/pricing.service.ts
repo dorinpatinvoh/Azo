@@ -428,11 +428,14 @@ export class PricingService {
 
   /**
    * Commission téléphone due pour une course ou une livraison de `amount` terminée à `at` : 0 si aucun téléphone n'a été fourni,
-   * si la remise est postérieure, si les 4 mois sont écoulés, ou (par défaut) si ce n'est pas un week-end.
+   * si la remise est postérieure, si les 4 mois sont écoulés, ou (par défaut) si le jour n'est pas concerné (par défaut : les samedis et dimanches sont exclus).
    */
   phoneCommissionFor(supportedAt: Date | null | undefined, at: Date, amount: number): number {
     if (!supportedAt || at.getTime() < supportedAt.getTime() || at.getTime() >= this.phoneSupportEnd(supportedAt).getTime()) return 0;
-    if ((this.config.phoneSupport?.weekendsOnly ?? true) && !this.isBeninWeekend(at)) return 0;
+    // Jours concernés : du lundi au vendredi par défaut (les week-ends sont exclus), selon `phoneSupport.applyOn`
+    const applyOn = this.config.phoneSupport?.applyOn ?? "WEEKDAYS";
+    const weekend = this.isBeninWeekend(at);
+    if ((applyOn === "WEEKDAYS" && weekend) || (applyOn === "WEEKENDS" && !weekend)) return 0;
     return this.phoneCommission(amount);
   }
 

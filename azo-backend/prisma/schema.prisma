@@ -189,6 +189,8 @@ model User {
 
   // Dossier prestataire (null pour un simple client)
   provider ProviderProfile?
+  /// Photo de profil (conservée sur le serveur : elle survit à une déconnexion, à la fermeture forcée de l'application ou à un changement de téléphone)
+  avatar   UserAvatar?
 
   savedPlaces    SavedPlace[]
   supportTickets SupportTicket[]
@@ -229,6 +231,14 @@ model NpiAccessAudit {
   createdAt DateTime @default(now())
 
   @@index([targetId, createdAt])
+}
+
+/// Photo de profil d'un compte, en image data URI (JPEG, PNG ou WEBP). Table à part pour ne pas alourdir chaque lecture du compte.
+model UserAvatar {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dataUri   String
+  updatedAt DateTime @updatedAt
 }
 
 model OtpCode {

@@ -31,7 +31,12 @@ export default function PhoneSupportBanner() {
         <Text style={styles.title}>Téléphone fourni{info.shop ? ` par ${info.shop}` : " par une boutique partenaire"}</Text>
         <Text style={styles.body}>
           Pour rembourser ce téléphone, <Text style={styles.strong}>{String(info.commissionPct).replace(".", ",")} % de commission téléphone</Text> est prélevé sur
-          {info.weekendsOnly ? " tes courses et livraisons du samedi et du dimanche" : " chacune de tes courses et livraisons"}, en plus des 15 % de l'entreprise.
+          {info.applyOn === "WEEKDAYS"
+            ? " tes courses et livraisons du lundi au vendredi (pas le week-end)"
+            : info.applyOn === "WEEKENDS"
+              ? " tes courses et livraisons du samedi et du dimanche"
+              : " chacune de tes courses et livraisons"}
+          , en plus des 15 % de l'entreprise.
         </Text>
         <Text style={styles.until}>
           Depuis le {info.since ? day(info.since) : "—"} · jusqu'au {day(info.until)} ({info.durationMonths} mois)

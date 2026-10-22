@@ -506,7 +506,7 @@ export class ProvidersService {
       shop: provider.phoneShop ?? null,
       commissionPct: cfg?.commissionPct ?? 10,
       durationMonths: months,
-      weekendsOnly: cfg?.weekendsOnly ?? true,
+      applyOn: cfg?.applyOn ?? "WEEKDAYS",
     };
   }
 
@@ -1048,7 +1048,8 @@ export class ProvidersService {
     const cfg = loadTarificationConfig().phoneSupport;
     const pct = cfg?.commissionPct ?? 10;
     const months = cfg?.durationMonths ?? 4;
-    const weekends = cfg?.weekendsOnly ?? true;
+    const applyOn = cfg?.applyOn ?? "WEEKDAYS";
+    const daysText = applyOn === "WEEKDAYS" ? "du lundi au vendredi (sans les week-ends) " : applyOn === "WEEKENDS" ? "le samedi et le dimanche " : "";
     const shopName = shop?.trim() || null;
     await this.prisma.providerProfile.update({
       where: { id },
@@ -1059,7 +1060,7 @@ export class ProvidersService {
       adminId,
       "UPDATED",
       enabled
-        ? `Téléphone fourni par ${shopName ?? "une boutique partenaire"} : commission téléphone de ${pct} % sur chaque course ou livraison terminée ${weekends ? "le samedi et le dimanche " : ""}pendant ${months} mois à partir de la remise`
+        ? `Téléphone fourni par ${shopName ?? "une boutique partenaire"} : commission téléphone de ${pct} % sur chaque course ou livraison terminée ${daysText}pendant ${months} mois à partir de la remise`
         : "Commission téléphone retirée : le prestataire ne paie plus que la commission de l'entreprise"
     );
     return this.adminDetail(id);

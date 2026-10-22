@@ -241,7 +241,7 @@ function Detail({ id }: { id: string }) {
             <Badge tone={d.phoneSupport.active ? "warn" : d.phoneSupport.enrolled ? "ok" : "grey"}>{d.phoneSupport.active ? "Commission téléphone active" : d.phoneSupport.enrolled ? "Période terminée" : "Aucun téléphone fourni"}</Badge>
           </div>
           <p className="muted small" style={{ marginBottom: 0 }}>
-            Pour un Speeder, un coursier ou un livreur sans téléphone Android, équipé via une boutique partenaire : en plus des 15 % de l'entreprise, <b>{d.phoneSupport.commissionPct} %</b> de chaque course ou livraison terminée {d.phoneSupport.weekendsOnly ? "le samedi et le dimanche " : ""}sont prélevés (commission téléphone) pendant <b>{d.phoneSupport.durationMonths} mois</b> à partir de la remise du téléphone, à reverser à la boutique. Le prestataire voit ce rappel dans son application.
+            Pour un Speeder, un coursier ou un livreur sans téléphone Android, équipé via une boutique partenaire : en plus des 15 % de l'entreprise, <b>{d.phoneSupport.commissionPct} %</b> de chaque course ou livraison terminée {d.phoneSupport.applyOn === "WEEKDAYS" ? "du lundi au vendredi (sans les week-ends) " : d.phoneSupport.applyOn === "WEEKENDS" ? "le samedi et le dimanche " : ""}sont prélevés (commission téléphone) pendant <b>{d.phoneSupport.durationMonths} mois</b> à partir de la remise du téléphone, à reverser à la boutique. Le prestataire voit ce rappel dans son application.
           </p>
           <dl className="kv" style={{ marginTop: 12 }}>
             <dt>Téléphone remis le</dt><dd>{d.phoneSupport.enrolled ? dateTime(d.phoneSupport.since) : "—"}</dd>
@@ -288,7 +288,7 @@ function Detail({ id }: { id: string }) {
           title="Téléphone fourni par une boutique partenaire"
           confirmLabel={d.phoneSupport?.enrolled ? "Enregistrer" : "Activer la commission téléphone"}
           reasonLabel="Boutique partenaire (facultatif)"
-          message={<>À partir de maintenant, chaque course ou livraison terminée de ce prestataire paie <b>{d.phoneSupport?.commissionPct ?? 10} %</b> de commission téléphone {d.phoneSupport?.weekendsOnly ? "le samedi et le dimanche " : ""}pendant <b>{d.phoneSupport?.durationMonths ?? 4} mois</b>, en plus des 15 % de l'entreprise. Ce qui est déjà terminé ne change pas. Il le verra dans son application.</>}
+          message={<>À partir de maintenant, chaque course ou livraison terminée de ce prestataire paie <b>{d.phoneSupport?.commissionPct ?? 10} %</b> de commission téléphone {d.phoneSupport?.applyOn === "WEEKENDS" ? "le samedi et le dimanche " : d.phoneSupport?.applyOn === "ALL" ? "" : "du lundi au vendredi (sans les week-ends) "}pendant <b>{d.phoneSupport?.durationMonths ?? 4} mois</b>, en plus des 15 % de l'entreprise. Ce qui est déjà terminé ne change pas. Il le verra dans son application.</>}
           onClose={() => setAction(null)}
           onConfirm={(shop) => api.post(`/admin/providers/${id}/phone-support`, { enabled: true, ...(shop ? { shop } : {}) }).then(() => { toast("Commission téléphone activée."); return reload(); })}
         />

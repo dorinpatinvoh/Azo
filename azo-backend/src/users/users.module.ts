@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   HttpCode,
@@ -14,6 +15,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from "@nestjs/common";
 import { Gender, Role } from "@prisma/client";
@@ -116,6 +118,14 @@ export class UpdateProfileDto {
   @MinLength(2, { message: "Le nom ou pseudo doit contenir au moins 2 caractères" })
   @MaxLength(50, { message: "Le nom ou pseudo ne peut pas dépasser 50 caractères" })
   fullName: string;
+}
+
+/** Photo de profil : image en data URI (JPEG, PNG ou WEBP), 2 Mo au plus. */
+export class UpdateAvatarDto {
+  @IsString()
+  @Matches(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/, { message: "Image invalide : utilise une photo JPG, PNG ou WEBP" })
+  @MaxLength(2_800_000, { message: "Photo trop lourde : choisis une photo plus légère (2 Mo au plus)" })
+  dataUri: string;
 }
 
 export class UpdateLanguageDto {
@@ -353,6 +363,34 @@ export class UsersService {
     }
     await this.prisma.user.update({ where: { id: userId }, data: { fullName: dto.fullName } });
     return this.me(userId);
+  }
+
+  /**
+   * Photo de profil du compte. À défaut de photo enregistrée, la photo de profil déposée dans le dossier prestataire (pièce
+   * « photo de profil », obligatoire pour un Speeder) sert de photo : un prestataire la retrouve donc même s'il ne l'a jamais
+   * choisie dans l'application.
+   */
+  async getAvatar(userId: string) {
+    const saved = await this.prisma.userAvatar.findUnique({ where: { userId }, select: { dataUri: true, updatedAt: true } });
+    if (saved) return { dataUri: saved.dataUri, source: "USER" as const, updatedAt: saved.updatedAt };
+    const doc = await this.prisma.providerDocument.findFirst({
+      where: { kind: "PROFILE_PHOTO", provider: { userId }, url: { startsWith: "data:image" } },
+      orderBy: { uploadedAt: "desc" },
+      select: { url: true, uploadedAt: true },
+    });
+    if (doc?.url) return { dataUri: doc.url, source: "DOSSIER" as const, updatedAt: doc.uploadedAt };
+    return { dataUri: null, source: null, updatedAt: null };
+  }
+
+  async setAvatar(userId: string, dataUri: string) {
+    await this.prisma.userAvatar.upsert({ where: { userId }, create: { userId, dataUri }, update: { dataUri } });
+    return { saved: true };
+  }
+
+  /** Retire la photo choisie ; la pièce du dossier prestataire n'est pas touchée (elle reste un document de vérification). */
+  async removeAvatar(userId: string) {
+    await this.prisma.userAvatar.deleteMany({ where: { userId } });
+    return { removed: true };
   }
 
   async updateLanguage(userId: string, dto: UpdateLanguageDto) {
@@ -852,6 +890,21 @@ export class UsersController {
   @Roles(Role.CLIENT)
   updateLegacyProfile(@CurrentUser() user, @Body() dto: UpdateProfileDto) {
     return this.users.updateLegacyProfile(user.userId, dto);
+  }
+
+  @Get("me/avatar")
+  getAvatar(@CurrentUser() user) {
+    return this.users.getAvatar(user.userId);
+  }
+
+  @Put("me/avatar")
+  setAvatar(@CurrentUser() user, @Body() dto: UpdateAvatarDto) {
+    return this.users.setAvatar(user.userId, dto.dataUri);
+  }
+
+  @Delete("me/avatar")
+  removeAvatar(@CurrentUser() user) {
+    return this.users.removeAvatar(user.userId);
   }
 
   @Patch("me/language")

@@ -4,7 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { useI18n } from "../i18n";
-import { clearAvatar, pickAvatar, useAvatar } from "../utils/avatar";
+import { pickAvatar, removeAvatar, useAvatar } from "../utils/avatar";
 import { BrandAlert } from ".//BrandAlert";
 
 type Props = { visible: boolean; onClose: () => void };
@@ -42,7 +42,7 @@ export default function AvatarSheet({ visible, onClose }: Props) {
     { id: "library", icon: "photo-library", label: t("avatar.library"), onPress: () => pick("library") },
   ];
   if (avatar) {
-    rows.push({ id: "remove", icon: "delete-outline", label: t("avatar.remove"), danger: true, onPress: () => { clearAvatar(); onClose(); } });
+    rows.push({ id: "remove", icon: "delete-outline", label: t("avatar.remove"), danger: true, onPress: () => { void removeAvatar(); onClose(); } });
   }
 
   return (

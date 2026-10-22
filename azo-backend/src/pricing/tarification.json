@@ -159,8 +159,8 @@
   "phoneSupport": {
     "commissionPct": 10,
     "durationMonths": 4,
-    "weekendsOnly": true,
-    "_notes": "Speeder, coursier ou livreur dont le téléphone a été fourni par une boutique partenaire (marqué par l'administrateur) : en plus des 15 % de l'entreprise, 10 % de chaque course ou livraison terminée sont prélevés pour la commission téléphone, pendant 4 mois à partir de la remise du téléphone, uniquement le samedi et le dimanche (heure du Bénin). Mettre weekendsOnly à false pour prélever tous les jours."
+    "applyOn": "WEEKDAYS",
+    "_notes": "Speeder, coursier ou livreur dont le téléphone a été fourni par une boutique partenaire (marqué par l'administrateur) : en plus des 15 % de l'entreprise, 10 % de chaque course ou livraison terminée sont prélevés pour la commission téléphone, pendant 4 mois à partir de la remise du téléphone, du lundi au vendredi (les samedis et dimanches, heure du Bénin, sont exclus). applyOn : WEEKDAYS (lundi au vendredi), WEEKENDS (samedi et dimanche) ou ALL (tous les jours)."
   },
 
   "personalCourier": {

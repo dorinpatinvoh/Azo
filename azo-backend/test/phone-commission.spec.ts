@@ -12,10 +12,10 @@ import { PricingService } from "../src/pricing/pricing.service";
 import { RidesService } from "../src/rides/rides.service";
 
 const pricing = new PricingService();
-// Téléphone remis le mardi 20 octobre 2026 : les 4 mois courent jusqu'au 20 février 2027 ; le week-end suivant est le samedi 24 et le dimanche 25
+// Téléphone remis le mardi 20 octobre 2026 : les 4 mois courent jusqu'au 20 février 2027 ; le premier week-end (exclu) est le samedi 24 et le dimanche 25
 const supportedAt = new Date("2026-10-20T10:00:00Z");
 
-describe("Commission téléphone : règles (10 %, 4 mois, week-ends)", () => {
+describe("Commission téléphone : règles (10 %, 4 mois, lundi au vendredi)", () => {
   it("vaut 10 % de la course, tronqué, en plus des 15 % de l'entreprise", () => {
     expect(pricing.phoneCommissionPct()).toBe(10);
     expect(pricing.phoneCommission(1000)).toBe(100);
@@ -23,32 +23,33 @@ describe("Commission téléphone : règles (10 %, 4 mois, week-ends)", () => {
     expect(pricing.rideCommission({ profile: "ZEM_INDEPENDANT" }, 1000)).toBe(150);
   });
 
-  it("est due le samedi et le dimanche après la remise du téléphone", () => {
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-24T10:00:00Z"), 1000)).toBe(100); // samedi
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-25T10:00:00Z"), 1000)).toBe(100); // dimanche
+  it("est due du lundi au vendredi après la remise du téléphone", () => {
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-22T10:00:00Z"), 1000)).toBe(100); // jeudi
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-23T10:00:00Z"), 1000)).toBe(100); // vendredi
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-26T10:00:00Z"), 1000)).toBe(100); // lundi
   });
 
-  it("n'est pas due en semaine", () => {
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-22T10:00:00Z"), 1000)).toBe(0); // jeudi
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-26T10:00:00Z"), 1000)).toBe(0); // lundi
+  it("n'est pas due le week-end (samedi et dimanche exclus)", () => {
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-24T10:00:00Z"), 1000)).toBe(0); // samedi
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-25T10:00:00Z"), 1000)).toBe(0); // dimanche
   });
 
-  it("suit l'heure du Bénin (UTC+1) : vendredi 23h30 UTC est déjà samedi, dimanche 23h30 UTC est déjà lundi", () => {
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-23T23:30:00Z"), 1000)).toBe(100);
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-25T23:30:00Z"), 1000)).toBe(0);
+  it("suit l'heure du Bénin (UTC+1) : vendredi 23h30 UTC est déjà samedi (exclu), dimanche 23h30 UTC est déjà lundi (compté)", () => {
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-23T23:30:00Z"), 1000)).toBe(0);
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-25T23:30:00Z"), 1000)).toBe(100);
   });
 
   it("n'est pas due avant la remise du téléphone, ni sans téléphone fourni", () => {
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-17T10:00:00Z"), 1000)).toBe(0); // samedi précédent
-    expect(pricing.phoneCommissionFor(null, new Date("2026-10-24T10:00:00Z"), 1000)).toBe(0);
-    expect(pricing.phoneCommissionFor(undefined, new Date("2026-10-24T10:00:00Z"), 1000)).toBe(0);
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2026-10-19T10:00:00Z"), 1000)).toBe(0); // lundi précédent
+    expect(pricing.phoneCommissionFor(null, new Date("2026-10-22T10:00:00Z"), 1000)).toBe(0);
+    expect(pricing.phoneCommissionFor(undefined, new Date("2026-10-22T10:00:00Z"), 1000)).toBe(0);
   });
 
   it("s'arrête toute seule après 4 mois (20 février 2027)", () => {
     expect(pricing.phoneSupportEnd(supportedAt).toISOString()).toBe("2027-02-20T10:00:00.000Z");
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2027-02-13T12:00:00Z"), 1000)).toBe(100); // dernier samedi dans les 4 mois
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2027-02-20T12:00:00Z"), 1000)).toBe(0); // samedi, mais les 4 mois sont écoulés
-    expect(pricing.phoneCommissionFor(supportedAt, new Date("2027-03-06T12:00:00Z"), 1000)).toBe(0);
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2027-02-19T09:00:00Z"), 1000)).toBe(100); // vendredi, avant la fin
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2027-02-22T12:00:00Z"), 1000)).toBe(0); // lundi, mais les 4 mois sont écoulés
+    expect(pricing.phoneCommissionFor(supportedAt, new Date("2027-03-08T12:00:00Z"), 1000)).toBe(0);
   });
 });
 
@@ -84,8 +85,8 @@ describe("Commission téléphone : paiement d'une course", () => {
   const SATURDAY = "2026-10-24T10:00:00Z";
   const THURSDAY = "2026-10-22T10:00:00Z";
 
-  it("sans téléphone fourni : seulement les 15 % de l'entreprise, même un samedi", async () => {
-    const { created, credits, tx } = await pay({ phoneSupportedAt: null }, SATURDAY);
+  it("sans téléphone fourni : seulement les 15 % de l'entreprise, même en semaine", async () => {
+    const { created, credits, tx } = await pay({ phoneSupportedAt: null }, THURSDAY);
     // lignes du Speeder uniquement (le débit du client, « TRANSACTION_RIDE_PAYMENT », est à part)
     const debits = created.filter((t) => t.type === "DEBIT" && t.labelKey && t.labelKey !== "TRANSACTION_RIDE_PAYMENT");
     expect(debits.map((t) => t.labelKey)).toEqual(["TRANSACTION_PLATFORM_COMMISSION"]);
@@ -93,8 +94,8 @@ describe("Commission téléphone : paiement d'une course", () => {
     expect(tx.ride.updateMany.mock.calls[0][0].data.phoneCommission).toBe(0);
   });
 
-  it("téléphone fourni, un samedi : 15 % pour l'entreprise PLUS 10 % de commission téléphone, le Speeder reçoit 75 %", async () => {
-    const { created, credits, tx, notifications } = await pay({ phoneSupportedAt: supportedAt }, SATURDAY);
+  it("téléphone fourni, un jeudi : 15 % pour l'entreprise PLUS 10 % de commission téléphone, le Speeder reçoit 75 %", async () => {
+    const { created, credits, tx, notifications } = await pay({ phoneSupportedAt: supportedAt }, THURSDAY);
     const phoneLine = created.find((t) => t.labelKey === "TRANSACTION_PHONE_COMMISSION");
     expect(phoneLine).toMatchObject({ type: "DEBIT", amount: 100, label: "Commission téléphone (10 %)" });
     expect(created.find((t) => t.labelKey === "TRANSACTION_PLATFORM_COMMISSION")).toMatchObject({ amount: 150 });
@@ -110,15 +111,15 @@ describe("Commission téléphone : paiement d'une course", () => {
     expect(message[2]).toContain("+750");
   });
 
-  it("téléphone fourni, un jeudi : pas de commission téléphone (week-ends seulement)", async () => {
-    const { created, credits, tx } = await pay({ phoneSupportedAt: supportedAt }, THURSDAY);
+  it("téléphone fourni, un samedi : pas de commission téléphone (les week-ends sont exclus)", async () => {
+    const { created, credits, tx } = await pay({ phoneSupportedAt: supportedAt }, SATURDAY);
     expect(created.find((t) => t.labelKey === "TRANSACTION_PHONE_COMMISSION")).toBeUndefined();
     expect(credits.map((c) => c.amount)).toEqual([150, 0]);
     expect(tx.ride.updateMany.mock.calls[0][0].data.phoneCommission).toBe(0);
   });
 
-  it("téléphone fourni il y a plus de 4 mois : plus de commission téléphone, même un samedi", async () => {
-    const { created, tx } = await pay({ phoneSupportedAt: new Date("2026-05-01T10:00:00Z") }, SATURDAY);
+  it("téléphone fourni il y a plus de 4 mois : plus de commission téléphone, même en semaine", async () => {
+    const { created, tx } = await pay({ phoneSupportedAt: new Date("2026-05-01T10:00:00Z") }, THURSDAY);
     expect(created.find((t) => t.labelKey === "TRANSACTION_PHONE_COMMISSION")).toBeUndefined();
     expect(tx.ride.updateMany.mock.calls[0][0].data.phoneCommission).toBe(0);
   });

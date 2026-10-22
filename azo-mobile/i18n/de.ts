@@ -563,7 +563,7 @@ export const de: Record<MessageKey, string> = {
   "voice.pause": "Stimme pausieren",
   "voice.resume": "Stimme fortsetzen",
   "avatar.title": "Profilfoto",
-  "avatar.note": "Das Foto bleibt auf diesem Telefon gespeichert.",
+  "avatar.note": "Dein Foto wird in deinem Konto gespeichert: Du bekommst es auch nach dem Abmelden oder bei einem neuen Telefon zurück.",
   "avatar.camera": "Foto aufnehmen",
   "avatar.library": "Aus der Galerie wählen",
   "avatar.remove": "Foto entfernen",

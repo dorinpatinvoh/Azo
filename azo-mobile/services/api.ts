@@ -278,6 +278,13 @@ export const needsRegistration = (user: Pick<UserProfile, "role" | "fullName" | 
   String(user.role || "CLIENT").toUpperCase().trim() === "CLIENT" &&
   (user.profileComplete === false || (user.profileComplete === undefined && !user.fullName?.trim()));
 
+/** Photo de profil du compte, gardée sur le serveur (data URI) : elle revient après une déconnexion ou sur un autre téléphone. */
+export const avatarApi = {
+  get: () => api.get<{ dataUri: string | null; source: "USER" | "DOSSIER" | null }>(`${P}/users/me/avatar`),
+  set: (dataUri: string) => api.put<{ saved: boolean }>(`${P}/users/me/avatar`, { dataUri }),
+  remove: () => api.delete<{ removed: boolean }>(`${P}/users/me/avatar`),
+};
+
 export const userApi = {
   me: () => api.get<UserProfile>("/users/me"),
   update: (fullName: string) => api.patch<UserProfile>("/users/me", { fullName }),
@@ -962,7 +969,7 @@ export type AgencyDetails = {
   fleetSize?: number;
 };
 
-/** Téléphone fourni par une boutique partenaire : commission téléphone prélevée en plus, pendant `durationMonths` mois (week-ends seulement si `weekendsOnly`). */
+/** Téléphone fourni par une boutique partenaire : commission téléphone prélevée en plus, pendant `durationMonths` mois (jours concernés : `applyOn`, du lundi au vendredi par défaut). */
 export type PhoneSupportInfo = {
   enrolled: boolean;
   active: boolean;
@@ -971,7 +978,7 @@ export type PhoneSupportInfo = {
   shop: string | null;
   commissionPct: number;
   durationMonths: number;
-  weekendsOnly: boolean;
+  applyOn: "WEEKDAYS" | "WEEKENDS" | "ALL";
 };
 
 export type ProviderDossier = {

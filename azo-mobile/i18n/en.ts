@@ -563,7 +563,7 @@ export const en: Record<MessageKey, string> = {
   "voice.pause": "Pause the voice",
   "voice.resume": "Resume the voice",
   "avatar.title": "Profile photo",
-  "avatar.note": "The photo stays saved on this phone.",
+  "avatar.note": "Your photo is saved to your account: you get it back even if you log out or change phone.",
   "avatar.camera": "Take a photo",
   "avatar.library": "Choose from the gallery",
   "avatar.remove": "Remove the photo",

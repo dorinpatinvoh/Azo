@@ -77,6 +77,7 @@ export async function deleteClientAccount(
 
   // Données personnelles et techniques : effacées dans les deux cas
   const wipePersonal = [
+    prisma.userAvatar.deleteMany({ where: { userId } }),
     prisma.devicePushToken.deleteMany({ where: { userId } }),
     prisma.notification.deleteMany({ where: { userId } }),
     prisma.savedPlace.deleteMany({ where: { userId } }),
