@@ -655,6 +655,7 @@ export const de: Record<MessageKey, string> = {
   "earn.commission": "AZƆ̀-Provision: {amount}",
   "earn.empty": "Keine abgeschlossene Fahrt in diesem Zeitraum.",
   "earn.tips": "inkl. Trinkgeld: {amount}",
+  "earn.phone": "Inkl. Telefonprovision: {amount}",
   "courses.tipSent": "Trinkgeld gesendet: {amount}",
   "activity.tipReceived": "Trinkgeld erhalten: +{amount}",
   "earn.error": "Einnahmen konnten nicht geladen werden.",

@@ -470,6 +470,8 @@ export type Ride = {
   originLat: number; originLng: number; destLat: number; destLng: number;
   price: number;
   commission?: number;
+  /** Commission téléphone prélevée en plus (Speeder dont le téléphone a été fourni par une boutique partenaire). */
+  phoneCommission?: number;
   rating?: number | null;
   /** Course programmée : heure souhaitée, et moment où la demande a été ouverte aux chauffeurs (null = pas encore). */
   scheduledAt?: string | null;
@@ -556,8 +558,8 @@ export const paidAmount = (ride: Pick<Ride, "price" | "finalPrice">) => ride.fin
 export type DriverEarnings = {
   period: "day" | "week" | "month";
   from: string;
-  days: { date: string; gross: number; net: number; rides: number; tips: number }[];
-  totals: { gross: number; net: number; rides: number; commission: number; tips: number };
+  days: { date: string; gross: number; net: number; rides: number; tips: number; phoneCommission: number }[];
+  totals: { gross: number; net: number; rides: number; commission: number; tips: number; phoneCommission: number };
   averagePerActiveDay: number;
   bestDay: { date: string; net: number } | null;
 };
@@ -697,6 +699,8 @@ export type Delivery = {
   payer: "SENDER" | "RECIPIENT";
   price: number;
   commission?: number;
+  /** Commission téléphone prélevée en plus (prestataire dont le téléphone a été fourni par une boutique partenaire). */
+  phoneCommission?: number;
   pickupCode: string;
   deliveryCode: string;
   createdAt: string;
@@ -958,11 +962,24 @@ export type AgencyDetails = {
   fleetSize?: number;
 };
 
+/** Téléphone fourni par une boutique partenaire : commission téléphone prélevée en plus, pendant `durationMonths` mois (week-ends seulement si `weekendsOnly`). */
+export type PhoneSupportInfo = {
+  enrolled: boolean;
+  active: boolean;
+  since: string | null;
+  until: string | null;
+  shop: string | null;
+  commissionPct: number;
+  durationMonths: number;
+  weekendsOnly: boolean;
+};
+
 export type ProviderDossier = {
   id: string;
   type: ProviderType;
   typeLabel: string;
   status: ProviderStatus;
+  phoneSupport?: PhoneSupportInfo;
   identity: {
     fullName: string | null;
     city: string | null;

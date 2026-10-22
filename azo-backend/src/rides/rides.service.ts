@@ -1615,7 +1615,11 @@ export class RidesService {
       },
       amount
     );
-    const driverGain = amount - commission;
+    // Speeder dont le téléphone a été fourni par une boutique partenaire : commission téléphone EN PLUS de celle de l'entreprise, sur
+    // chaque course terminée après la remise du téléphone (la date est posée par l'administrateur, donc toute course qui se termine ensuite)
+    const phoneCommission = this.pricing.phoneCommissionFor?.(driver?.provider?.phoneSupportedAt, new Date(), amount) ?? 0;
+    const phonePct = phoneCommission > 0 ? this.pricing.phoneCommissionPct() : 0;
+    const driverGain = amount - commission - phoneCommission;
     // Pourcentage réellement appliqué à cette course (15 % pour la plupart, taux du niveau pour un employé d'agence)
     const commissionPct = amount > 0 ? Math.round((commission / amount) * 1000) / 10 : 0;
     const ref = `Course #${ride.id.slice(0, 6)}`;
@@ -1649,10 +1653,15 @@ export class RidesService {
           ...(commission > 0
             ? [{ walletId: driverWallet.id, type: "DEBIT" as const, amount: commission, label: `Commission AZƆ̀ (${commissionPct} %)`, labelKey: "TRANSACTION_PLATFORM_COMMISSION", labelParams: { ref, pct: commissionPct, amount }, meta: ref }]
             : []),
+          ...(phoneCommission > 0
+            ? [{ walletId: driverWallet.id, type: "DEBIT" as const, amount: phoneCommission, label: `Commission téléphone (${phonePct} %)`, labelKey: "TRANSACTION_PHONE_COMMISSION", labelParams: { ref, pct: phonePct, amount }, meta: ref }]
+            : []),
         ],
       });
       // 15 % pour l'entreprise : versés au portefeuille administrateur dans la même transaction
       await this.wallet.creditPlatformInTx(tx, commission, ref);
+      // Commission téléphone : versée aussi au portefeuille administrateur, sous son propre libellé (à reverser aux boutiques partenaires)
+      await this.wallet.creditPlatformInTx(tx, phoneCommission, ref, "Commission téléphone (à reverser aux boutiques)");
 
       const where: Prisma.RideWhereInput = { id: rideId, driverId, status: "IN_PROGRESS" };
       if (options.stopRequestAt) {
@@ -1666,6 +1675,7 @@ export class RidesService {
           status: "COMPLETED",
           completedAt: new Date(),
           commission,
+          phoneCommission,
           finalPrice: amount,
           settledDistanceMeters: options.settledDistanceMeters,
           priceMode: options.priceMode,
@@ -1706,12 +1716,20 @@ export class RidesService {
       })
       .catch(() => null);
     await this.notifications
-      .push(driverId, "Paiement reçu", `Course ${amount} FCFA · ${commissionPct} % de la course (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${driverGain} FCFA.`, "payment", {
-        data: { event: "ride-completed", rideId },
-        titleKey: "NOTIFICATION_RIDE_COMPLETED_DRIVER",
-        bodyKey: "NOTIFICATION_RIDE_COMPLETED_DRIVER_BODY",
-        params: { driverGain, commission, amount, pct: commissionPct },
-      })
+      .push(
+        driverId,
+        "Paiement reçu",
+        phoneCommission > 0
+          ? `Course ${amount} FCFA · ${commissionPct} % (−${commission} F) pour l'entreprise AZƆ̀ + ${phonePct} % (−${phoneCommission} F) de commission téléphone · tu reçois +${driverGain} FCFA.`
+          : `Course ${amount} FCFA · ${commissionPct} % de la course (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${driverGain} FCFA.`,
+        "payment",
+        {
+          data: { event: "ride-completed", rideId },
+          titleKey: phoneCommission > 0 ? "NOTIFICATION_RIDE_COMPLETED_DRIVER_PHONE" : "NOTIFICATION_RIDE_COMPLETED_DRIVER",
+          bodyKey: phoneCommission > 0 ? "NOTIFICATION_RIDE_COMPLETED_DRIVER_PHONE_BODY" : "NOTIFICATION_RIDE_COMPLETED_DRIVER_BODY",
+          params: { driverGain, commission, amount, pct: commissionPct, phoneCommission, phonePct },
+        }
+      )
       .catch(() => null);
     this.gateway.emitStatus(rideId, "COMPLETED");
     this.gateway.emitRideSettled(rideId, {

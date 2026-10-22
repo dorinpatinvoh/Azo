@@ -22,6 +22,7 @@ import OSMMapView, { type OSMMarker } from "../components/OSMMapView";
 import RideStopPanel from "../components/RideStopPanel";
 import EarningsCard from "../components/EarningsCard";
 import StandingBanner from "../components/StandingBanner";
+import PhoneSupportBanner from "../components/PhoneSupportBanner";
 import PillTabBar, { type PillTabItem } from "../components/PillTabBar";
 import Avatar from "../components/Avatar";
 import AvatarSheet from "../components/AvatarSheet";
@@ -410,7 +411,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
           BrandAlert.alert(
             fresh.status === "COMPLETED" ? "Course terminée" : "Course annulée",
             fresh.status === "COMPLETED"
-              ? commissionNotice(paidAmount(fresh), fresh.commission ?? 0)
+              ? commissionNotice(paidAmount(fresh), fresh.commission ?? 0, fresh.phoneCommission ?? 0)
               : "Le client a annulé la course. Tu peux accepter une autre demande."
           );
           return;
@@ -761,7 +762,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
     const today = done.filter((r) => isToday(r.createdAt));
     // Les pourboires reçus aujourd'hui comptent aussi (100 % pour le Speeder), même pour une course d'un autre jour
     const tipsToday = history.filter((r) => r.tip && isToday(r.tip.at ?? r.createdAt)).reduce((sum, r) => sum + (r.tip?.amount ?? 0), 0);
-    const gainsToday = today.reduce((sum, r) => sum + (paidAmount(r) - (r.commission ?? 0)), 0) + tipsToday;
+    const gainsToday = today.reduce((sum, r) => sum + (paidAmount(r) - (r.commission ?? 0) - (r.phoneCommission ?? 0)), 0) + tipsToday;
     const rated = done.filter((r) => typeof r.rating === "number");
     const rating = rated.length
       ? rated.reduce((sum, r) => sum + (r.rating ?? 0), 0) / rated.length
@@ -920,7 +921,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
               await loadAccount();
               const gross = paidAmount(done);
               const commission = done.commission ?? 0;
-              BrandAlert.alert("Course terminée 🎉", commissionNotice(gross, commission));
+              BrandAlert.alert("Course terminée 🎉", commissionNotice(gross, commission, done.phoneCommission ?? 0));
             } catch (e) {
               BrandAlert.alert("Impossible de terminer", errorMessage(e));
             } finally {
@@ -1016,6 +1017,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
+        <PhoneSupportBanner />
         <View style={tab === "home" ? undefined : styles.hidden}>
         <>
         <StandingBanner />
@@ -1444,7 +1446,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
                   {r.tip ? <Text style={[styles.tripMeta, { color: colors.primary, fontWeight: "800" }]}>🎁 Pourboire reçu : +{fcfa(r.tip.amount)}</Text> : null}
                 </View>
                 <Text style={[styles.tripAmount, r.status !== "COMPLETED" && { color: colors.onSurfaceVariant }]}>
-                  {r.status === "COMPLETED" ? `+${fcfa(paidAmount(r) - (r.commission ?? 0))}` : "—"}
+                  {r.status === "COMPLETED" ? `+${fcfa(paidAmount(r) - (r.commission ?? 0) - (r.phoneCommission ?? 0))}` : "—"}
                 </Text>
               </View>
             ))}

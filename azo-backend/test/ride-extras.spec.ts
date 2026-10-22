@@ -35,7 +35,7 @@ describe("gains du chauffeur", () => {
     expect(res.days[0].date).toBe("2026-10-07");
     expect(res.days[6]).toMatchObject({ date: "2026-10-13", gross: 2500, net: 2250, rides: 2 });
     expect(res.days.find((d) => d.date === "2026-10-11")).toMatchObject({ gross: 800, net: 720, rides: 1 });
-    expect(res.totals).toEqual({ gross: 3300, net: 2970, rides: 3, commission: 330, tips: 0 });
+    expect(res.totals).toEqual({ gross: 3300, net: 2970, rides: 3, commission: 330, tips: 0, phoneCommission: 0 });
     expect(res.bestDay).toEqual({ date: "2026-10-13", net: 2250 });
     expect(res.averagePerActiveDay).toBe(1485);
   });
@@ -53,7 +53,7 @@ describe("gains du chauffeur", () => {
     const res = await service.driverEarnings(driverId, "week", now);
     expect(res.days[6]).toMatchObject({ date: "2026-10-13", gross: 2000, net: 1850, rides: 1, tips: 500 });
     expect(res.days.find((d) => d.date === "2026-10-11")).toMatchObject({ gross: 200, net: 200, rides: 0, tips: 200 });
-    expect(res.totals).toEqual({ gross: 2200, net: 2050, rides: 1, commission: 150, tips: 700 });
+    expect(res.totals).toEqual({ gross: 2200, net: 2050, rides: 1, commission: 150, tips: 700, phoneCommission: 0 });
     expect(res.bestDay).toEqual({ date: "2026-10-13", net: 1850 });
   });
 
@@ -71,7 +71,7 @@ describe("gains du chauffeur", () => {
     expect((await service.driverEarnings(driverId, "day", now)).days).toHaveLength(1);
     const month = await service.driverEarnings(driverId, "month", now);
     expect(month.days).toHaveLength(30);
-    expect(month.totals).toEqual({ gross: 0, net: 0, rides: 0, commission: 0, tips: 0 });
+    expect(month.totals).toEqual({ gross: 0, net: 0, rides: 0, commission: 0, tips: 0, phoneCommission: 0 });
     expect(month.bestDay).toBeNull();
     expect(month.averagePerActiveDay).toBe(0);
   });

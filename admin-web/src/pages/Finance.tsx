@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { api } from "../api";
 import { Badge, ConfirmModal, Empty, ErrorBox, Field, Modal, PageHead, Spinner, Stat, useLoad, useToast } from "../ui";
 import { VEHICLE_LABEL, dateTime, fcfa, km, phone } from "../format";
-import type { CommissionRow, FinanceSummary, Withdrawal } from "../types";
+import type { CommissionRow, FinanceSummary, PhoneCommissions, Withdrawal } from "../types";
 
 const MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 const monthLabel = (key: string) => {
@@ -15,12 +15,13 @@ export default function Finance() {
   const toast = useToast();
   const [limit, setLimit] = useState(50);
   const { data, error, loading, reload } = useLoad(async () => {
-    const [summary, commissions, withdrawals] = await Promise.all([
+    const [summary, commissions, withdrawals, phoneCommissions] = await Promise.all([
       api.get<FinanceSummary>("/admin/finance"),
       api.get<CommissionRow[]>(`/admin/finance/commissions?limit=${limit}`),
       api.get<Withdrawal[]>("/admin/finance/withdrawals"),
+      api.get<PhoneCommissions>("/admin/finance/phone-commissions").catch(() => null),
     ]);
-    return { summary, commissions, withdrawals };
+    return { summary, commissions, withdrawals, phoneCommissions };
   }, [limit]);
   const [asking, setAsking] = useState(false);
   const [paying, setPaying] = useState<Withdrawal | null>(null);
@@ -73,6 +74,32 @@ export default function Finance() {
               </div>
             </div>
           </div>
+
+          {data.phoneCommissions && data.phoneCommissions.total > 0 ? (
+            <div className="card">
+              <div className="row between">
+                <h2>Commissions téléphone à reverser aux boutiques</h2>
+                <span className="muted small">Total : <b>{fcfa(data.phoneCommissions.total)}</b> · ce mois : <b>{fcfa(data.phoneCommissions.thisMonth)}</b> · {data.phoneCommissions.rides} course(s) ou livraison(s)</span>
+              </div>
+              <p className="muted small">Prélevées en plus des 15 % sur les Speeders, coursiers et livreurs dont le téléphone a été fourni par une boutique partenaire (4 mois, week-ends). Elles ne comptent pas dans les gains de l'entreprise ci-dessus : elles sont à reverser.</p>
+              <div className="tablewrap" style={{ marginTop: 8 }}>
+                <table>
+                  <thead><tr><th>Prestataire</th><th>Boutique</th><th>Téléphone remis le</th><th className="num">Missions</th><th className="num">À reverser</th></tr></thead>
+                  <tbody>
+                    {data.phoneCommissions.speeders.map((x) => (
+                      <tr key={x.userId}>
+                        <td>{x.providerId ? <a href={`#/dossiers/${x.providerId}`}>{x.fullName ?? phone(x.phone)}</a> : (x.fullName ?? phone(x.phone))}<div className="muted small">{phone(x.phone)}</div></td>
+                        <td>{x.shop ?? "—"}</td>
+                        <td className="small">{x.since ? dateTime(x.since) : "retiré"}</td>
+                        <td className="num">{x.rides}</td>
+                        <td className="num"><b>{fcfa(x.total)}</b></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
 
           <div className="card">
             <div className="row between">

@@ -34,6 +34,7 @@ import AvatarSheet from "../components/AvatarSheet";
 import LanguageSheet from "../components/LanguageSheet";
 import { useAvatar } from "../utils/avatar";
 import { commissionNotice, VEHICLE_LABEL } from "../utils/rideDisplay";
+import PhoneSupportBanner from "../components/PhoneSupportBanner";
 import { languageInfo, useI18n } from "../i18n";
 import { displayName, initials } from "./ProfileScreen";
 import { BrandAlert } from "../components/BrandAlert";
@@ -336,7 +337,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
         const commission = done.commission ?? Math.round(gross * 0.15);
         BrandAlert.alert(
           personalMission ? "Course terminée 🎉" : "Livraison terminée 🎉",
-          commissionNotice(gross, commission)
+          commissionNotice(gross, commission, done.phoneCommission ?? 0)
         );
       }
     } catch (e) {
@@ -433,6 +434,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
           keyboardShouldPersistTaps="handled"
         >
+          <PhoneSupportBanner />
           {tab === "home" && (
           <>
           {/* Mission en cours (double OTP) */}

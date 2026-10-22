@@ -43,6 +43,70 @@ export class FinanceService {
    * Commission de l'entreprise sur chaque course et chaque livraison terminées (les plus récentes d'abord) :
    * montant de la course, pourcentage appliqué et somme prélevée.
    */
+  /** Commissions téléphone prélevées sur les Speeders dont le téléphone vient d'une boutique partenaire : à reverser aux boutiques. */
+  async phoneCommissions() {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const where = { phoneCommission: { gt: 0 } };
+    const [all, month, groups, dAll, dMonth, dGroups] = await Promise.all([
+      this.prisma.ride.aggregate({ where, _sum: { phoneCommission: true }, _count: true }),
+      this.prisma.ride.aggregate({ where: { ...where, completedAt: { gte: monthStart } }, _sum: { phoneCommission: true } }),
+      this.prisma.ride.groupBy({
+        by: ["driverId"],
+        where: { ...where, driverId: { not: null } },
+        _sum: { phoneCommission: true },
+        _count: true,
+        orderBy: { _sum: { phoneCommission: "desc" } },
+        take: 100,
+      }),
+      this.prisma.delivery.aggregate({ where, _sum: { phoneCommission: true }, _count: true }),
+      this.prisma.delivery.aggregate({ where: { ...where, status: "COMPLETED", createdAt: { gte: monthStart } }, _sum: { phoneCommission: true } }),
+      this.prisma.delivery.groupBy({
+        by: ["courierId"],
+        where: { ...where, courierId: { not: null } },
+        _sum: { phoneCommission: true },
+        _count: true,
+        orderBy: { _sum: { phoneCommission: "desc" } },
+        take: 100,
+      }),
+    ]);
+    // Courses (Speeders) et livraisons (coursiers, livreurs) regroupées par prestataire
+    const merged = new Map<string, { rides: number; total: number }>();
+    for (const g of groups) if (g.driverId) merged.set(g.driverId, { rides: g._count, total: g._sum.phoneCommission ?? 0 });
+    for (const g of dGroups) {
+      if (!g.courierId) continue;
+      const prev = merged.get(g.courierId) ?? { rides: 0, total: 0 };
+      merged.set(g.courierId, { rides: prev.rides + g._count, total: prev.total + (g._sum.phoneCommission ?? 0) });
+    }
+    const ordered = [...merged.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 100);
+    const ids = ordered.map(([id]) => id);
+    const users = ids.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, phone: true, fullName: true, provider: { select: { id: true, phoneShop: true, phoneSupportedAt: true } } },
+        })
+      : [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return {
+      total: (all._sum.phoneCommission ?? 0) + (dAll._sum.phoneCommission ?? 0),
+      thisMonth: (month._sum.phoneCommission ?? 0) + (dMonth._sum.phoneCommission ?? 0),
+      rides: all._count + dAll._count,
+      speeders: ordered.map(([userId, v]) => {
+        const u = byId.get(userId);
+        return {
+          userId,
+          providerId: u?.provider?.id ?? null,
+          fullName: u?.fullName ?? null,
+          phone: u?.phone ?? null,
+          shop: u?.provider?.phoneShop ?? null,
+          since: u?.provider?.phoneSupportedAt ?? null,
+          rides: v.rides,
+          total: v.total,
+        };
+      }),
+    };
+  }
+
   async commissions(limit = 50) {
     const n = Math.min(Math.max(Math.floor(limit) || 50, 1), 200);
     type RideRow = {

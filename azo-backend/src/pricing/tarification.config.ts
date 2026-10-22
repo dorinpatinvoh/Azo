@@ -122,6 +122,8 @@ export type TarificationConfig = {
   delivery: { commissionPct: number; vehicles?: Record<string, { base?: number; perKm: number; baseByPackage?: Record<string, number>; onlyPackages?: string[] }>; _aDefinir?: string[] };
   /** Commission de l'entreprise sur chaque course / livraison terminée (versée au portefeuille administrateur). */
   platformCommission?: { pct: number };
+  /** Commission téléphone : prélevée en plus sur chaque course d'un Speeder dont le téléphone a été fourni par une boutique partenaire. */
+  phoneSupport?: { commissionPct: number; durationMonths?: number; weekendsOnly?: boolean };
   /** Coursier personnel : durées de réservation et tarif par véhicule (base + km). */
   personalCourier?: {
     durations: { hours: number; label: string }[];

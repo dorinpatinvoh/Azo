@@ -138,6 +138,18 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     es: t("Pago recibido", "Carrera {amount} FCFA · el {pct} % de la carrera (−{commission} F) se paga a la empresa AZƆ̀ · recibes +{driverGain} FCFA."),
     de: t("Zahlung erhalten", "Fahrt {amount} FCFA · {pct} % der Fahrt (−{commission} F) gehen an das Unternehmen AZƆ̀ · du erhältst +{driverGain} FCFA."),
   },
+  NOTIFICATION_DELIVERY_PAID_COURIER_PHONE: {
+    fr: t("Paiement reçu", "Mission {amount} FCFA · {pct} % (−{commission} F) pour l'entreprise AZƆ̀ + commission téléphone (−{phoneCommission} F) · tu reçois +{net} FCFA."),
+    en: t("Payment received", "Job {amount} FCFA · {pct}% (−{commission} F) to the AZƆ̀ company + phone commission (−{phoneCommission} F) · you receive +{net} FCFA."),
+    es: t("Pago recibido", "Servicio {amount} FCFA · {pct} % (−{commission} F) para la empresa AZƆ̀ + comisión del teléfono (−{phoneCommission} F) · recibes +{net} FCFA."),
+    de: t("Zahlung erhalten", "Auftrag {amount} FCFA · {pct} % (−{commission} F) für das Unternehmen AZƆ̀ + Telefonprovision (−{phoneCommission} F) · du erhältst +{net} FCFA."),
+  },
+  NOTIFICATION_RIDE_COMPLETED_DRIVER_PHONE: {
+    fr: t("Paiement reçu", "Course {amount} FCFA · {pct} % (−{commission} F) pour l'entreprise AZƆ̀ + {phonePct} % (−{phoneCommission} F) de commission téléphone · tu reçois +{driverGain} FCFA."),
+    en: t("Payment received", "Ride {amount} FCFA · {pct}% (−{commission} F) to the AZƆ̀ company + {phonePct}% (−{phoneCommission} F) phone commission · you receive +{driverGain} FCFA."),
+    es: t("Pago recibido", "Carrera {amount} FCFA · {pct} % (−{commission} F) para la empresa AZƆ̀ + {phonePct} % (−{phoneCommission} F) de comisión del teléfono · recibes +{driverGain} FCFA."),
+    de: t("Zahlung erhalten", "Fahrt {amount} FCFA · {pct} % (−{commission} F) für das Unternehmen AZƆ̀ + {phonePct} % (−{phoneCommission} F) Telefonprovision · du erhältst +{driverGain} FCFA."),
+  },
   NOTIFICATION_DELIVERY_PAID_COURIER: {
     fr: t("Paiement reçu", "Livraison {amount} FCFA · {pct} % de la livraison (−{commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +{net} FCFA."),
     en: t("Payment received", "Delivery {amount} FCFA · {pct}% of the delivery (−{commission} F) goes to the AZƆ̀ company · you receive +{net} FCFA."),

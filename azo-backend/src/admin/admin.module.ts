@@ -312,6 +312,12 @@ export class AdminController {
     return this.finance.cancel(u.userId, id);
   }
 
+  // GET /admin/finance/phone-commissions — commissions téléphone prélevées, par Speeder, à reverser aux boutiques partenaires
+  @Get("finance/phone-commissions")
+  phoneCommissions() {
+    return this.finance.phoneCommissions();
+  }
+
   @Get("stats")
   stats() {
     return this.svc.stats();

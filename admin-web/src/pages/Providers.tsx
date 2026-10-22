@@ -108,7 +108,7 @@ function List() {
 }
 
 /* ------------------------------------------------------------------ fiche */
-type Action = null | "approve" | "reject" | "info" | "suspend" | "reinstate" | { doc: ProviderDocument; decision: "VALID" | "INVALID" };
+type Action = null | "approve" | "reject" | "info" | "suspend" | "reinstate" | "phoneOn" | "phoneOff" | { doc: ProviderDocument; decision: "VALID" | "INVALID" };
 
 function Detail({ id }: { id: string }) {
   const toast = useToast();
@@ -234,6 +234,28 @@ function Detail({ id }: { id: string }) {
         </div>
       </div>
 
+      {(d.type === "DRIVER" || d.type === "COURIER") && d.phoneSupport ? (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="row between">
+            <h2>Téléphone fourni par une boutique partenaire</h2>
+            <Badge tone={d.phoneSupport.active ? "warn" : d.phoneSupport.enrolled ? "ok" : "grey"}>{d.phoneSupport.active ? "Commission téléphone active" : d.phoneSupport.enrolled ? "Période terminée" : "Aucun téléphone fourni"}</Badge>
+          </div>
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            Pour un Speeder, un coursier ou un livreur sans téléphone Android, équipé via une boutique partenaire : en plus des 15 % de l'entreprise, <b>{d.phoneSupport.commissionPct} %</b> de chaque course ou livraison terminée {d.phoneSupport.weekendsOnly ? "le samedi et le dimanche " : ""}sont prélevés (commission téléphone) pendant <b>{d.phoneSupport.durationMonths} mois</b> à partir de la remise du téléphone, à reverser à la boutique. Le prestataire voit ce rappel dans son application.
+          </p>
+          <dl className="kv" style={{ marginTop: 12 }}>
+            <dt>Téléphone remis le</dt><dd>{d.phoneSupport.enrolled ? dateTime(d.phoneSupport.since) : "—"}</dd>
+            <dt>Prélèvements jusqu'au</dt><dd>{d.phoneSupport.enrolled ? dateTime(d.phoneSupport.until) : "—"}</dd>
+            <dt>Boutique</dt><dd>{d.phoneSupport.shop ?? "—"}</dd>
+            <dt>Déjà prélevé</dt><dd>{fcfa(d.phoneSupport.collected)} sur {d.phoneSupport.rides} course(s) ou livraison(s)</dd>
+          </dl>
+          <div className="row" style={{ marginTop: 12 }}>
+            <button className="btn" onClick={() => setAction("phoneOn")}>{d.phoneSupport.enrolled ? "Changer de boutique" : "Marquer : téléphone fourni"}</button>
+            {d.phoneSupport.enrolled ? <button className="btn ghost" onClick={() => setAction("phoneOff")}>Retirer la commission téléphone</button> : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className="card" style={{ marginTop: 16 }}>
         <h2>Pièces justificatives</h2>
         {d.documents.length === 0 ? <Empty>Aucune pièce déposée.</Empty> : (
@@ -261,6 +283,25 @@ function Detail({ id }: { id: string }) {
       {action === "reject" ? <ConfirmModal title="Refuser ce dossier" danger confirmLabel="Refuser" reasonLabel="Motif du refus (le candidat le verra)" reasonRequired message="Le candidat pourra corriger son dossier et le redéposer." onClose={() => setAction(null)} onConfirm={(r) => decide("REJECT", r)} /> : null}
       {action === "info" ? <ConfirmModal title="Demander une information" confirmLabel="Envoyer la demande" reasonLabel="Ce que le candidat doit fournir ou corriger" reasonRequired onClose={() => setAction(null)} onConfirm={(r) => decide("NEED_INFO", r)} /> : null}
       {action === "suspend" ? <ConfirmModal title="Suspendre ce prestataire" danger confirmLabel="Suspendre" reasonLabel="Motif de la suspension" reasonRequired message="Il ne pourra plus travailler tant que la suspension n'est pas levée." onClose={() => setAction(null)} onConfirm={(r) => decide("SUSPEND", r)} /> : null}
+      {action === "phoneOn" ? (
+        <ConfirmModal
+          title="Téléphone fourni par une boutique partenaire"
+          confirmLabel={d.phoneSupport?.enrolled ? "Enregistrer" : "Activer la commission téléphone"}
+          reasonLabel="Boutique partenaire (facultatif)"
+          message={<>À partir de maintenant, chaque course ou livraison terminée de ce prestataire paie <b>{d.phoneSupport?.commissionPct ?? 10} %</b> de commission téléphone {d.phoneSupport?.weekendsOnly ? "le samedi et le dimanche " : ""}pendant <b>{d.phoneSupport?.durationMonths ?? 4} mois</b>, en plus des 15 % de l'entreprise. Ce qui est déjà terminé ne change pas. Il le verra dans son application.</>}
+          onClose={() => setAction(null)}
+          onConfirm={(shop) => api.post(`/admin/providers/${id}/phone-support`, { enabled: true, ...(shop ? { shop } : {}) }).then(() => { toast("Commission téléphone activée."); return reload(); })}
+        />
+      ) : null}
+      {action === "phoneOff" ? (
+        <ConfirmModal
+          title="Retirer la commission téléphone"
+          confirmLabel="Retirer"
+          message="Ce Speeder ne paiera plus que la commission de l'entreprise sur ses prochaines courses. Ce qui a déjà été prélevé est conservé."
+          onClose={() => setAction(null)}
+          onConfirm={() => api.post(`/admin/providers/${id}/phone-support`, { enabled: false }).then(() => { toast("Commission téléphone retirée."); return reload(); })}
+        />
+      ) : null}
       {action === "reinstate" ? <ConfirmModal title="Rétablir ce prestataire" confirmLabel="Rétablir" message="Le compte retrouve son accès." onClose={() => setAction(null)} onConfirm={() => api.post(`/admin/providers/${id}/reinstate`).then(() => { toast("Compte rétabli."); return reload(); })} /> : null}
       {action && typeof action === "object" ? (
         <ConfirmModal

@@ -655,6 +655,7 @@ export const en: Record<MessageKey, string> = {
   "earn.commission": "AZƆ̀ commission: {amount}",
   "earn.empty": "No completed ride in this period.",
   "earn.tips": "incl. tips: {amount}",
+  "earn.phone": "Incl. phone commission: {amount}",
   "courses.tipSent": "Tip sent: {amount}",
   "activity.tipReceived": "Tip received: +{amount}",
   "earn.error": "Could not load your earnings.",

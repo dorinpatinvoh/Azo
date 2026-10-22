@@ -79,8 +79,17 @@ export const DEMO_USER = { id: "demo", phone: "", fullName: "Kossi Boris Adjovi"
  * Message de fin de course pour le prestataire : la part de la course versée à l'entreprise AZƆ̀ (15 % pour un Speeder indépendant, un coursier ou un livreur ;
  * le taux de son niveau pour un employé d'agence) et ce qu'il reçoit. Les montants viennent du serveur.
  */
-export function commissionNotice(gross: number, commission: number): string {
-  const net = gross - commission;
+export function commissionNotice(gross: number, commission: number, phoneCommission = 0): string {
+  const net = gross - commission - phoneCommission;
+  // Speeder dont le téléphone a été fourni par une boutique partenaire : commission téléphone en plus de celle de l'entreprise
+  if (phoneCommission > 0) {
+    const pct = gross > 0 ? Math.round((commission / gross) * 1000) / 10 : 0;
+    const phonePct = Math.round((phoneCommission / gross) * 1000) / 10;
+    return `Course : ${fcfa(gross)}
+${pct.toLocaleString("fr-FR")} % (${fcfa(commission)}) est versé à l'entreprise AZƆ̀.
+${phonePct.toLocaleString("fr-FR")} % (${fcfa(phoneCommission)}) de commission téléphone.
+Tu reçois : +${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`;
+  }
   if (!(commission > 0)) return `Course : ${fcfa(gross)}
 Tu reçois : +${fcfa(net)} sur ton portefeuille AZƆ̀ Pay.`;
   const pct = gross > 0 ? Math.round((commission / gross) * 1000) / 10 : 0;

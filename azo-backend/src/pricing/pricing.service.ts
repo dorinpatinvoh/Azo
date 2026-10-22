@@ -398,6 +398,44 @@ export class PricingService {
     return this.config.platformCommission?.pct ?? 15;
   }
 
+  /** Taux de la commission téléphone (en %) : Speeder dont le téléphone a été fourni par une boutique partenaire. */
+  phoneCommissionPct(): number {
+    return this.config.phoneSupport?.commissionPct ?? 10;
+  }
+
+  /** Commission téléphone d'une course, en plus de celle de l'entreprise (entier, tronqué comme les autres commissions). */
+  phoneCommission(rideAmount: number): number {
+    return this.percentOf(rideAmount, this.phoneCommissionPct());
+  }
+
+  /** Durée de la commission téléphone, en mois à partir de la remise du téléphone. */
+  phoneSupportDurationMonths(): number {
+    return this.config.phoneSupport?.durationMonths ?? 4;
+  }
+
+  /** Samedi ou dimanche, à l'heure du Bénin (UTC+1). */
+  isBeninWeekend(at: Date): boolean {
+    const day = new Date(at.getTime() + 3_600_000).getUTCDay();
+    return day === 0 || day === 6;
+  }
+
+  /** Fin de la commission téléphone : la durée (4 mois) après la remise du téléphone. */
+  phoneSupportEnd(supportedAt: Date): Date {
+    const end = new Date(supportedAt.getTime());
+    end.setUTCMonth(end.getUTCMonth() + this.phoneSupportDurationMonths());
+    return end;
+  }
+
+  /**
+   * Commission téléphone due pour une course ou une livraison de `amount` terminée à `at` : 0 si aucun téléphone n'a été fourni,
+   * si la remise est postérieure, si les 4 mois sont écoulés, ou (par défaut) si ce n'est pas un week-end.
+   */
+  phoneCommissionFor(supportedAt: Date | null | undefined, at: Date, amount: number): number {
+    if (!supportedAt || at.getTime() < supportedAt.getTime() || at.getTime() >= this.phoneSupportEnd(supportedAt).getTime()) return 0;
+    if ((this.config.phoneSupport?.weekendsOnly ?? true) && !this.isBeninWeekend(at)) return 0;
+    return this.phoneCommission(amount);
+  }
+
   /** Commission de l'entreprise sur un montant (FCFA, arrondi). */
   platformCommission(amount: number): number {
     return this.percentOf(amount, this.platformCommissionPct());

@@ -1,0 +1,48 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 22 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">22 octobre 2026 · 35 suites / 409 tests verts · migration <code>20261022120000_phone_support</code></span></div>
+
+<h2>1. En résumé</h2>
+<p>Les <b>pourboires comptent dans les gains</b> du Speeder (déjà en production, commit <code>76b1e201</code>) et la <b>commission téléphone</b> est ajoutée : un prestataire dont le téléphone a été fourni par une boutique partenaire paie, en plus des 15 % de l'entreprise, <b>10 % de chaque course ou livraison terminée, le samedi et le dimanche, pendant 4 mois</b> à partir de la remise du téléphone. <code>tsc</code> sans erreur.</p>
+<div class="box warn"><b>Déploiement :</b> une migration (<code>20261022120000_phone_support</code>) : <code>ProviderProfile.phoneSupportedAt</code> et <code>phoneShop</code>, <code>Ride.phoneCommission</code> et <code>Delivery.phoneCommission</code> (entiers, 0 par défaut). <code>render:start</code> l'applique avant le démarrage. <code>/health</code> doit afficher le nouveau commit.</div>
+
+<h2>2. Règle de la commission téléphone</h2>
+<ul>
+<li>Réglage dans <code>tarification.json</code> (<code>phoneSupport</code> : <code>commissionPct</code> 10, <code>durationMonths</code> 4, <code>weekendsOnly</code> true). Mettre <code>weekendsOnly</code> à false pour prélever tous les jours, sans changer le code.</li>
+<li><code>PricingService.phoneCommissionFor(remise, date, montant)</code> : 0 sans téléphone fourni, avant la remise, après les 4 mois, ou hors week-end ; sinon 10 % tronqué. Le week-end suit l'heure du Bénin (UTC+1) : vendredi 23 h 30 UTC est déjà samedi. La fin est la remise + 4 mois (20 octobre → 20 février) : la commission s'arrête toute seule.</li>
+<li><b>Courses</b> (<code>RidesService.settle</code>) : le Speeder est crédité du prix entier puis débité de la commission de l'entreprise et de la « Commission téléphone (10 %) » ; net = 75 % sur 1 000 F. Le prélèvement est enregistré sur la course (<code>Ride.phoneCommission</code>).</li>
+<li><b>Livraisons</b> (<code>confirmDelivery</code> et <code>WalletService.settleDelivery</code>) : même règle pour les coursiers personnels et livreurs express (<code>Delivery.phoneCommission</code>).</li>
+<li><b>Où va l'argent</b> : la part de l'entreprise (15 %) et la commission téléphone sont versées au portefeuille administrateur, la seconde sous le libellé « Commission téléphone (à reverser aux boutiques) ». Les gains de l'entreprise (calculés sur <code>Ride.commission</code>) ne l'incluent pas.</li>
+<li><b>Notifications</b> de fin de course et de livraison avec la commission téléphone, traduites en 4 langues (<code>NOTIFICATION_RIDE_COMPLETED_DRIVER_PHONE</code>, <code>NOTIFICATION_DELIVERY_PAID_COURIER_PHONE</code>).</li>
+<li><b>Gains du Speeder</b> (<code>driverEarnings</code>) et reçu : nets de la commission téléphone, qui apparaît à part (<code>phoneCommission</code> par jour et dans les totaux ; la commission de l'entreprise reste le brut moins le net moins la commission téléphone).</li>
+</ul>
+
+<h2>3. Console et dossier du prestataire</h2>
+<ul>
+<li><code>POST /admin/providers/:id/phone-support {enabled, shop?}</code> : réservé aux Speeders, coursiers et livreurs (refus pour une agence). Garde la date de remise si on change seulement de boutique ; retirer la marque arrête les prélèvements. Chaque action est notée au journal du dossier.</li>
+<li><code>GET /admin/providers/:id</code> (et le dossier du prestataire, <code>GET /providers/me</code>) contient <code>phoneSupport</code> : <code>enrolled</code>, <code>active</code>, <code>since</code>, <code>until</code>, <code>shop</code>, <code>commissionPct</code>, <code>durationMonths</code>, <code>weekendsOnly</code> ; la version administrateur ajoute <code>collected</code> et <code>rides</code> (courses et livraisons confondues). <b>C'est ce qui permet au prestataire de voir le bandeau dans son application.</b></li>
+<li><code>GET /admin/finance/phone-commissions</code> : total, mois, nombre de missions, et par prestataire (boutique, date de remise, total) pour reverser aux boutiques ; courses et livraisons regroupées. Pour une livraison, « le mois » s'appuie sur la date de création (aucune date de fin n'est enregistrée sur <code>Delivery</code>).</li>
+</ul>
+
+<h2>4. Vérifications</h2>
+<ul>
+<li><b>Tests</b> : 409 verts (12 nouveaux : règle samedi / dimanche / semaine / heure du Bénin / avant remise / après 4 mois, paiement d'une course dans chaque cas avec date simulée, règlement d'une livraison 15 % + 10 %). Les tests de course qui simulent la tarification ne sont pas touchés (appel optionnel <code>phoneCommissionFor?.()</code>).</li>
+<li><b>Base jetable</b> (migration appliquée, puis jetée) : marquage d'un livreur, refus d'une agence, durée de 4 mois, cumul d'un dossier (livraison 200 F + course 50 F sur 2 missions), tableau des finances fusionnant courses et livraisons.</li>
+<li><b>Non vérifié</b> : un paiement réel de bout en bout avec la commission, l'affichage du bandeau sur un téléphone.</li>
+</ul>
+
+<h2>5. Points à confirmer</h2>
+<ul>
+<li>« Pendant 4 mois les week-ends » a été lu comme <b>« uniquement le samedi et le dimanche, pendant 4 mois »</b>. Si l'intention est « tous les jours pendant 4 mois, week-ends compris », il suffit de passer <code>weekendsOnly</code> à false dans <code>tarification.json</code> (puis redéployer).</li>
+<li>La commission n'est <b>pas plafonnée</b> à un montant (prix du téléphone) : elle s'arrête seulement à la date de fin.</li>
+<li>Employé d'agence marqué : le chiffre d'affaires net du tableau de bord de l'agence ne retire pas encore cette commission (cas rare).</li>
+</ul>
+
+<h2>6. Audit du 21 octobre : points toujours ouverts</h2>
+<p>Critiques : <b>création d'argent par la boutique « marché »</b> (prix négatif), <b>aucun SMS</b> envoyé et serveur en simulation, pas de suppression de compte par l'utilisateur ni de pages légales, versement des retraits manuel. Importants : solde non réservé, bugs d'agences, schéma et migrations qui ne concordent pas (<code>RideSettlement</code>), dépendances vulnérables, hébergement gratuit. Détail dans le rapport du 21 octobre.</p>
+
+<h2>7. Commits</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>76b1e201</code></td><td>Pourboires dans les gains et l'historique</td></tr>
+<tr><td><code>ea756d2b</code></td><td>Coursier personnel, kilométrage durci, voitures retirées pour le livreur express</td></tr>
+<tr><td>à venir</td><td>Commission téléphone (migration <code>20261022120000</code>), rapports du 22 octobre</td></tr></table>
+</body></html>

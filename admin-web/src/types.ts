@@ -68,7 +68,28 @@ export type ProviderItem = {
   user: { id: string; phone: string; fullName: string | null; role: string; status: string; createdAt: string };
 };
 
+export type PhoneSupport = {
+  enrolled: boolean;
+  active: boolean;
+  since: string | null;
+  until: string | null;
+  shop: string | null;
+  commissionPct: number;
+  durationMonths: number;
+  weekendsOnly: boolean;
+  collected: number;
+  rides: number;
+};
+
+export type PhoneCommissions = {
+  total: number;
+  thisMonth: number;
+  rides: number;
+  speeders: { userId: string; providerId: string | null; fullName: string | null; phone: string | null; shop: string | null; since: string | null; rides: number; total: number }[];
+};
+
 export type ProviderDetail = ProviderItem & {
+  phoneSupport?: PhoneSupport;
   agency: { id: string; name: string; plan: string; commissionRate: number; maxAccounts: number } | null;
   timeline: { id: string; type: string; comment: string | null; byAdmin?: boolean; createdAt: string }[];
 };

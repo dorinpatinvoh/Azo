@@ -255,7 +255,7 @@ export class WalletService {
    * ou de la livraison (tout réussit ou rien). Sans compte administrateur actif, ne fait rien (le gain reste calculé
    * côté finances de l'entreprise).
    */
-  async creditPlatformInTx(tx: Prisma.TransactionClient, amount: number, ref: string): Promise<boolean> {
+  async creditPlatformInTx(tx: Prisma.TransactionClient, amount: number, ref: string, label = "Commission AZƆ̀"): Promise<boolean> {
     if (!(amount > 0)) return false;
     const admin = await tx.user.findFirst({ where: { role: "ADMIN", status: "ACTIVE" }, orderBy: { createdAt: "asc" }, select: { id: true } });
     if (!admin) return false;
@@ -266,7 +266,7 @@ export class WalletService {
         walletId: wallet.id,
         type: TransactionType.CREDIT,
         amount,
-        label: "Commission AZƆ̀",
+        label,
         meta: ref,
       },
     });
@@ -277,7 +277,7 @@ export class WalletService {
    * Règlement d'une livraison, en une seule transaction : le client est débité du prix (si c'est lui qui paie), le coursier
    * reçoit le net et l'entreprise sa commission (portefeuille administrateur).
    */
-  async settleDelivery(p: { clientId: string | null; courierId: string; price: number; net: number; commission: number; dropAddress: string; ref: string }) {
+  async settleDelivery(p: { clientId: string | null; courierId: string; price: number; net: number; commission: number; phoneCommission?: number; dropAddress: string; ref: string }) {
     await this.getWallet(p.courierId);
     if (p.clientId) await this.getWallet(p.clientId);
     await this.prisma.$transaction(async (tx) => {
@@ -315,7 +315,23 @@ export class WalletService {
           },
         });
       }
+      const phone = p.phoneCommission ?? 0;
+      if (phone > 0) {
+        const phonePct = p.price > 0 ? Math.round((phone / p.price) * 1000) / 10 : 0;
+        await tx.transaction.create({
+          data: {
+            walletId: courierWallet.id,
+            type: TransactionType.DEBIT,
+            amount: phone,
+            label: `Commission téléphone (${phonePct} %)`,
+            labelKey: "TRANSACTION_PHONE_COMMISSION",
+            labelParams: { pct: phonePct, amount: p.price },
+            meta: p.ref,
+          },
+        });
+      }
       await this.creditPlatformInTx(tx, p.commission, p.ref);
+      await this.creditPlatformInTx(tx, phone, p.ref, "Commission téléphone (à reverser aux boutiques)");
     });
   }
 

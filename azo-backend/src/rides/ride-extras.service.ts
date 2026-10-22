@@ -33,7 +33,7 @@ export class RideExtrasService {
 
     const rides = await this.prisma.ride.findMany({
       where: { driverId, status: "COMPLETED", completedAt: { gte: from } },
-      select: { price: true, finalPrice: true, commission: true, completedAt: true },
+      select: { price: true, finalPrice: true, commission: true, phoneCommission: true, completedAt: true },
     });
 
     // Pourboires reçus sur la période : 100 % pour le chauffeur, sans commission (défensif : une panne de lecture ne bloque pas les gains)
@@ -42,14 +42,15 @@ export class RideExtrasService {
         ?.findMany({ where: { driverId, createdAt: { gte: from } }, select: { amount: true, createdAt: true } })
         .catch(() => [])) ?? [];
 
-    const days = keys.map((date) => ({ date, gross: 0, net: 0, rides: 0, tips: 0 }));
+    const days = keys.map((date) => ({ date, gross: 0, net: 0, rides: 0, tips: 0, phoneCommission: 0 }));
     for (const ride of rides) {
       if (!ride.completedAt) continue;
       const day = days.find((d) => d.date === localDayKey(ride.completedAt as Date));
       if (!day) continue;
       const gross = ride.finalPrice ?? ride.price;
       day.gross += gross;
-      day.net += gross - (ride.commission ?? 0);
+      day.net += gross - (ride.commission ?? 0) - (ride.phoneCommission ?? 0);
+      day.phoneCommission += ride.phoneCommission ?? 0;
       day.rides += 1;
     }
 
@@ -62,8 +63,8 @@ export class RideExtrasService {
     }
 
     const totals = days.reduce(
-      (acc, d) => ({ gross: acc.gross + d.gross, net: acc.net + d.net, rides: acc.rides + d.rides, tips: acc.tips + d.tips }),
-      { gross: 0, net: 0, rides: 0, tips: 0 }
+      (acc, d) => ({ gross: acc.gross + d.gross, net: acc.net + d.net, rides: acc.rides + d.rides, tips: acc.tips + d.tips, phoneCommission: acc.phoneCommission + d.phoneCommission }),
+      { gross: 0, net: 0, rides: 0, tips: 0, phoneCommission: 0 }
     );
     const activeDays = days.filter((d) => d.rides > 0 || d.tips > 0);
     const best = activeDays.reduce<(typeof days)[number] | null>((b, d) => (!b || d.net > b.net ? d : b), null);
@@ -72,7 +73,8 @@ export class RideExtrasService {
       period,
       from: from.toISOString(),
       days,
-      totals: { ...totals, commission: totals.gross - totals.net },
+      // Commission de l'entreprise = ce qui reste du brut une fois le net et la commission téléphone retirés
+      totals: { ...totals, commission: totals.gross - totals.net - totals.phoneCommission },
       averagePerActiveDay: activeDays.length ? Math.round(totals.net / activeDays.length) : 0,
       bestDay: best ? { date: best.date, net: best.net } : null,
     };
@@ -148,7 +150,13 @@ export class RideExtrasService {
       driver: driverName,
       vehicle: ride.driver?.provider ? { model: ride.driver.provider.vehicleModel ?? null, plate: ride.driver.provider.plateNumber ?? null } : null,
       // La commission et le gain net ne concernent que le chauffeur
-      ...(isDriver ? { commission: ride.commission ?? 0, net: amount - (ride.commission ?? 0) } : {}),
+      ...(isDriver
+        ? {
+            commission: ride.commission ?? 0,
+            ...(ride.phoneCommission ? { phoneCommission: ride.phoneCommission } : {}),
+            net: amount - (ride.commission ?? 0) - (ride.phoneCommission ?? 0),
+          }
+        : {}),
     };
   }
 

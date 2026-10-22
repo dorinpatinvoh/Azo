@@ -315,6 +315,8 @@ model Ride {
 
   price                       Int
   commission                  Int
+  /// Commission téléphone (Speeder dont le téléphone a été fourni par une boutique partenaire) prélevée sur cette course, en plus de la commission de l'entreprise
+  phoneCommission             Int         @default(0)
   rating                      Int?
   pickupCode                  String? // code de départ : visible du client à ARRIVED, saisi par le Zem
   dropCode                    String? // code d'arrivée : demandé par le Zem, visible du client à IN_PROGRESS, saisi par le Zem
@@ -416,6 +418,8 @@ model Delivery {
   odoCred       Float    @default(0)
   // Coursier personnel : le coursier a signalé son arrivée chez le client (« Je suis arrivé ») ; le départ n'est possible qu'ensuite
   courierArrivedAt DateTime?
+  /// Commission téléphone prélevée sur cette livraison (coursier ou livreur dont le téléphone a été fourni par une boutique partenaire)
+  phoneCommission Int @default(0)
 }
 
 model RentalBooking {
@@ -531,6 +535,10 @@ model ProviderProfile {
 
   // Vie du compte après approbation
   activatedAt   DateTime?
+  /// Speeder dont le téléphone a été fourni par une boutique partenaire : date de remise. Dès lors, chaque course terminée paie en plus la commission téléphone.
+  phoneSupportedAt DateTime?
+  /// Boutique partenaire qui a fourni le téléphone (facultatif)
+  phoneShop     String?
   rating        Float     @default(0)
   ratingCount   Int       @default(0) // nombre de notes reçues (pour affichage « N notes »)
   jobsCompleted Int       @default(0)

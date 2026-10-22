@@ -35,6 +35,7 @@ import {
   MinLength,
 } from "class-validator";
 import { Type } from "class-transformer";
+import { loadTarificationConfig } from "../pricing/tarification.config";
 import {
   AgencyPlan,
   DocumentKind,
@@ -360,6 +361,13 @@ class DocumentDecisionDto {
   @IsOptional() @IsString() @IsISO8601() expiresAt?: string;
 }
 
+class PhoneSupportDto {
+  /** true : le téléphone du Speeder a été fourni par une boutique partenaire ; false : retire la commission téléphone. */
+  @IsBoolean() enabled: boolean;
+  /** Boutique partenaire (facultatif). */
+  @IsOptional() @IsString() @MaxLength(80) shop?: string;
+}
+
 class ProviderDecisionDto {
   @IsIn(["APPROVE", "REJECT", "NEED_INFO", "SUSPEND"]) decision: "APPROVE" | "REJECT" | "NEED_INFO" | "SUSPEND";
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
@@ -481,6 +489,27 @@ export class ProvidersService {
     return [...required, ...extra];
   }
 
+  /**
+   * Téléphone fourni par une boutique partenaire : ce que voit le prestataire (et l'administrateur). `active` = la commission téléphone
+   * court encore (remise faite, moins de 4 mois) ; `until` = date de fin.
+   */
+  private phoneSupportInfo(provider: { phoneSupportedAt?: Date | null; phoneShop?: string | null }) {
+    const cfg = loadTarificationConfig().phoneSupport;
+    const months = cfg?.durationMonths ?? 4;
+    const since = provider.phoneSupportedAt ?? null;
+    const until = since ? new Date(new Date(since).setUTCMonth(new Date(since).getUTCMonth() + months)) : null;
+    return {
+      enrolled: !!since,
+      active: !!since && !!until && Date.now() < until.getTime(),
+      since,
+      until,
+      shop: provider.phoneShop ?? null,
+      commissionPct: cfg?.commissionPct ?? 10,
+      durationMonths: months,
+      weekendsOnly: cfg?.weekendsOnly ?? true,
+    };
+  }
+
   private serialize(provider: ProviderWithDocs) {
     const missingDocuments = this.missingDocuments(provider);
     const missingFields = this.missingFields(provider);
@@ -492,6 +521,7 @@ export class ProvidersService {
       type: provider.type,
       typeLabel: typeLabelOf(provider),
       status: provider.status,
+      phoneSupport: this.phoneSupportInfo(provider),
       identity: {
         fullName: provider.fullName,
         city: provider.city,
@@ -981,10 +1011,20 @@ export class ProvidersService {
     });
     if (!provider) throw new NotFoundException("Dossier prestataire introuvable");
     const { events, ...rest } = provider;
+    // Téléphone fourni par une boutique partenaire : état, et commission téléphone déjà prélevée sur ses courses
+    const [phoneRides, phoneDeliveries] = await Promise.all([
+      this.prisma.ride.aggregate({ where: { driverId: provider.userId, phoneCommission: { gt: 0 } }, _sum: { phoneCommission: true }, _count: true }).catch(() => null),
+      this.prisma.delivery.aggregate({ where: { courierId: provider.userId, phoneCommission: { gt: 0 } }, _sum: { phoneCommission: true }, _count: true }).catch(() => null),
+    ]);
     return {
       ...this.serialize(rest as ProviderWithDocs),
       user: provider.user,
       agency: provider.agency,
+      phoneSupport: {
+        ...this.phoneSupportInfo(provider),
+        collected: (phoneRides?._sum.phoneCommission ?? 0) + (phoneDeliveries?._sum.phoneCommission ?? 0),
+        rides: (phoneRides?._count ?? 0) + (phoneDeliveries?._count ?? 0),
+      },
       timeline: events.map((e) => ({
         id: e.id,
         type: e.type,
@@ -993,6 +1033,36 @@ export class ProvidersService {
         createdAt: e.createdAt,
       })),
     };
+  }
+
+  /**
+   * POST /admin/providers/:id/phone-support — marque un Speeder dont le téléphone a été fourni par une boutique partenaire (contrat avec
+   * les boutiques). À partir de ce moment, chaque course terminée prélève la commission téléphone en plus de celle de l'entreprise.
+   * Retirer la marque arrête les prélèvements ; la date de remise est conservée si on la met à jour (par exemple pour changer de boutique).
+   */
+  async setPhoneSupport(adminId: string, id: string, enabled: boolean, shop?: string) {
+    const provider = await this.prisma.providerProfile.findUnique({ where: { id } });
+    if (!provider) throw new NotFoundException("Dossier prestataire introuvable");
+    if (provider.type !== "DRIVER" && provider.type !== "COURIER")
+      throw new BadRequestException("Seul un Speeder, un coursier ou un livreur peut recevoir un téléphone d'une boutique partenaire.");
+    const cfg = loadTarificationConfig().phoneSupport;
+    const pct = cfg?.commissionPct ?? 10;
+    const months = cfg?.durationMonths ?? 4;
+    const weekends = cfg?.weekendsOnly ?? true;
+    const shopName = shop?.trim() || null;
+    await this.prisma.providerProfile.update({
+      where: { id },
+      data: enabled ? { phoneSupportedAt: provider.phoneSupportedAt ?? new Date(), phoneShop: shopName } : { phoneSupportedAt: null, phoneShop: null },
+    });
+    await this.log(
+      id,
+      adminId,
+      "UPDATED",
+      enabled
+        ? `Téléphone fourni par ${shopName ?? "une boutique partenaire"} : commission téléphone de ${pct} % sur chaque course ou livraison terminée ${weekends ? "le samedi et le dimanche " : ""}pendant ${months} mois à partir de la remise`
+        : "Commission téléphone retirée : le prestataire ne paie plus que la commission de l'entreprise"
+    );
+    return this.adminDetail(id);
   }
 
   // POST /admin/providers/:id/start-review — verrou optimiste : deux administrateurs
@@ -1638,6 +1708,12 @@ export class AdminProvidersController {
   @Get(":id")
   detail(@Param("id") id: string) {
     return this.svc.adminDetail(id);
+  }
+
+  // POST /admin/providers/:id/phone-support  { enabled, shop? } — téléphone fourni par une boutique partenaire
+  @Post(":id/phone-support")
+  phoneSupport(@CurrentUser() u, @Param("id") id: string, @Body() dto: PhoneSupportDto) {
+    return this.svc.setPhoneSupport(u.userId, id, dto.enabled, dto.shop);
   }
 
   // POST /admin/providers/:id/start-review

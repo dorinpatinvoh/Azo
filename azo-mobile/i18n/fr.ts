@@ -657,6 +657,7 @@ export const fr = {
   "earn.commission": "Commission AZƆ̀ : {amount}",
   "earn.empty": "Aucune course terminée sur cette période.",
   "earn.tips": "dont pourboires : {amount}",
+  "earn.phone": "Dont commission téléphone : {amount}",
   "courses.tipSent": "Pourboire envoyé : {amount}",
   "activity.tipReceived": "Pourboire reçu : +{amount}",
   "earn.error": "Impossible de charger tes gains.",

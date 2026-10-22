@@ -1,0 +1,38 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 22 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) et la console web (<code>admin-web</code>) — pour Sergio</p><span class="tag">22 octobre 2026 · pourboires dans l'historique, commission téléphone, APK allégé</span></div>
+
+<h2>1. En résumé</h2>
+<p>Deux nouveautés : les <b>pourboires apparaissent dans l'historique</b> (gains et activité du Speeder, courses du client), et la <b>commission téléphone</b> pour les prestataires dont le téléphone a été fourni par une boutique partenaire : l'administrateur les marque dans la console, et eux voient clairement un <b>bandeau « Téléphone fourni »</b> dans l'application. <code>tsc</code> sans erreur (mobile et console).</p>
+<div class="box warn"><b>À savoir avant de tester :</b> rien n'a été essayé sur un téléphone. Le serveur doit être redéployé <b>avant</b> l'APK (nouvelles colonnes en base). Priorités de test : marquer un Speeder « téléphone fourni » dans la console puis ouvrir son application (bandeau), terminer une course un samedi (ligne « Commission téléphone »), donner un pourboire (lignes d'historique).</div>
+
+<h2>2. Pourboires visibles</h2>
+<ul>
+<li>Le pourboire était bien crédité au Speeder mais aucun écran ne l'affichait. Désormais : onglet <b>Activité</b> du Speeder (« 🎁 Pourboire reçu : +500 F »), <b>« Gains nets du jour »</b>, onglet <b>Gains</b> (« dont pourboires : X F », 100 % pour le Speeder), et <b>« Mes courses »</b> du client (« 🎁 Pourboire envoyé : 500 F »). Textes en 4 langues.</li>
+</ul>
+
+<h2>3. Commission téléphone : ce que voit le prestataire</h2>
+<ul>
+<li><b>Bandeau « Téléphone fourni par … »</b> (<code>PhoneSupportBanner.tsx</code>) en haut de l'espace du Speeder (tous les onglets) et du coursier / livreur : « 10 % de commission téléphone est prélevé sur tes courses et livraisons du samedi et du dimanche, en plus des 15 % de l'entreprise », avec la date de remise et la <b>date de fin (4 mois)</b>. Il disparaît seul à la fin de la période, et n'apparaît pas sans téléphone fourni.</li>
+<li><b>Fin de course</b> : le message détaille la part de l'entreprise puis la commission téléphone, et ce que le prestataire reçoit (ex. 1 000 F : 150 + 100, il reçoit 750 F). Même chose à la fin d'une livraison.</li>
+<li><b>Gains et activité</b> du Speeder nets de cette commission ; la carte de gains affiche « Dont commission téléphone : X F ».</li>
+<li>Historique AZƆ̀ Pay : une ligne « Commission téléphone (10 %) » par course ou livraison concernée.</li>
+</ul>
+
+<h2>4. Commission téléphone : console web</h2>
+<ul>
+<li>Sur le dossier d'un <b>Speeder, d'un coursier ou d'un livreur</b> : carte « Téléphone fourni par une boutique partenaire » (état, date de remise, <b>date de fin</b>, boutique, cumul prélevé en F et en nombre de missions). Boutons : « Marquer : téléphone fourni » (avec le nom de la boutique, facultatif), « Changer de boutique », « Retirer la commission téléphone ». Chaque action est notée dans l'historique du dossier.</li>
+<li>Page <b>Finances</b> : tableau « Commissions téléphone à reverser aux boutiques » (total, mois, par prestataire et par boutique), qui ne compte pas dans les gains de l'entreprise.</li>
+<li>Le dossier à envoyer sur Cloudflare est reconstruit (<code>azo-admin-web</code> sur le Bureau).</li>
+</ul>
+
+<h2>5. APK</h2>
+<ul>
+<li><b>APK allégé</b> : 50 Mo (<code>AZO-leger.apk</code>), arm64 et armeabi-v7a, réduction du code (R8) activée : <b>à tester sur au moins deux téléphones</b>. L'APK complet de 97 Mo reste le secours.</li>
+</ul>
+
+<h2>6. Commits et état</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>76b1e201</code></td><td>Pourboires dans l'historique ; rapports du 21 octobre</td></tr>
+<tr><td><code>ea756d2b</code></td><td>Coursier personnel, type choisi à l'inscription, kilométrage durci</td></tr>
+<tr><td>à venir</td><td>Commission téléphone (serveur, console, application) ; rapports du 22 octobre</td></tr></table>
+</body></html>

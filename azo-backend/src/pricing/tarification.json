@@ -156,6 +156,13 @@
     "_notes": "Chaque course ou livraison terminée par un Spider, un coursier personnel, un livreur express ou un employé d'agence rapporte 15 % à l'entreprise ; la somme est versée au portefeuille administrateur."
   },
 
+  "phoneSupport": {
+    "commissionPct": 10,
+    "durationMonths": 4,
+    "weekendsOnly": true,
+    "_notes": "Speeder, coursier ou livreur dont le téléphone a été fourni par une boutique partenaire (marqué par l'administrateur) : en plus des 15 % de l'entreprise, 10 % de chaque course ou livraison terminée sont prélevés pour la commission téléphone, pendant 4 mois à partir de la remise du téléphone, uniquement le samedi et le dimanche (heure du Bénin). Mettre weekendsOnly à false pour prélever tous les jours."
+  },
+
   "personalCourier": {
     "_notes": "Coursier personnel : course réservée pour une durée (environ 5 heures, 1 jour, 3 jours). Prix = base + kilomètres × tarif au km, selon le véhicule. Le coursier qui accepte reste réservé jusqu'à la fin de la durée.",
     "durations": [

@@ -803,7 +803,10 @@ export class DeliveryService {
       finalPrice = Math.min(finalPrice, balance);
     }
     const commission = this.pricing.deliveryCommission(finalPrice);
-    const net = finalPrice - commission;
+    // Coursier ou livreur dont le téléphone a été fourni par une boutique partenaire : commission téléphone en plus (4 mois, week-ends)
+    const courierProfile = await this.prisma.providerProfile.findUnique({ where: { userId: courierId }, select: { phoneSupportedAt: true } });
+    const phoneCommission = this.pricing.phoneCommissionFor?.(courierProfile?.phoneSupportedAt, new Date(), finalPrice) ?? 0;
+    const net = finalPrice - commission - phoneCommission;
 
     if (courierId !== d.clientId && finalPrice > 0) {
       await this.wallet.settleDelivery({
@@ -812,6 +815,7 @@ export class DeliveryService {
         price: finalPrice,
         net,
         commission,
+        phoneCommission,
         dropAddress: d.dropAddress,
         ref: id,
       });
@@ -824,14 +828,16 @@ export class DeliveryService {
         .push(
           courierId,
           "Paiement reçu",
-          d.mode === "PERSONAL"
-            ? `Course personnelle ${finalPrice} FCFA · ${pct} % de la course (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${net} FCFA.`
-            : `Livraison ${finalPrice} FCFA · ${pct} % de la livraison (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${net} FCFA.`,
+          phoneCommission > 0
+            ? `${d.mode === "PERSONAL" ? "Course personnelle" : "Livraison"} ${finalPrice} FCFA · ${pct} % (−${commission} F) pour l'entreprise AZƆ̀ + commission téléphone (−${phoneCommission} F) · tu reçois +${net} FCFA.`
+            : d.mode === "PERSONAL"
+              ? `Course personnelle ${finalPrice} FCFA · ${pct} % de la course (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${net} FCFA.`
+              : `Livraison ${finalPrice} FCFA · ${pct} % de la livraison (−${commission} F) est versé à l'entreprise AZƆ̀ · tu reçois +${net} FCFA.`,
           "payment",
           {
-          titleKey: d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_PAID_COURIER" : "NOTIFICATION_DELIVERY_PAID_COURIER",
-          bodyKey: d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_PAID_COURIER" : "NOTIFICATION_DELIVERY_PAID_COURIER",
-          params: { amount: finalPrice, pct, commission, net },
+          titleKey: phoneCommission > 0 ? "NOTIFICATION_DELIVERY_PAID_COURIER_PHONE" : d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_PAID_COURIER" : "NOTIFICATION_DELIVERY_PAID_COURIER",
+          bodyKey: phoneCommission > 0 ? "NOTIFICATION_DELIVERY_PAID_COURIER_PHONE" : d.mode === "PERSONAL" ? "NOTIFICATION_PERSONAL_PAID_COURIER" : "NOTIFICATION_DELIVERY_PAID_COURIER",
+          params: { amount: finalPrice, pct, commission, net, phoneCommission },
           data: { event: "delivery-paid", deliveryId: d.id },
         }
         )
@@ -840,7 +846,7 @@ export class DeliveryService {
 
     const updated = await this.prisma.delivery.update({
       where: { id },
-      data: { status: "COMPLETED", courierId, ...(finalKm !== null ? { price: finalPrice, distanceKm: finalKm } : {}) },
+      data: { status: "COMPLETED", courierId, phoneCommission, ...(finalKm !== null ? { price: finalPrice, distanceKm: finalKm } : {}) },
       include: { client: { select: { fullName: true, phone: true } } },
     });
 

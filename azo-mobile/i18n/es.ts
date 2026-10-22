@@ -655,6 +655,7 @@ export const es: Record<MessageKey, string> = {
   "earn.commission": "Comisión AZƆ̀: {amount}",
   "earn.empty": "Ninguna carrera terminada en este período.",
   "earn.tips": "incl. propinas: {amount}",
+  "earn.phone": "Incl. comisión del teléfono: {amount}",
   "courses.tipSent": "Propina enviada: {amount}",
   "activity.tipReceived": "Propina recibida: +{amount}",
   "earn.error": "No se pudieron cargar tus ganancias.",
