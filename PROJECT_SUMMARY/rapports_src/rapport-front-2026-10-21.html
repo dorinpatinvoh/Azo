@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 21 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) et la console web (<code>admin-web</code>) — pour Sergio</p><span class="tag">21 octobre 2026 · 7 commits poussés sur main (<code>8f00c7d9</code> à <code>a00f5b00</code>) · une partie du travail reste à commiter (voir § 9)</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) et la console web (<code>admin-web</code>) — pour Sergio</p><span class="tag">21 octobre 2026 · 9 commits poussés sur main (<code>8f00c7d9</code> à <code>ea756d2b</code>, puis les pourboires) · voir § 10</span></div>
 
 <h2>1. En résumé</h2>
 <p>L'administration est entièrement sortie de l'application et vit sur la <b>console web</b> (au nom d'ANGI DSN PRO, adaptée au téléphone). Les prestataires peuvent <b>demander un retrait</b> vers Mobile Money. L'inscription est repensée : le type de Speeder, de coursier ou d'agence se choisit à la création du compte. Le parcours du coursier personnel suit celui d'une course de Speeder. Le kilométrage des livraisons ne grimpe plus à l'arrêt. <code>tsc</code> sans erreur.</p>
@@ -60,7 +60,13 @@
 <li><b>Audit complet</b> de l'application : voir le rapport backend (§ 8). Pour le mobile : 69 erreurs avalées sans message, 12 <code>console.log</code>, textes de l'inscription prestataire écrits en dur en français (les 785 autres textes sont traduits dans les 4 langues), menu de développement inaccessible mais encore dans l'application, <code>usesCleartextTraffic</code> à <code>true</code> dans <code>app.json</code> (à passer à <code>false</code>).</li>
 </ul>
 
-<h2>9. Commits et état</h2>
+<h2>9. Pourboires visibles dans l'historique</h2>
+<ul>
+<li>Le pourboire était bien crédité au Speeder et enregistré dans l'historique AZƆ̀ Pay, mais aucun écran ne l'affichait. Désormais : onglet <b>Activité</b> du Speeder (« 🎁 Pourboire reçu : +500 F » sous la course), <b>« Gains nets du jour »</b> (pourboires du jour inclus), onglet <b>Gains</b> (carte « dont pourboires : X F », 100 % pour le Speeder, sans commission), et <b>« Mes courses »</b> du client (« 🎁 Pourboire envoyé : 500 F »). Textes en 4 langues (<code>earn.tips</code>, <code>courses.tipSent</code>).</li>
+<li>Seules les courses de Speeder ont des pourboires : coursiers, livreurs et agences n'en reçoivent pas aujourd'hui.</li>
+</ul>
+
+<h2>10. Commits et état</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
 <tr><td><code>a00f5b00</code></td><td>Retrait des prestataires vers Mobile Money (écran Portefeuille, page console)</td></tr>
 <tr><td><code>46262e4b</code></td><td>Administration retirée du mobile, console au nom d'ANGI DSN PRO et adaptée au téléphone</td></tr>
@@ -69,5 +75,5 @@
 <tr><td><code>df5ac739</code></td><td>Inscription d'agence refaite, pièces sans statuts ni casier, clavier</td></tr>
 <tr><td><code>7adc8eb1</code></td><td>Recharge FedaPay refusée : la cause est affichée à l'utilisateur</td></tr>
 <tr><td><code>8f00c7d9</code></td><td>Console web et connexion administrateur par mot de passe</td></tr></table>
-<div class="box warn"><b>Pas encore commité</b> (dans le dossier de travail) : parcours du coursier personnel (« Je suis arrivé », vocabulaire de course, notifications), choix du type à l'inscription et suppression des voitures pour le livreur express, kilométrage durci, nouvelle colonne <code>courierArrivedAt</code> et sa migration <code>20261021120000</code>. Le serveur doit être redéployé avant le prochain APK.</div>
+<div class="box warn"><b>Commité dans <code>ea756d2b</code> puis les pourboires</b> : parcours du coursier personnel (« Je suis arrivé », vocabulaire de course, notifications), choix du type à l'inscription et suppression des voitures pour le livreur express, kilométrage durci, nouvelle colonne <code>courierArrivedAt</code> et sa migration <code>20261021120000</code>. Le serveur doit être redéployé avant le prochain APK.</div>
 </body></html>

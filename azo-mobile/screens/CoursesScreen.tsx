@@ -209,6 +209,7 @@ export default function CoursesScreen({ onBack, onNavigateTab, onRequestRide, on
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>{VEHICLE_LABEL[r.vehicleType]}</Text>
                     <Text style={styles.cardMeta}>{relativeDay(r.createdAt)}</Text>
+                    {r.tip ? <Text style={[styles.cardMeta, { color: colors.primary, fontWeight: "800" }]}>🎁 {t("courses.tipSent", { amount: fcfa(r.tip.amount) })}</Text> : null}
                   </View>
                   <Text style={[styles.price, r.status === "CANCELLED" && styles.priceCancelled]}>{fcfa(r.price)}</Text>
                 </View>

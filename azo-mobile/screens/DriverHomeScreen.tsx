@@ -759,7 +759,9 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
   const stats = useMemo(() => {
     const done = history.filter((r) => r.status === "COMPLETED");
     const today = done.filter((r) => isToday(r.createdAt));
-    const gainsToday = today.reduce((sum, r) => sum + (paidAmount(r) - (r.commission ?? 0)), 0);
+    // Les pourboires reçus aujourd'hui comptent aussi (100 % pour le Speeder), même pour une course d'un autre jour
+    const tipsToday = history.filter((r) => r.tip && isToday(r.tip.at ?? r.createdAt)).reduce((sum, r) => sum + (r.tip?.amount ?? 0), 0);
+    const gainsToday = today.reduce((sum, r) => sum + (paidAmount(r) - (r.commission ?? 0)), 0) + tipsToday;
     const rated = done.filter((r) => typeof r.rating === "number");
     const rating = rated.length
       ? rated.reduce((sum, r) => sum + (r.rating ?? 0), 0) / rated.length
@@ -1439,6 +1441,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
                     Course #{r.id.slice(0, 6)} · {relativeDay(r.createdAt)}
                   </Text>
                   <Text style={styles.tripMeta}>{r.status === "COMPLETED" ? "Payée" : r.status === "CANCELLED" ? "Annulée" : "En cours"}</Text>
+                  {r.tip ? <Text style={[styles.tripMeta, { color: colors.primary, fontWeight: "800" }]}>🎁 Pourboire reçu : +{fcfa(r.tip.amount)}</Text> : null}
                 </View>
                 <Text style={[styles.tripAmount, r.status !== "COMPLETED" && { color: colors.onSurfaceVariant }]}>
                   {r.status === "COMPLETED" ? `+${fcfa(paidAmount(r) - (r.commission ?? 0))}` : "—"}

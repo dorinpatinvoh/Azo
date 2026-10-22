@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 21 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">21 octobre 2026 · 7 commits poussés sur main (<code>8f00c7d9</code> à <code>a00f5b00</code>) · 33 suites / 396 tests verts · une partie reste à commiter (voir § 10)</span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">21 octobre 2026 · 9 commits poussés sur main (<code>8f00c7d9</code> à <code>ea756d2b</code>, puis les pourboires) · 33 suites / 397 tests verts · une partie reste à commiter (voir § 10)</span></div>
 
 <h2>1. En résumé</h2>
 <p>Connexion administrateur par mot de passe en production, suppression de clients, <b>retraits des prestataires</b>, erreurs FedaPay visibles, kilométrage des livraisons durci, étape « Je suis arrivé » du coursier personnel, pièces d'agence allégées. Un <b>audit complet</b> a été fait (§ 8) : il reste des points critiques avant un lancement public. <code>tsc</code> sans erreur.</p>
@@ -41,12 +41,13 @@
 <li><b>« Je suis arrivé » (coursier personnel)</b> : <code>POST /deliveries/:id/arrive</code> (idempotent, réservé au coursier de la mission, mode PERSONAL, statut MATCHED), colonne <code>Delivery.courierArrivedAt</code> (migration <code>20261021120000_delivery_courier_arrived</code>, validée sur base jetable, aucun nouvel écart avec le schéma). Le départ avec le code est refusé tant que l'arrivée n'est pas signalée ; la livraison express n'est pas concernée. Pas de nouveau statut (une date, pour ne pas toucher une vingtaine de requêtes).</li>
 <li><b>Notifications</b> en mode course personnelle (arrivée, départ, fin, paiement, annulation, nouvelle recherche) avec clés <code>NOTIFICATION_PERSONAL_*</code> en 4 langues.</li>
 <li><b>Livreur express sans voiture</b> : <code>saveApplication</code> refuse GAZELLE, KOALA et LEOPARD pour un livreur express (avant d'ouvrir le dossier), en cohérence avec « Les voitures ne livrent pas de colis » de la grille tarifaire. Le coursier personnel les garde.</li>
+<li><b>Pourboires dans les gains</b> : <code>driverEarnings</code> ajoute les pourboires reçus (<code>RideTip</code>) au jour où ils sont donnés, sans commission, avec <code>tips</code> par jour et dans <code>totals</code> (un jour avec seulement un pourboire compte comme jour actif). Lecture défensive : une panne de lecture n'empêche pas les gains. L'historique des courses exposait déjà <code>tip</code>.</li>
 <li>Pièces d'agence : <code>STATUTS</code> et <code>EXTRAIT_CASIER</code> ne sont plus demandés (reste CNI, LOGO, RCCM, IFU).</li>
 </ul>
 
 <h2>7. Tests</h2>
 <ul>
-<li>396 tests verts sur 33 suites. Nouveaux : 8 tests du kilométrage strict (3 cas de GPS immobile, vitesse parasite sans mouvement, saut de GPS, vrai trajet de 2 km, trajet lent, arrêt puis reprise), 6 de « Je suis arrivé », 1 de la voiture refusée au livreur express, 9 de la connexion administrateur (journée précédente).</li>
+<li>397 tests verts sur 33 suites (1 test ajouté pour les pourboires dans les gains ; les totaux de gains contiennent maintenant le champ <code>tips</code>). Nouveaux : 8 tests du kilométrage strict (3 cas de GPS immobile, vitesse parasite sans mouvement, saut de GPS, vrai trajet de 2 km, trajet lent, arrêt puis reprise), 6 de « Je suis arrivé », 1 de la voiture refusée au livreur express, 9 de la connexion administrateur (journée précédente).</li>
 <li>Deux anciens tests ont été changés volontairement : « 1,2 m/s compte un petit déplacement » n'est plus vrai en mode strict ; il est remplacé par « 20 m en 2 s à 8 m/s sont comptés » et « 1 m annoncé par la vitesse n'est pas compté ».</li>
 <li>Non couverts par des tests du projet : retrait, suppression de client (vérifiés par des scripts jetables non conservés).</li>
 </ul>
@@ -63,7 +64,7 @@
 <tr><td>Important</td><td>Dépendances : 4 vulnérabilités graves côté serveur (<code>multer</code>, <code>axios</code>, <code>@nestjs/platform-express</code>, <code>fedapay</code>) ; 28 côté mobile, surtout des outils de compilation ; 0 pour la console.</td></tr>
 <tr><td>Important</td><td>Exploitation : Render gratuit (le serveur s'endort, les tâches <code>setInterval</code> s'arrêtent avec lui) ; <code>STRICT_PRODUCTION=false</code> (clé JWT par défaut possible si <code>JWT_SECRET</code> manque) ; mot de passe de la base à changer (adresse collée deux fois dans un échange).</td></tr>
 <tr><td>Moyen</td><td>Codes de connexion écrits dans les logs (<code>[OTP DEV]</code>) ; jeton accepté dans l'adresse (<code>?token=</code>) ; pièces de plus de 5 Mo sur le disque éphémère ; pas de limite globale de requêtes ni d'en-têtes <code>helmet</code>.</td></tr>
-<tr><td>Solide</td><td>Contrôle d'accès des courses et livraisons ; état du compte relu à chaque requête ; clés NPI obligatoires ; commission atomique ; prix calculé par le serveur ; migrations appliquées au démarrage ; 396 tests verts.</td></tr></table>
+<tr><td>Solide</td><td>Contrôle d'accès des courses et livraisons ; état du compte relu à chaque requête ; clés NPI obligatoires ; commission atomique ; prix calculé par le serveur ; migrations appliquées au démarrage ; 397 tests verts.</td></tr></table>
 <p><b>Non vérifié</b> : notifications poussées, temps réel (socket), cartes et iPhone en production, un vrai paiement de bout en bout, l'APK allégé sur un téléphone.</p>
 
 <h2>9. Comptes de test (scripts, à lancer par vous sur la base)</h2>
@@ -80,5 +81,5 @@
 <tr><td><code>df5ac739</code></td><td>Inscription d'agence, pièces sans statuts ni casier</td></tr>
 <tr><td><code>7adc8eb1</code></td><td>Recharge FedaPay refusée : cause journalisée et affichée</td></tr>
 <tr><td><code>8f00c7d9</code></td><td>Connexion administrateur par mot de passe</td></tr></table>
-<div class="box warn"><b>Pas encore commité</b> : kilométrage strict (<code>odometer.ts</code>, <code>delivery.module.ts</code>), « Je suis arrivé » et sa migration, notifications de course personnelle, refus des voitures pour le livreur express, tests associés.</div>
+<div class="box"><b>Tout est commité.</b> Le commit <code>ea756d2b</code> (déployé en production, migration <code>20261021120000</code> appliquée) contient : kilométrage strict, « Je suis arrivé », notifications de course personnelle, refus des voitures pour le livreur express, tests associés. Le commit suivant ajoute les pourboires dans les gains.</div>
 </body></html>

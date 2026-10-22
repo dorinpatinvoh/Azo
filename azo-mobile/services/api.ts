@@ -556,8 +556,8 @@ export const paidAmount = (ride: Pick<Ride, "price" | "finalPrice">) => ride.fin
 export type DriverEarnings = {
   period: "day" | "week" | "month";
   from: string;
-  days: { date: string; gross: number; net: number; rides: number }[];
-  totals: { gross: number; net: number; rides: number; commission: number };
+  days: { date: string; gross: number; net: number; rides: number; tips: number }[];
+  totals: { gross: number; net: number; rides: number; commission: number; tips: number };
   averagePerActiveDay: number;
   bestDay: { date: string; net: number } | null;
 };

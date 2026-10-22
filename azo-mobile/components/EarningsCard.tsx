@@ -62,8 +62,9 @@ export default function EarningsCard({ refreshKey = 0 }: { refreshKey?: number }
           <Text style={styles.muted}>
             {t("earn.rides", { n: data.totals.rides })} · {t("earn.commission", { amount: money(data.totals.commission) })}
           </Text>
+          {data.totals.tips > 0 ? <Text style={[styles.muted, { fontWeight: "800", color: colors.primary }]}>🎁 {t("earn.tips", { amount: money(data.totals.tips) })}</Text> : null}
 
-          {data.totals.rides === 0 ? (
+          {data.totals.rides === 0 && data.totals.tips === 0 ? (
             <Text style={[styles.muted, { marginTop: spacing.sm }]}>{t("earn.empty")}</Text>
           ) : (
             <>

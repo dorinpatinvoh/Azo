@@ -36,7 +36,13 @@ export class RideExtrasService {
       select: { price: true, finalPrice: true, commission: true, completedAt: true },
     });
 
-    const days = keys.map((date) => ({ date, gross: 0, net: 0, rides: 0 }));
+    // Pourboires reçus sur la période : 100 % pour le chauffeur, sans commission (défensif : une panne de lecture ne bloque pas les gains)
+    const tips: { amount: number; createdAt: Date }[] =
+      (await this.prisma.rideTip
+        ?.findMany({ where: { driverId, createdAt: { gte: from } }, select: { amount: true, createdAt: true } })
+        .catch(() => [])) ?? [];
+
+    const days = keys.map((date) => ({ date, gross: 0, net: 0, rides: 0, tips: 0 }));
     for (const ride of rides) {
       if (!ride.completedAt) continue;
       const day = days.find((d) => d.date === localDayKey(ride.completedAt as Date));
@@ -47,11 +53,19 @@ export class RideExtrasService {
       day.rides += 1;
     }
 
+    for (const tip of tips) {
+      const day = days.find((d) => d.date === localDayKey(tip.createdAt));
+      if (!day) continue;
+      day.tips += tip.amount;
+      day.gross += tip.amount;
+      day.net += tip.amount;
+    }
+
     const totals = days.reduce(
-      (acc, d) => ({ gross: acc.gross + d.gross, net: acc.net + d.net, rides: acc.rides + d.rides }),
-      { gross: 0, net: 0, rides: 0 }
+      (acc, d) => ({ gross: acc.gross + d.gross, net: acc.net + d.net, rides: acc.rides + d.rides, tips: acc.tips + d.tips }),
+      { gross: 0, net: 0, rides: 0, tips: 0 }
     );
-    const activeDays = days.filter((d) => d.rides > 0);
+    const activeDays = days.filter((d) => d.rides > 0 || d.tips > 0);
     const best = activeDays.reduce<(typeof days)[number] | null>((b, d) => (!b || d.net > b.net ? d : b), null);
 
     return {
