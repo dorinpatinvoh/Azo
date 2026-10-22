@@ -12,8 +12,9 @@ export const KIND_INFO: Record<ReferralKind, { label: string; plural: string; ic
   AGENCE: { label: "Agence", plural: "Agences", icon: "apartment" },
   COURSIER_PERSONNEL: { label: "Coursier personnel", plural: "Coursiers personnels", icon: "directions-run" },
   LIVREUR_EXPRESS: { label: "Livreur express", plural: "Livreurs express", icon: "local-shipping" },
+  CLIENT: { label: "Client", plural: "Clients", icon: "person" },
 };
-export const REFERRAL_KINDS: ReferralKind[] = ["SPEEDER", "AGENCE", "COURSIER_PERSONNEL", "LIVREUR_EXPRESS"];
+export const REFERRAL_KINDS: ReferralKind[] = ["SPEEDER", "AGENCE", "COURSIER_PERSONNEL", "LIVREUR_EXPRESS", "CLIENT"];
 
 const STATUS_INFO: Record<ReferralStatus, { label: string; bg: string; fg: string }> = {
   ACTIF: { label: "Actif", bg: "#DDF3E4", fg: "#146C2E" },
@@ -81,7 +82,7 @@ export function ReferralSummary({ data, kind = "ALL", onSelectKind }: SummaryPro
         </View>
       </View>
       <Text style={styles.note}>
-        « Actif » : au moins une course ou livraison terminée ces {summary.activeWindowDays} derniers jours. « Inactif » : dossier validé, mais aucune activité récente.
+        « Actif » : au moins une course ou livraison terminée ces {summary.activeWindowDays} derniers jours. « Inactif » : dossier validé (ou inscription terminée pour un client), mais aucune activité récente.
       </Text>
     </View>
   );
@@ -161,7 +162,8 @@ function Stat({ value, label, color }: { value: number; label: string; color?: s
 }
 
 function Row({ item: r }: { item: ReferralItem }) {
-  const st = STATUS_INFO[r.status];
+  // Un client « en attente » n'a pas fini son inscription (pas de dossier) ; un client actif a terminé une course ou une livraison ces 30 jours
+  const st = r.kind === "CLIENT" && r.status === "EN_ATTENTE" ? { ...STATUS_INFO.EN_ATTENTE, label: "Inscription à terminer" } : STATUS_INFO[r.status];
   const k = r.kind ? KIND_INFO[r.kind] : null;
   return (
     <View style={styles.row}>

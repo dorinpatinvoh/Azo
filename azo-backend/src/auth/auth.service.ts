@@ -264,9 +264,10 @@ export class AuthService {
       provider = await this.providers.statusOf(user.id);
     }
 
-    // Parrainage : un prestataire qui s'inscrit peut saisir le code de son parrain (jamais bloquant)
+    // Parrainage : un client ou un prestataire qui s'inscrit peut saisir le code de son commercial (jamais bloquant ; sans effet pour un
+    // compte déjà inscrit ou déjà parrainé)
     let referralStatus: "APPLIED" | "INVALID" | null = null;
-    if (proKind && this.referrals) {
+    if (this.referrals) {
       const result = await this.referrals.attachByCode(user.id, referralCode).catch(() => "INVALID" as const);
       referralStatus = result === "IGNORED" ? null : result;
     }

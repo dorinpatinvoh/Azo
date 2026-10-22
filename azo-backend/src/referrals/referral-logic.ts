@@ -1,7 +1,7 @@
 /** Règles du parrainage (sans accès à la base : testables seules). */
 
-export type ReferralKind = "SPEEDER" | "AGENCE" | "COURSIER_PERSONNEL" | "LIVREUR_EXPRESS";
-export const REFERRAL_KINDS: ReferralKind[] = ["SPEEDER", "AGENCE", "COURSIER_PERSONNEL", "LIVREUR_EXPRESS"];
+export type ReferralKind = "SPEEDER" | "AGENCE" | "COURSIER_PERSONNEL" | "LIVREUR_EXPRESS" | "CLIENT";
+export const REFERRAL_KINDS: ReferralKind[] = ["SPEEDER", "AGENCE", "COURSIER_PERSONNEL", "LIVREUR_EXPRESS", "CLIENT"];
 
 /** Un prestataire sans course ni livraison terminée depuis ce nombre de jours est « inactif ». */
 export const ACTIVE_WINDOW_DAYS = 30;
@@ -51,7 +51,7 @@ export function referralLink(code: string, base: string = process.env.REFERRAL_L
   return `${root}${sep}ref=${encodeURIComponent(code)}#telecharger`;
 }
 
-/** Catégorie d'un prestataire pour le suivi du parrain. */
+/** Catégorie d'un filleul pour le suivi du parrain : prestataire (selon son dossier ou son type d'inscription) ou client. */
 export function kindOf(
   provider: { type: string; categoryId: string | null } | null | undefined,
   signupKind: string | null | undefined
@@ -64,7 +64,8 @@ export function kindOf(
   }
   if (signupKind === "DRIVER") return "SPEEDER";
   if (signupKind === "AGENCY") return "AGENCE";
-  return null; // inscription « COURIER » sans dossier : la spécialité n'est pas encore connue
+  if (signupKind === "COURIER") return null; // inscription « COURIER » sans dossier : la spécialité n'est pas encore connue
+  return "CLIENT"; // aucun dossier ni type d'inscription professionnel : un client
 }
 
 export type ReferralStatus = "ACTIF" | "INACTIF" | "EN_ATTENTE" | "REFUSE" | "SUSPENDU";
@@ -81,6 +82,16 @@ export function statusOf(providerStatus: string | null | undefined, lastActivity
   if (providerStatus === "REJECTED") return "REFUSE";
   if (providerStatus === "SUSPENDED") return "SUSPENDU";
   return "EN_ATTENTE"; // brouillon, déposé, en examen, information demandée, ou pas encore de dossier
+}
+
+/**
+ * État d'un client parrainé : « en attente » tant que son inscription (identité) n'est pas terminée ; ensuite actif s'il a terminé au
+ * moins une course ou livraison dans les 30 derniers jours, sinon inactif.
+ */
+export function statusOfClient(registrationComplete: boolean, lastActivityAt: Date | null, now: Date = new Date()): ReferralStatus {
+  if (!registrationComplete) return "EN_ATTENTE";
+  if (!lastActivityAt) return "INACTIF";
+  return now.getTime() - lastActivityAt.getTime() <= ACTIVE_WINDOW_DAYS * 24 * 3600 * 1000 ? "ACTIF" : "INACTIF";
 }
 
 /** « +2290197000042 » → « 01 •• •• •• 42 » : le parrain reconnaît son filleul sans voir le numéro complet. */

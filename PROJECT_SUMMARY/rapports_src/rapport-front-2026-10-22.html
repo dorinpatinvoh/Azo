@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 22 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) et la console web (<code>admin-web</code>) — pour Sergio</p><span class="tag">22 octobre 2026 · pourboires dans l'historique, commission téléphone, photo de profil conservée, APK allégé</span></div>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) et la console web (<code>admin-web</code>) — pour Sergio</p><span class="tag">22 octobre 2026 · pourboires dans l'historique, commission téléphone, photo de profil conservée, clients dans le parrainage, APK allégé</span></div>
 
 <h2>1. En résumé</h2>
 <p>Trois nouveautés : les <b>pourboires apparaissent dans l'historique</b> ; la <b>commission téléphone</b> pour les prestataires dont le téléphone a été fourni par une boutique partenaire, avec un <b>bandeau « Téléphone fourni »</b> qu'ils voient dans l'application ; la <b>photo de profil ne disparaît plus</b> (enregistrée sur le compte, récupérée si Android ferme l'application). <code>tsc</code> sans erreur (mobile et console).</p>
@@ -37,10 +37,19 @@
 <li><b>APK allégé</b> : 50 Mo (<code>AZO-leger.apk</code>), arm64 et armeabi-v7a, réduction du code (R8) activée : <b>à tester sur au moins deux téléphones</b>. L'APK complet de 97 Mo reste le secours.</li>
 </ul>
 
-<h2>7. Commits et état</h2>
+<h2>7. Les clients comptent dans le parrainage</h2>
+<ul>
+<li><b>Problème</b> : un client qui s'inscrivait avec le lien d'un commercial n'apparaissait pas chez lui. Le parrainage ne concernait que les prestataires, et le lien ne transmet rien à l'application (il mène à la page de téléchargement ; le code se saisit à l'inscription).</li>
+<li><b>Application</b> : le champ « Code promo du commercial (facultatif) » est maintenant proposé à <b>tout nouveau compte</b>, clients compris (<code>OtpLoginScreen.tsx</code>). Nouvelle catégorie <b>« Clients »</b> dans l'espace du commercial (<code>ReferralOverview.tsx</code>), avec le statut « Inscription à terminer » tant que l'identité n'est pas saisie.</li>
+<li><b>Console</b> : colonne « Clients » dans la liste des commerciaux, catégorie « Clients » dans leur fiche, et le bouton devient « Rattacher un client ou un prestataire » (rattachement par numéro).</li>
+<li><b>Limite</b> : le code n'est pas rempli automatiquement depuis le lien (il faudrait lire le presse-papiers, module à ajouter, ou publier sur Google Play). Un compte déjà inscrit ne peut plus être rattaché par un code : passer par la console.</li>
+</ul>
+
+<h2>8. Commits et état</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
 <tr><td><code>0fd1fe8e</code></td><td>Commission téléphone (serveur, console, application) ; rapports du 22 octobre</td></tr>
 <tr><td><code>76b1e201</code></td><td>Pourboires dans l'historique ; rapports du 21 octobre</td></tr>
 <tr><td><code>ea756d2b</code></td><td>Coursier personnel, type choisi à l'inscription, kilométrage durci</td></tr>
-<tr><td>à venir</td><td>Commission téléphone du lundi au vendredi ; photo de profil conservée sur le serveur ; rapports à jour</td></tr></table>
+<tr><td><code>de6f923f</code></td><td>Photo de profil conservée sur le serveur ; commission téléphone du lundi au vendredi ; rapports à jour</td></tr>
+<tr><td>à venir</td><td>Clients dans le parrainage ; rapports à jour</td></tr></table>
 </body></html>

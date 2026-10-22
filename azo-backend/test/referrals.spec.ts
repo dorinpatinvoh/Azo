@@ -3,7 +3,7 @@ jest.mock("../src/prisma/prisma.service", () => ({ PrismaService: class PrismaSe
 
 import { BadRequestException, ConflictException, ForbiddenException } from "@nestjs/common";
 import { ReferralsService } from "../src/referrals/referrals.module";
-import { ACTIVE_WINDOW_DAYS, commercialCode, generateLegacyReferralCode, kindOf, maskPhone, nextCommercialNumber, normalizeReferralCode, referralLink, statusOf } from "../src/referrals/referral-logic";
+import { ACTIVE_WINDOW_DAYS, commercialCode, generateLegacyReferralCode, kindOf, maskPhone, nextCommercialNumber, normalizeReferralCode, referralLink, statusOf, statusOfClient } from "../src/referrals/referral-logic";
 
 describe("Parrainage : règles", () => {
   it("le code promo d'un commercial est COM-AZO suivi de son numéro d'ordre", () => {
@@ -135,16 +135,42 @@ describe("Parrainage : service", () => {
     await expect(service.myOverview("u1")).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it("le rattachement par l'administrateur refuse un client simple, un parrain et un prestataire déjà parrainé", async () => {
+  it("le rattachement par l'administrateur accepte un client, mais refuse un parrain et un compte déjà parrainé", async () => {
     const { prisma, service } = make();
     prisma.referrer.findUnique.mockResolvedValue({ id: "r1", userId: "p1" });
     prisma.user.findFirst.mockResolvedValueOnce(null);
     await expect(service.attach("r1", { phone: "0197000020" })).rejects.toThrow(/Aucun compte/);
-    prisma.user.findFirst.mockResolvedValueOnce({ id: "c", referrerId: null, signupKind: "CLIENT", provider: null, referrerProfile: null });
-    await expect(service.attach("r1", { phone: "0197000021" })).rejects.toBeInstanceOf(BadRequestException);
+    // un client (sans dossier) peut être rattaché à un commercial
+    prisma.user.findFirst.mockResolvedValueOnce({ id: "c", referrerId: null, signupKind: null, provider: null, referrerProfile: null });
+    prisma.user.update = jest.fn().mockResolvedValue({});
+    prisma.referrer.findUnique.mockResolvedValue({ id: "r1", userId: "p1", code: "COM-AZO001", active: true, note: null, createdAt: new Date(), user: { fullName: "Ama", phone: "+2290198000055" } });
+    prisma.user.findMany = jest.fn().mockResolvedValue([]);
+    await service.attach("r1", { phone: "0197000021" }).catch(() => undefined);
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "c" }, data: expect.objectContaining({ referrerId: "r1" }) }));
     prisma.user.findFirst.mockResolvedValueOnce({ id: "d", referrerId: "r2", signupKind: "DRIVER", provider: { id: "pp" }, referrerProfile: null });
     await expect(service.attach("r1", { phone: "0197000022" })).rejects.toThrow(/déjà un commercial/);
     prisma.user.findFirst.mockResolvedValueOnce({ id: "e", referrerId: null, signupKind: "DRIVER", provider: { id: "pp" }, referrerProfile: { id: "r5" } });
     await expect(service.attach("r1", { phone: "0197000023" })).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe("clients parrainés", () => {
+  it("un compte sans dossier ni inscription professionnelle est un client", () => {
+    expect(kindOf(null, null)).toBe("CLIENT");
+    expect(kindOf(null, "CLIENT")).toBe("CLIENT");
+    // les inscriptions professionnelles ne deviennent pas des clients
+    expect(kindOf(null, "DRIVER")).toBe("SPEEDER");
+    expect(kindOf(null, "COURIER")).toBeNull();
+  });
+
+  it("état d'un client : inscription à terminer, actif (course ou livraison terminée sous 30 jours), inactif", () => {
+    const now = new Date("2026-10-22T12:00:00Z");
+    const days = (n: number) => new Date(now.getTime() - n * 24 * 3600 * 1000);
+    expect(statusOfClient(false, null, now)).toBe("EN_ATTENTE");
+    expect(statusOfClient(false, days(2), now)).toBe("EN_ATTENTE");
+    expect(statusOfClient(true, null, now)).toBe("INACTIF");
+    expect(statusOfClient(true, days(2), now)).toBe("ACTIF");
+    expect(statusOfClient(true, days(29), now)).toBe("ACTIF");
+    expect(statusOfClient(true, days(31), now)).toBe("INACTIF");
   });
 });

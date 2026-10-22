@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 22 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">22 octobre 2026 · 36 suites / 414 tests verts · migrations <code>20261022120000_phone_support</code> et <code>20261022150000_user_avatar</code></span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">22 octobre 2026 · 36 suites / 416 tests verts · migrations <code>20261022120000_phone_support</code> et <code>20261022150000_user_avatar</code></span></div>
 
 <h2>1. En résumé</h2>
 <p>Les <b>pourboires comptent dans les gains</b> du Speeder (en production, commit <code>76b1e201</code>) ; la <b>commission téléphone</b> : un prestataire dont le téléphone a été fourni par une boutique partenaire paie, en plus des 15 % de l'entreprise, <b>10 % de chaque course ou livraison terminée, du lundi au vendredi, pendant 4 mois</b> à partir de la remise du téléphone (samedis et dimanches exclus) ; et la <b>photo de profil conservée sur le serveur</b>. <code>tsc</code> sans erreur.</p>
@@ -30,26 +30,37 @@
 <li><b>Vérifié sur base jetable</b> : client sans photo, repli sur la photo du dossier, photo choisie prioritaire, remplacement sur une seule ligne, retrait, formats refusés (lien, gif, trop lourde), photo supprimée avec le compte.</li>
 </ul>
 
-<h2>5. Vérifications</h2>
+<h2>5. Clients dans le parrainage</h2>
 <ul>
-<li><b>Tests</b> : 414 verts sur 36 suites. Nouveaux : 12 pour la commission téléphone (règle lundi au vendredi, heure du Bénin, avant la remise, après 4 mois, paiement d'une course dans chaque cas avec date simulée, règlement d'une livraison 15 % + 10 %) et 5 pour la photo de profil. Base jetable pour les deux migrations, le marquage d'un livreur, le cumul d'un dossier (livraison 200 F + course 50 F) et le tableau des finances.</li>
+<li><b>Problème</b> : un client inscrit avec le code d'un commercial n'apparaissait pas chez lui (les filleuls étaient seulement des prestataires ; <code>verifyOtp</code> n'appelait <code>attachByCode</code> que pour un type d'inscription professionnel).</li>
+<li><code>AuthService.verifyOtp</code> appelle désormais <code>attachByCode</code> pour toute inscription qui fournit un code (jamais bloquant ; sans effet pour un compte déjà inscrit ou déjà parrainé, ce qui est inchangé).</li>
+<li><code>referral-logic.ts</code> : nouvelle catégorie <code>CLIENT</code> (un compte sans dossier ni type d'inscription professionnel ; une inscription COURIER sans dossier reste non classée) et <code>statusOfClient</code> : « en attente » (inscription à terminer) tant que <code>profileCompletedAt</code> est vide, puis actif (course ou livraison <b>commandée</b> terminée sous 30 jours) ou inactif.</li>
+<li><code>ReferralsService.overview</code> compte, pour un client, ses courses et livraisons terminées (<code>clientId</code>) et ses recharges ; le total par catégorie, la liste du commercial (numéros masqués) et l'administration les incluent. <code>attach</code> (rattachement par numéro depuis la console) accepte un client.</li>
+<li><b>Tests</b> : 416 verts (règles de catégorie et d'état du client, rattachement administrateur d'un client). <b>Base jetable</b> : un client qui s'inscrit avec « com azo 1 » est rattaché, passe d'« inscription à terminer » à inactif puis à actif avec une course, sa recharge de 5 000 F est comptée, un client déjà inscrit est ignoré, un code inconnu est signalé, l'espace du commercial affiche 1 client au numéro masqué. Pas de migration.</li>
+<li><b>Limite</b> : l'attribution reste manuelle (le code se saisit à l'inscription) ; le remplissage automatique demanderait de lire le presse-papiers côté application ou de publier sur Google Play.</li>
+</ul>
+
+<h2>6. Vérifications</h2>
+<ul>
+<li><b>Tests</b> : 416 verts sur 36 suites. Nouveaux : 12 pour la commission téléphone (règle lundi au vendredi, heure du Bénin, avant la remise, après 4 mois, paiement d'une course dans chaque cas avec date simulée, règlement d'une livraison 15 % + 10 %) et 5 pour la photo de profil. Base jetable pour les deux migrations, le marquage d'un livreur, le cumul d'un dossier (livraison 200 F + course 50 F) et le tableau des finances.</li>
 <li><b>Non vérifié</b> : un paiement réel de bout en bout avec la commission, l'affichage du bandeau, la récupération d'une photo après fermeture d'Android et l'envoi de la photo depuis un téléphone.</li>
 </ul>
 
-<h2>6. Points à connaître</h2>
+<h2>7. Points à connaître</h2>
 <ul>
 <li>La commission téléphone n'est <b>pas plafonnée</b> à un montant (prix du téléphone) : elle s'arrête seulement à la date de fin.</li>
 <li>Employé d'agence marqué : le chiffre d'affaires net du tableau de bord de l'agence ne retire pas encore cette commission (cas rare).</li>
 <li>Photos de profil et pièces des dossiers sont stockées en base (data URI) : surveiller la taille de la base.</li>
 </ul>
 
-<h2>7. Audit du 21 octobre : points toujours ouverts</h2>
+<h2>8. Audit du 21 octobre : points toujours ouverts</h2>
 <p>Critiques : <b>création d'argent par la boutique « marché »</b> (prix négatif), <b>aucun SMS</b> envoyé et serveur en simulation, pas de suppression de compte par l'utilisateur ni de pages légales, versement des retraits manuel. Importants : solde non réservé, bugs d'agences, schéma et migrations qui ne concordent pas (<code>RideSettlement</code>), dépendances vulnérables, hébergement gratuit. Détail dans le rapport du 21 octobre.</p>
 
-<h2>8. Commits</h2>
+<h2>9. Commits</h2>
 <table><tr><th>Commit</th><th>Contenu</th></tr>
 <tr><td><code>0fd1fe8e</code></td><td>Commission téléphone (migration <code>20261022120000</code>), rapports du 22 octobre</td></tr>
 <tr><td><code>76b1e201</code></td><td>Pourboires dans les gains et l'historique</td></tr>
 <tr><td><code>ea756d2b</code></td><td>Coursier personnel, kilométrage durci, voitures retirées pour le livreur express</td></tr>
-<tr><td>à venir</td><td>Commission téléphone du lundi au vendredi ; photo de profil conservée (migration <code>20261022150000</code>) ; rapports à jour</td></tr></table>
+<tr><td><code>de6f923f</code></td><td>Photo de profil conservée (migration <code>20261022150000</code>) ; commission téléphone du lundi au vendredi ; rapports à jour</td></tr>
+<tr><td>à venir</td><td>Clients dans le parrainage ; rapports à jour</td></tr></table>
 </body></html>

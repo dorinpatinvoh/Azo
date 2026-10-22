@@ -34,6 +34,7 @@ import {
   maskPhone,
   normalizeReferralCode,
   statusOf,
+  statusOfClient,
 } from "./referral-logic";
 
 export class CreateReferrerDto {
@@ -142,6 +143,7 @@ export class ReferralsService {
         fullName: true,
         createdAt: true,
         referredAt: true,
+        profileCompletedAt: true,
         signupKind: true,
         agencyId: true,
         wallet: { select: { id: true } },
@@ -175,7 +177,31 @@ export class ReferralsService {
         ])
       : [[], [], [], [], []];
 
+    // Un client parrainé « travaille » en commandant : ses courses et livraisons terminées comptent pour lui
+    const clientIds = users.filter((u) => kindOf(u.provider, u.signupKind) === "CLIENT").map((u) => u.id);
+    const [cRidesAll, cRidesRecent, cDeliveriesAll, cDeliveriesRecent] = clientIds.length
+      ? await Promise.all([
+          this.prisma.ride.groupBy({ by: ["clientId"], where: { clientId: { in: clientIds }, status: "COMPLETED" }, _count: { _all: true }, _max: { completedAt: true } }),
+          this.prisma.ride.groupBy({ by: ["clientId"], where: { clientId: { in: clientIds }, status: "COMPLETED", completedAt: { gte: since } }, _count: { _all: true } }),
+          this.prisma.delivery.groupBy({ by: ["clientId"], where: { clientId: { in: clientIds }, status: "COMPLETED" }, _count: { _all: true }, _max: { createdAt: true } }),
+          this.prisma.delivery.groupBy({ by: ["clientId"], where: { clientId: { in: clientIds }, status: "COMPLETED", createdAt: { gte: since } }, _count: { _all: true } }),
+        ])
+      : [[], [], [], []];
+
     type Act = { total: number; recent: number; last: Date | null };
+    const clientAct = new Map<string, Act>();
+    const bumpClient = (id: string, total: number, last: Date | null, recent = 0) => {
+      const a = clientAct.get(id) ?? { total: 0, recent: 0, last: null };
+      a.total += total;
+      a.recent += recent;
+      if (last && (!a.last || last > a.last)) a.last = last;
+      clientAct.set(id, a);
+    };
+    for (const r of cRidesAll as any[]) bumpClient(r.clientId, r._count._all, r._max.completedAt);
+    for (const r of cRidesRecent as any[]) bumpClient(r.clientId, 0, null, r._count._all);
+    for (const d of cDeliveriesAll as any[]) bumpClient(d.clientId, d._count._all, d._max.createdAt);
+    for (const d of cDeliveriesRecent as any[]) bumpClient(d.clientId, 0, null, d._count._all);
+
     const act = new Map<string, Act>();
     const bump = (id: string | null, total: number, last: Date | null, recent = 0) => {
       if (!id) return;
@@ -192,7 +218,8 @@ export class ReferralsService {
     const rechargeByWallet = new Map((recharges as any[]).map((r) => [r.walletId, r]));
 
     const items: ReferralItem[] = users.map((u) => {
-      const own = act.get(u.id) ?? { total: 0, recent: 0, last: null };
+      const kind = kindOf(u.provider, u.signupKind);
+      const own = (kind === "CLIENT" ? clientAct.get(u.id) : act.get(u.id)) ?? { total: 0, recent: 0, last: null };
       let jobsTotal = own.total;
       let jobsRecent = own.recent;
       let last = own.last;
@@ -206,13 +233,12 @@ export class ReferralsService {
         if (m.last && (!last || m.last > last)) last = m.last;
       }
       const rc: any = u.wallet ? rechargeByWallet.get(u.wallet.id) : null;
-      const kind = kindOf(u.provider, u.signupKind);
       return {
         userId: u.id,
         name: u.provider?.fullName || u.fullName || "Sans nom",
         phone: options.maskPhones ? maskPhone(u.phone) : u.phone,
         kind,
-        status: statusOf(u.provider?.status, last, now),
+        status: kind === "CLIENT" ? statusOfClient(!!u.profileCompletedAt, last, now) : statusOf(u.provider?.status, last, now),
         providerStatus: u.provider?.status ?? null,
         city: u.provider?.city ?? null,
         vehicleType: u.provider?.vehicleType ?? null,
@@ -335,14 +361,11 @@ export class ReferralsService {
       where: { phone: { in: variants } },
       select: { id: true, referrerId: true, signupKind: true, provider: { select: { id: true } }, referrerProfile: { select: { id: true } } },
     });
-    if (!user) throw new NotFoundException("Aucun compte avec ce numéro : le prestataire doit d'abord s'inscrire.");
+    if (!user) throw new NotFoundException("Aucun compte avec ce numéro : la personne doit d'abord s'inscrire.");
     if (user.referrerProfile) throw new ConflictException("Ce numéro est celui d'un commercial.");
     if (user.id === r.userId) throw new ConflictException("Un commercial ne peut pas se recruter lui-même.");
-    if (!user.provider && user.signupKind !== "DRIVER" && user.signupKind !== "COURIER" && user.signupKind !== "AGENCY") {
-      throw new BadRequestException("Seuls les prestataires (Speeder, agence, livreur, coursier) peuvent être rattachés à un commercial.");
-    }
-    if (user.referrerId === referrerId) throw new ConflictException("Ce prestataire est déjà rattaché à ce commercial.");
-    if (user.referrerId) throw new ConflictException("Ce prestataire a déjà un commercial : retire-le d'abord.");
+    if (user.referrerId === referrerId) throw new ConflictException("Ce compte est déjà rattaché à ce commercial.");
+    if (user.referrerId) throw new ConflictException("Ce compte a déjà un commercial : retire-le d'abord.");
     await this.prisma.user.update({ where: { id: user.id }, data: { referrerId, referredAt: new Date() } });
     return this.referrerDetail(referrerId);
   }

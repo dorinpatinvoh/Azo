@@ -1245,7 +1245,7 @@ export const agenciesApi = {
 
 /* ==================== PARRAINAGE ==================== */
 
-export type ReferralKind = "SPEEDER" | "AGENCE" | "COURSIER_PERSONNEL" | "LIVREUR_EXPRESS";
+export type ReferralKind = "SPEEDER" | "AGENCE" | "COURSIER_PERSONNEL" | "LIVREUR_EXPRESS" | "CLIENT";
 export type ReferralStatus = "ACTIF" | "INACTIF" | "EN_ATTENTE" | "REFUSE" | "SUSPENDU";
 
 export type ReferralKindSummary = {

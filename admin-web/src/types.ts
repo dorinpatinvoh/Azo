@@ -199,7 +199,7 @@ export type ProviderWithdrawal = {
   note: string | null;
 };
 
-export type ReferralKind = "SPEEDER" | "AGENCE" | "COURSIER_PERSONNEL" | "LIVREUR_EXPRESS";
+export type ReferralKind = "SPEEDER" | "AGENCE" | "COURSIER_PERSONNEL" | "LIVREUR_EXPRESS" | "CLIENT";
 export type ReferralStatus = "ACTIF" | "INACTIF" | "EN_ATTENTE" | "REFUSE" | "SUSPENDU";
 export type KindSummary = { total: number; enAttente: number; actifs: number; inactifs: number; autres: number; ontRecharge: number; montantRecharge: number };
 export type ReferralItem = {

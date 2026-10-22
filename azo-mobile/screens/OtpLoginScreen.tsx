@@ -230,7 +230,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
       const normalized = toBeninE164(digits);
       // Profil professionnel : seul le numéro est demandé (pas de nom, sexe ni NPI à l'inscription)
       const proProfile = signupMode && accountKind !== "CLIENT" ? (accountKind === "COURIER_PERSONAL" || accountKind === "COURIER_EXPRESS" ? "COURIER" : accountKind) : "CLIENT";
-      const response = await authApi.verifyOtp(normalized, fullCode, proProfile as ProfileRole, proProfile !== "CLIENT" ? referralCode : undefined);
+      const response = await authApi.verifyOtp(normalized, fullCode, proProfile as ProfileRole, signupMode ? referralCode : undefined);
 
       await SecureStore.setItemAsync("userToken", response.token);
 
@@ -587,7 +587,7 @@ export default function OtpLoginScreen({ onVerified, resumeRegistration = false 
                 )}
               </View>
 
-              {signupMode && accountKind !== "CLIENT" ? (
+              {signupMode ? (
                 <View style={{ marginBottom: spacing.md }}>
                   <Text style={styles.label}>Code promo du commercial (facultatif)</Text>
                   <TextInput

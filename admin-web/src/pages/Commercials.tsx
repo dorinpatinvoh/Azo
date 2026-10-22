@@ -9,8 +9,9 @@ const KINDS: { key: ReferralKind; label: string }[] = [
   { key: "AGENCE", label: "Agences" },
   { key: "COURSIER_PERSONNEL", label: "Coursiers personnels" },
   { key: "LIVREUR_EXPRESS", label: "Livreurs express" },
+  { key: "CLIENT", label: "Clients" },
 ];
-const KIND_ONE: Record<ReferralKind, string> = { SPEEDER: "Speeder", AGENCE: "Agence", COURSIER_PERSONNEL: "Coursier personnel", LIVREUR_EXPRESS: "Livreur express" };
+const KIND_ONE: Record<ReferralKind, string> = { SPEEDER: "Speeder", AGENCE: "Agence", COURSIER_PERSONNEL: "Coursier personnel", LIVREUR_EXPRESS: "Livreur express", CLIENT: "Client" };
 const STATUS: Record<ReferralStatus, { label: string; tone: string }> = {
   ACTIF: { label: "Actif", tone: "ok" },
   INACTIF: { label: "Inactif", tone: "orange" },
@@ -36,7 +37,7 @@ function List() {
 
   return (
     <>
-      <PageHead title="Commerciaux" subtitle="Chaque commercial a un code promo COM-AZO… et un lien personnel ; il suit les prestataires qu'il recrute">
+      <PageHead title="Commerciaux" subtitle="Chaque commercial a un code promo COM-AZO… et un lien personnel ; il suit les clients et les prestataires qu'il recrute">
         <button className="btn ghost sm" onClick={reload}>Actualiser</button>
         <button className="btn" onClick={() => setCreating(true)}>Ajouter un commercial</button>
       </PageHead>
@@ -47,7 +48,7 @@ function List() {
         <div className="tablewrap">
           <table>
             <thead>
-              <tr><th>Commercial</th><th>Code promo</th><th className="num">Speeders</th><th className="num">Agences</th><th className="num">Coursiers</th><th className="num">Livreurs</th><th className="num">Actifs</th><th className="num">Inactifs</th><th className="num">Ont rechargé</th></tr>
+              <tr><th>Commercial</th><th>Code promo</th><th className="num">Speeders</th><th className="num">Agences</th><th className="num">Coursiers</th><th className="num">Livreurs</th><th className="num">Clients</th><th className="num">Actifs</th><th className="num">Inactifs</th><th className="num">Ont rechargé</th></tr>
             </thead>
             <tbody>
               {data.map((r) => (
@@ -58,6 +59,7 @@ function List() {
                   <td className="num">{r.byKind.AGENCE.total}</td>
                   <td className="num">{r.byKind.COURSIER_PERSONNEL.total}</td>
                   <td className="num">{r.byKind.LIVREUR_EXPRESS.total}</td>
+                  <td className="num">{r.byKind.CLIENT.total}</td>
                   <td className="num">{r.totals.actifs}</td>
                   <td className="num">{r.totals.inactifs}</td>
                   <td className="num">{r.totals.ontRecharge}<div className="muted small">{fcfa(r.totals.montantRecharge)}</div></td>
@@ -108,7 +110,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   }
   return (
     <Modal title="Ajouter un commercial" onClose={onClose}>
-      <p className="muted">Il reçoit un code promo COM-AZO…, son lien personnel de téléchargement et un espace pour suivre les prestataires qu'il recrute. Le numéro doit être neuf (pas déjà un client ou un prestataire).</p>
+      <p className="muted">Il reçoit un code promo COM-AZO…, son lien personnel de téléchargement et un espace pour suivre les clients et les prestataires qu'il recrute. Le numéro doit être neuf (pas déjà un client ou un prestataire).</p>
       <Field label="Nom complet"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Kossi Adjovi" autoFocus /></Field>
       <Field label="Numéro de téléphone" hint="10 chiffres, commençant par 01"><input inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="01 XX XX XX XX" /></Field>
       <Field label="Note (facultatif)"><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex. Zone Cotonou" maxLength={300} /></Field>
@@ -152,7 +154,7 @@ function Detail({ id }: { id: string }) {
       <p><a href="#/commerciaux">← Tous les commerciaux</a></p>
       <PageHead title={r.fullName ?? "Commercial"} subtitle={`${phone(r.phone)} · commercial depuis le ${dateOnly(r.createdAt)}`}>
         {!r.active ? <Badge tone="err">Désactivé</Badge> : <Badge tone="ok">Actif</Badge>}
-        <button className="btn ghost sm" onClick={() => setAttaching(true)}>Rattacher un prestataire</button>
+        <button className="btn ghost sm" onClick={() => setAttaching(true)}>Rattacher un client ou un prestataire</button>
         <button className={`btn sm ${r.active ? "danger" : "ok"}`} onClick={() => setToggling(true)}>{r.active ? "Désactiver" : "Réactiver"}</button>
       </PageHead>
       <ErrorBox error={error} onRetry={reload} />
@@ -203,7 +205,7 @@ function Detail({ id }: { id: string }) {
                 <tr key={x.userId}>
                   <td><b>{x.name}</b><div className="muted small">{phone(x.phone)}{x.city ? ` · ${x.city}` : ""}</div></td>
                   <td>{x.kind ? KIND_ONE[x.kind] : "—"}{x.vehicleType ? <div className="muted small">{VEHICLE_LABEL[x.vehicleType] ?? x.vehicleType}</div> : null}{x.fleetSize != null ? <div className="muted small">flotte de {x.fleetSize}</div> : null}</td>
-                  <td><Badge tone={STATUS[x.status].tone}>{STATUS[x.status].label}</Badge>{x.approvedAt ? <div className="muted small">validé le {dateOnly(x.approvedAt)}</div> : null}</td>
+                  <td><Badge tone={STATUS[x.status].tone}>{x.kind === "CLIENT" && x.status === "EN_ATTENTE" ? "Inscription à terminer" : STATUS[x.status].label}</Badge>{x.approvedAt ? <div className="muted small">validé le {dateOnly(x.approvedAt)}</div> : null}</td>
                   <td className="small">{dateOnly(x.registeredAt)}</td>
                   <td className="small">{dateOnly(x.lastActivityAt)}</td>
                   <td className="num">{x.jobsTotal} <span className="muted">({x.jobsLast30Days})</span></td>
@@ -216,7 +218,7 @@ function Detail({ id }: { id: string }) {
         </div>
       )}
 
-      {attaching ? <AttachModal id={id} onClose={() => setAttaching(false)} onDone={(next) => { setData(next); toast("Prestataire rattaché."); }} /> : null}
+      {attaching ? <AttachModal id={id} onClose={() => setAttaching(false)} onDone={(next) => { setData(next); toast("Compte rattaché."); }} /> : null}
       {toggling ? <ConfirmModal title={r.active ? "Désactiver ce commercial" : "Réactiver ce commercial"} danger={r.active} confirmLabel={r.active ? "Désactiver" : "Réactiver"} message={r.active ? "Il n'accède plus à son espace et son code promo n'est plus accepté pour de nouvelles inscriptions. Ses recrues restent rattachées." : "Il retrouve son espace et son code promo redevient valable."} onClose={() => setToggling(false)} onConfirm={() => api.patch<CommercialDetail>(`/admin/referrals/${id}`, { active: !r.active }).then((next) => { setData(next); toast(r.active ? "Commercial désactivé." : "Commercial réactivé."); })} /> : null}
       {detaching ? <ConfirmModal title="Retirer cette recrue" danger confirmLabel="Retirer" message={`${detaching.name} ne sera plus rattaché à ${r.fullName ?? "ce commercial"}.`} onClose={() => setDetaching(null)} onConfirm={() => api.delete<CommercialDetail>(`/admin/referrals/referral/${detaching.userId}`).then((next) => { setData(next); toast("Recrue retirée."); })} /> : null}
     </>
@@ -240,8 +242,8 @@ function AttachModal({ id, onClose, onDone }: { id: string; onClose: () => void;
     }
   }
   return (
-    <Modal title="Rattacher un prestataire" onClose={onClose}>
-      <p className="muted">Numéro d'un Speeder, d'une agence, d'un livreur express ou d'un coursier déjà inscrit et sans commercial.</p>
+    <Modal title="Rattacher un client ou un prestataire" onClose={onClose}>
+      <p className="muted">Numéro d'un client, d'un Speeder, d'une agence, d'un livreur express ou d'un coursier déjà inscrit et sans commercial.</p>
       <Field label="Numéro de téléphone" hint="10 chiffres, commençant par 01"><input inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="01 XX XX XX XX" autoFocus /></Field>
       <ErrorBox error={error} />
       <div className="actions">
