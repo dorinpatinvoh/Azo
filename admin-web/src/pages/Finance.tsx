@@ -26,6 +26,7 @@ export default function Finance() {
   const [asking, setAsking] = useState(false);
   const [paying, setPaying] = useState<Withdrawal | null>(null);
   const [cancelling, setCancelling] = useState<Withdrawal | null>(null);
+  const [resetting, setResetting] = useState(false);
   const [detail, setDetail] = useState<CommissionRow | null>(null);
 
   const s = data?.summary;
@@ -34,6 +35,7 @@ export default function Finance() {
     <>
       <PageHead title="Finances" subtitle="Gains de l'entreprise, commission de chaque course, retraits">
         <button className="btn ghost sm" onClick={reload}>Actualiser</button>
+        <button className="btn danger" onClick={() => setResetting(true)} disabled={!s}>Remettre à 0 F</button>
         <button className="btn" onClick={() => setAsking(true)} disabled={!s || s.available < s.minWithdrawal}>Faire un retrait</button>
       </PageHead>
       <ErrorBox error={error} onRetry={reload} />
@@ -173,6 +175,9 @@ export default function Finance() {
 
       {asking && s ? <WithdrawalModal available={s.available} min={s.minWithdrawal} onClose={() => setAsking(false)} onDone={() => { toast("Demande de retrait enregistrée."); reload(); }} /> : null}
       {paying ? <PaidModal w={paying} onClose={() => setPaying(null)} onDone={() => { toast("Retrait marqué comme versé."); reload(); }} /> : null}
+      {resetting && s ? <ConfirmModal title="Remettre le portefeuille de l'entreprise à 0 F" danger confirmLabel="Remettre à 0 F" reasonLabel="Motif (facultatif)"
+        message={<>Les gains disponibles (<b>{fcfa(s.available)}</b>) sont soldés par un retrait « Remise à zéro » enregistré dans la liste des retraits, et le solde du portefeuille administrateur repasse à 0 F. Rien n'est effacé de l'historique. Les retraits en attente ne sont pas touchés. <b>Aucun argent n'est versé : fais-le avant si cet argent doit sortir.</b></>}
+        onClose={() => setResetting(false)} onConfirm={(reason) => api.post("/admin/finance/reset", { reason }).then(() => { toast("Portefeuille de l'entreprise remis à 0 F."); return reload(); })} /> : null}
       {cancelling ? <ConfirmModal title="Annuler cette demande" confirmLabel="Annuler la demande" danger message={`Retrait de ${fcfa(cancelling.amount)} vers ${phone(cancelling.phone)} : le montant redevient disponible.`} onClose={() => setCancelling(null)} onConfirm={() => api.post(`/admin/finance/withdrawals/${cancelling.id}/cancel`).then(() => { toast("Demande annulée."); return reload(); })} /> : null}
       {detail ? (
         <Modal title={detail.ref} onClose={() => setDetail(null)}>

@@ -271,6 +271,33 @@ export class FinanceService {
     });
   }
 
+  /**
+   * Remet le portefeuille de l'entreprise à 0 F : les gains disponibles sont soldés par un retrait « remise à zéro » déjà
+   * versé (visible dans la liste, jamais effacé), et le solde du portefeuille administrateur est ramené à zéro par une
+   * écriture. Les retraits encore en attente ne sont pas touchés.
+   */
+  async resetToZero(adminId: string, reason?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT TRUE AS locked FROM (SELECT pg_advisory_xact_lock(hashtext('company-withdrawal'))) AS lock_result`;
+      const [revenue, committed] = await Promise.all([this.revenue(), this.committed()]);
+      const available = Math.max(revenue.total - committed.requested - committed.paid, 0);
+      const note = `Remise à zéro par l'administrateur${reason?.trim() ? ` : ${reason.trim()}` : ""}`;
+      if (available > 0) {
+        await tx.companyWithdrawal.create({
+          data: { amount: available, phone: "Remise à zéro", method: "RESET", note, status: "PAID", reference: "RAZ", requestedById: adminId, decidedById: adminId, paidAt: new Date() },
+        });
+      }
+      const wallets = await tx.wallet.findMany({ where: { user: { role: "ADMIN" }, balance: { not: 0 } }, select: { id: true, balance: true } });
+      for (const w of wallets) {
+        await tx.transaction.create({
+          data: { walletId: w.id, type: w.balance > 0 ? "DEBIT" : "CREDIT", amount: Math.abs(w.balance), label: "Portefeuille de l'entreprise remis à zéro", meta: `Par ${adminId}${reason?.trim() ? ` : ${reason.trim()}` : ""}` },
+        });
+        await tx.wallet.update({ where: { id: w.id }, data: { balance: 0 } });
+      }
+      return { before: available, walletsReset: wallets.length };
+    });
+  }
+
   /** L'argent a été versé sur le compte Mobile Money : on garde la référence de l'opération. */
   async markPaid(adminId: string, id: string, reference?: string) {
     const withdrawal = await this.prisma.companyWithdrawal.findUnique({ where: { id } });

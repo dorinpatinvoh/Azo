@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "../api";
 import { Badge, Empty, ErrorBox, PageHead, Spinner, Stat, useLoad } from "../ui";
 import { EVENT_LABEL, TYPE_LABEL, dateTime, fcfa } from "../format";
@@ -15,9 +15,20 @@ export default function Dashboard() {
     return { stats, providers, finance, audit };
   });
 
+  // Mise à jour automatique toutes les 20 s tant que l'onglet est visible (et dès qu'on y revient)
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  useEffect(() => { if (data) setUpdatedAt(new Date()); }, [data]);
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === "visible") reload(); };
+    const id = setInterval(tick, 20000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", tick); };
+  }, [reload]);
+
   return (
     <>
       <PageHead title="Tableau de bord" subtitle="Vue d'ensemble de l'activité AZƆ̀">
+        {updatedAt ? <span className="muted small">Mis à jour à {updatedAt.toLocaleTimeString("fr-FR")} · automatique</span> : null}
         <button className="btn ghost sm" onClick={reload}>Actualiser</button>
       </PageHead>
       <ErrorBox error={error} onRetry={reload} />

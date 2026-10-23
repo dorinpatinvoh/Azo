@@ -386,6 +386,12 @@ export class AdminController {
     return this.finance.requestWithdrawal(u.userId, dto);
   }
 
+  // POST /admin/finance/reset {reason?} — remet le portefeuille de l'entreprise à 0 F (retrait « remise à zéro » + écriture conservés)
+  @Post("finance/reset")
+  resetCompany(@CurrentUser() u, @Body() dto: { reason?: string }) {
+    return this.finance.resetToZero(u.userId, typeof dto?.reason === "string" ? dto.reason.slice(0, 200) : undefined);
+  }
+
   // POST /admin/finance/withdrawals/:id/paid { reference? } — l'argent a été versé
   @Post("finance/withdrawals/:id/paid")
   markWithdrawalPaid(@CurrentUser() u, @Param("id") id: string, @Body() dto: MarkPaidDto) {
