@@ -35,7 +35,7 @@ export default function Users() {
 
   return (
     <>
-      <PageHead title="Utilisateurs" subtitle="Rechercher un compte, le bloquer, supprimer un client, remettre ses notes à zéro, consulter son NPI">
+      <PageHead title="Utilisateurs" subtitle="Rechercher un compte, le bloquer, le supprimer, remettre ses notes à zéro, consulter son NPI">
         <button className="btn ghost sm" onClick={reload}>Actualiser</button>
       </PageHead>
       <div className="toolbar">

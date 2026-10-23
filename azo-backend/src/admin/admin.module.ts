@@ -142,6 +142,8 @@ export class AdminService {
     const search = q?.trim();
     return this.prisma.user.findMany({
       where: {
+        // Les comptes déjà supprimés (anonymisés, numéro « supprime-… ») ne sont plus listés
+        NOT: { phone: { startsWith: "supprime-" } },
         ...(role && Object.values(Role).includes(role as Role) ? { role: role as Role } : {}),
         ...(search
           ? {
