@@ -1,0 +1,32 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 23 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">23 octobre 2026 · migration <code>20261023120000_delivery_recipient_phone</code> · commit <code>f89f09c5</code></span></div>
+
+<h2>1. En résumé</h2>
+<p>Trois changements : le <b>numéro du destinataire</b> est obligatoire pour une livraison et le <b>code de remise n'est plus visible du coursier</b> ; le <b>kilométrage démarre dès le départ</b> ; la <b>suppression de compte par l'administrateur</b> couvre tous les profils.</p>
+<div class="box warn"><b>Déploiement :</b> une migration, <code>20261023120000_delivery_recipient_phone</code> (colonne <code>Delivery.recipientPhone</code>), appliquée par <code>render:start</code>. Déployer le serveur <b>avant</b> la nouvelle application.</div>
+
+<h2>2. Numéro du destinataire et code de remise</h2>
+<ul>
+<li>Une commande de livraison exige le numéro du destinataire (format Bénin validé, enregistré en +229). Le champ est vide à chaque commande : rien n'est repris d'une livraison précédente.</li>
+<li>Si ce numéro a un compte AZƆ̀, le destinataire reçoit son <b>code de remise en notification</b> (<code>NOTIFICATION_DELIVERY_RECIPIENT_CODE</code>, 4 langues). Sans compte, ou si c'est l'expéditeur, c'est le client qui transmet le code.</li>
+<li><code>forCourier()</code> masque toujours le code de remise (et le code de ramassage quand les SMS sont en service) et masque le numéro du destinataire. Le client voit ses deux codes et le numéro.</li>
+</ul>
+
+<h2>3. Kilométrage : départ</h2>
+<ul>
+<li>Le compteur est ancré sur la dernière position connue (moins de 60 s) au démarrage de la course (<code>start</code>) et au ramassage d'une livraison (<code>confirmPickup</code>) : le début du trajet n'est plus perdu ou compté trop tard.</li>
+</ul>
+
+<h2>4. Suppression de compte par l'administrateur</h2>
+<ul>
+<li>Tous les profils peuvent être supprimés : client, commercial, prestataire, agence, administrateur (y compris <code>0197000000</code>).</li>
+<li>Si l'effacement définitif d'un compte sans historique échoue à cause d'une donnée liée (clé étrangère), le compte est <b>anonymisé</b> au lieu de renvoyer une erreur.</li>
+<li>Garde-fous conservés : son propre compte, le dernier administrateur actif, une course ou livraison en cours, un portefeuille non nul (« Solder et supprimer »).</li>
+</ul>
+
+<h2>5. Vérifications</h2>
+<ul>
+<li>Tests : nouvelle suite <code>delivery-recipient</code> (numéro invalide refusé, numéro propre à chaque commande, notification au destinataire, code masqué au coursier) ; suites kilométrage, coursier personnel et arrivée adaptées ; suppression d'utilisateur verte. <code>tsc</code> sans erreur.</li>
+<li><b>Non vérifié</b> : parcours complet sur téléphone, suppression réelle d'un compte avec données liées.</li>
+</ul>
+</body></html>
