@@ -85,7 +85,7 @@ export default function Users() {
                         <button className="btn ghost sm" onClick={() => setAction({ kind: "ratings", user: u })}>Notes à zéro</button>
                         <button className="btn ghost sm" onClick={() => setAction({ kind: "npi", user: u })}>NPI</button>
                         {!u.phone.startsWith("supprime-") ? (
-                          <button className="btn danger sm" onClick={() => setAction({ kind: "delete", user: u })}>Supprimer</button>
+                          <button className="btn danger sm" onClick={() => setAction({ kind: "delete", user: u })}>Supprimer définitivement</button>
                         ) : null}
                       </div>
                     </td>
@@ -106,7 +106,7 @@ export default function Users() {
           onConfirm={() => api.post(`/admin/users/${action.user.id}/status`, { status: "ACTIVE" }).then(() => { toast("Compte débloqué."); return reload(); })} />
       ) : null}
       {action && action.kind === "delete" ? (
-        <ConfirmModal title={`Supprimer ${action.user.fullName ?? phone(action.user.phone)}`} danger confirmLabel={(action.user.wallet?.balance ?? 0) !== 0 ? "Solder et supprimer" : "Supprimer le compte"}
+        <ConfirmModal title={`Supprimer ${action.user.fullName ?? phone(action.user.phone)}`} danger confirmLabel={(action.user.wallet?.balance ?? 0) !== 0 ? "Solder et supprimer définitivement" : "Supprimer définitivement"}
           message={<>{(action.user.wallet?.balance ?? 0) !== 0 ? <><b>Son portefeuille contient {fcfa(action.user.wallet?.balance)} : en confirmant, ce solde est remis à zéro (écriture conservée dans l'historique). Rembourse-le-lui avant si cet argent lui appartient.</b><br /><br /></> : null}Le compte de <b>{phone(action.user.phone)}</b> sera supprimé. S'il a déjà des courses, des livraisons ou des mouvements d'argent, ils sont conservés pour la comptabilité mais son nom, son numéro et son NPI sont effacés. Si c'est un commercial, son code disparaît et les prestataires qu'il a recrutés restent sans commercial. Si c'est un prestataire ou une agence, son dossier et ses pièces sont effacés (ses conducteurs restent rattachés à l'agence). Si c'est un administrateur, il perd tous ses droits : le dernier administrateur ne peut pas être supprimé. Cette action est définitive. Aucune course ne doit être en cours.</>}
           onClose={() => setAction(null)}
           onConfirm={() => api.delete<{ mode: "deleted" | "anonymized" }>(`/admin/users/${action.user.id}${(action.user.wallet?.balance ?? 0) !== 0 ? "?settle=1" : ""}`).then((r) => { toast(r.mode === "deleted" ? "Compte supprimé." : "Compte supprimé (historique conservé, données personnelles effacées)."); return reload(); })} />
