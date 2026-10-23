@@ -32,11 +32,36 @@ export default function Dashboard() {
           </div>
 
           <div className="grid g4">
-            <Stat value={data.stats.users.toLocaleString("fr-FR")} label="Comptes" />
+            <Stat hero value={data.stats.inProgress} label="En cours en ce moment" />
+            <Stat value={`${data.stats.today.rides + data.stats.today.deliveries}`} label={`Aujourd'hui : ${data.stats.today.rides} course(s), ${data.stats.today.deliveries} livraison(s)`} />
+            <Stat value={fcfa(data.stats.today.volume)} label="Volume terminé aujourd'hui" />
+            <Stat value={fcfa(data.stats.volumeTotal)} label="Volume total terminé" />
+          </div>
+
+          <div className="grid g4">
+            <Stat value={data.stats.users.toLocaleString("fr-FR")} label={`Comptes (${data.stats.clients.toLocaleString("fr-FR")} clients) · +${data.stats.newUsers7d} en 7 jours`} />
             <Stat value={`${data.stats.completedRides} / ${data.stats.rides}`} label="Courses terminées / demandées" />
             <Stat value={`${data.stats.completedDeliveries} / ${data.stats.deliveries}`} label="Livraisons terminées / demandées" />
-            <Stat value={data.stats.agencies} label="Agences" />
+            <Stat value={data.stats.averageRating != null ? `${data.stats.averageRating.toLocaleString("fr-FR")} / 5` : "—"} label={`Note moyenne des courses · ${data.stats.agencies} agence(s)`} />
           </div>
+
+          <div className="card">
+            <div className="row between">
+              <h2>7 derniers jours</h2>
+              <span className="muted small">courses + livraisons demandées par jour</span>
+            </div>
+            <WeekBars week={data.stats.week} />
+          </div>
+
+          {data.stats.providerWithdrawalsPending.count > 0 ? (
+            <div className="card">
+              <div className="row between">
+                <h2>Retraits de prestataires à payer</h2>
+                <a href="#/retraits">Ouvrir</a>
+              </div>
+              <p style={{ margin: "8px 0 0" }}><b>{data.stats.providerWithdrawalsPending.count}</b> demande(s) pour <b>{fcfa(data.stats.providerWithdrawalsPending.amount)}</b></p>
+            </div>
+          ) : null}
 
           <div className="grid g2">
             <div className="card">
@@ -82,6 +107,25 @@ export default function Dashboard() {
         </div>
       ) : null}
     </>
+  );
+}
+
+function WeekBars({ week }: { week: { day: string; rides: number; deliveries: number; volume: number }[] }) {
+  const max = Math.max(1, ...week.map((w) => w.rides + w.deliveries));
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "flex-end", height: 130, marginTop: 14 }}>
+      {week.map((w) => {
+        const n = w.rides + w.deliveries;
+        const label = new Date(w.day + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+        return (
+          <div key={w.day} style={{ flex: 1, textAlign: "center", minWidth: 0 }} title={`${w.rides} course(s), ${w.deliveries} livraison(s), ${fcfa(w.volume)} terminés`}>
+            <div className="small">{n}</div>
+            <div style={{ height: Math.max(3, (n / max) * 80), background: "var(--p)", borderRadius: 6, opacity: n ? 1 : 0.25 }} />
+            <div className="muted small" style={{ marginTop: 4 }}>{label}</div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

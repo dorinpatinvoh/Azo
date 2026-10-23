@@ -118,6 +118,14 @@ export type GlobalStats = {
   providersPending: number;
   providersApproved: number;
   blockedUsers: number;
+  clients: number;
+  newUsers7d: number;
+  today: { rides: number; deliveries: number; volume: number };
+  inProgress: number;
+  volumeTotal: number;
+  week: { day: string; rides: number; deliveries: number; volume: number }[];
+  providerWithdrawalsPending: { count: number; amount: number };
+  averageRating: number | null;
 };
 
 export type UserRow = {
