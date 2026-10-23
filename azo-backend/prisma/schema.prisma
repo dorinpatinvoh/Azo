@@ -769,3 +769,10 @@ model CompanyWithdrawal {
 
   @@index([status])
 }
+
+/// Réglages simples clé/valeur (date de départ des chiffres d'argent, etc.)
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @default(now()) @updatedAt
+}

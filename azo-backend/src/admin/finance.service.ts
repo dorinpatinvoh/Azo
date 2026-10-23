@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { MONEY_BASELINE_KEY, moneyBaseline } from "./money-baseline";
 import { PrismaService } from "../prisma/prisma.service";
 import { normalizeBeninPhone } from "../common/phone";
 import { PricingService } from "../pricing/pricing.module";
@@ -171,21 +172,22 @@ export class FinanceService {
 
   /** Gains par source et par mois. */
   async revenue(now: Date = new Date()) {
+    const from = (await moneyBaseline(this.prisma)) ?? new Date(0);
     const [rides, deliveries, activations, withdrawalFees, spiderShare] = await Promise.all([
       this.monthly(
-        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM("commission"), 0) AS total FROM "Ride" WHERE "status" = 'COMPLETED' GROUP BY 1`
+        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM("commission"), 0) AS total FROM "Ride" WHERE "status" = 'COMPLETED' AND "createdAt" >= ${from} GROUP BY 1`
       ),
       this.monthly(
-        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM(ROUND("price" * 0.15)), 0) AS total FROM "Delivery" WHERE "status" = 'COMPLETED' GROUP BY 1`
+        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM(ROUND("price" * 0.15)), 0) AS total FROM "Delivery" WHERE "status" = 'COMPLETED' AND "createdAt" >= ${from} GROUP BY 1`
       ),
       this.monthly(
-        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM("amount"), 0) AS total FROM "Transaction" WHERE "type" = 'DEBIT' AND "label" LIKE 'Activation agence %' GROUP BY 1`
+        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM("amount"), 0) AS total FROM "Transaction" WHERE "type" = 'DEBIT' AND "label" LIKE 'Activation agence %' AND "createdAt" >= ${from} GROUP BY 1`
       ),
       this.monthly(
-        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM(COALESCE(("labelParams"->>'fee')::int, 0)), 0) AS total FROM "Transaction" WHERE "labelKey" = 'TRANSACTION_WITHDRAWAL' GROUP BY 1`
+        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM(COALESCE(("labelParams"->>'fee')::int, 0)), 0) AS total FROM "Transaction" WHERE "labelKey" = 'TRANSACTION_WITHDRAWAL' AND "createdAt" >= ${from} GROUP BY 1`
       ),
       this.monthly(
-        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM("amount"), 0) AS total FROM "Transaction" WHERE "type" = 'DEBIT' AND "label" IN (${SPIDER_MONTHLY_LABELS[0]}, ${SPIDER_MONTHLY_LABELS[1]}) GROUP BY 1`
+        this.prisma.$queryRaw<MonthlyRow[]>`SELECT date_trunc('month', "createdAt") AS m, COALESCE(SUM("amount"), 0) AS total FROM "Transaction" WHERE "type" = 'DEBIT' AND "label" IN (${SPIDER_MONTHLY_LABELS[0]}, ${SPIDER_MONTHLY_LABELS[1]}) AND "createdAt" >= ${from} GROUP BY 1`
       ),
     ]);
 
@@ -220,9 +222,10 @@ export class FinanceService {
 
   /** Retraits déjà demandés ou versés (un retrait annulé n'est pas compté). */
   private async committed(): Promise<{ requested: number; paid: number }> {
+    const from = (await moneyBaseline(this.prisma)) ?? new Date(0);
     const grouped = await this.prisma.companyWithdrawal.groupBy({
       by: ["status"],
-      where: { status: { in: ["REQUESTED", "PAID"] } },
+      where: { status: { in: ["REQUESTED", "PAID"] }, createdAt: { gte: from } },
       _sum: { amount: true },
     });
     const get = (status: string) => grouped.find((g) => g.status === status)?._sum.amount ?? 0;
@@ -272,21 +275,15 @@ export class FinanceService {
   }
 
   /**
-   * Remet le portefeuille de l'entreprise à 0 F : les gains disponibles sont soldés par un retrait « remise à zéro » déjà
-   * versé (visible dans la liste, jamais effacé), et le solde du portefeuille administrateur est ramené à zéro par une
-   * écriture. Les retraits encore en attente ne sont pas touchés.
+   * Remet les chiffres d'argent de l'entreprise à 0 F : une date de départ est enregistrée (gains, volumes, retraits comptent
+   * à partir de maintenant) et le solde du portefeuille administrateur est ramené à zéro par une écriture. Rien n'est effacé :
+   * courses, livraisons, écritures et retraits restent en base.
    */
   async resetToZero(adminId: string, reason?: string) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT TRUE AS locked FROM (SELECT pg_advisory_xact_lock(hashtext('company-withdrawal'))) AS lock_result`;
       const [revenue, committed] = await Promise.all([this.revenue(), this.committed()]);
       const available = Math.max(revenue.total - committed.requested - committed.paid, 0);
-      const note = `Remise à zéro par l'administrateur${reason?.trim() ? ` : ${reason.trim()}` : ""}`;
-      if (available > 0) {
-        await tx.companyWithdrawal.create({
-          data: { amount: available, phone: "Remise à zéro", method: "RESET", note, status: "PAID", reference: "RAZ", requestedById: adminId, decidedById: adminId, paidAt: new Date() },
-        });
-      }
       const wallets = await tx.wallet.findMany({ where: { user: { role: "ADMIN" }, balance: { not: 0 } }, select: { id: true, balance: true } });
       for (const w of wallets) {
         await tx.transaction.create({
@@ -294,6 +291,8 @@ export class FinanceService {
         });
         await tx.wallet.update({ where: { id: w.id }, data: { balance: 0 } });
       }
+      // La date de départ est posée en dernier : l'écriture ci-dessus est antérieure, donc exclue des nouveaux chiffres
+      await tx.appSetting.upsert({ where: { key: MONEY_BASELINE_KEY }, create: { key: MONEY_BASELINE_KEY, value: new Date(Date.now() + 1).toISOString() }, update: { value: new Date(Date.now() + 1).toISOString() } });
       return { before: available, walletsReset: wallets.length };
     });
   }

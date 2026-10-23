@@ -25,6 +25,7 @@ import { UsersModule } from "../users/users.module";
 import { NpiCryptoService } from "../common/npi-crypto.service";
 import { FinanceService, MIN_COMPANY_WITHDRAWAL } from "./finance.service";
 import { deleteClientAccount } from "./client-deletion";
+import { moneyBaseline } from "./money-baseline";
 
 class ProviderWithdrawalPaidDto {
   @IsOptional() @IsString() @MaxLength(60) reference?: string;
@@ -115,9 +116,9 @@ export class AdminService {
     ] = await Promise.all([
       this.prisma.user.count({ where: { NOT: { phone: { startsWith: "supprime-" } } } }),
       this.prisma.ride.count(),
-      this.prisma.ride.findMany({ where: { status: "COMPLETED" }, select: { commission: true, price: true } }),
+      this.prisma.ride.findMany({ where: { status: "COMPLETED" }, select: { commission: true, price: true, createdAt: true } }),
       this.prisma.delivery.count(),
-      this.prisma.delivery.findMany({ where: { status: "COMPLETED" }, select: { price: true } }),
+      this.prisma.delivery.findMany({ where: { status: "COMPLETED" }, select: { price: true, createdAt: true } }),
       this.prisma.agency.count(),
       this.prisma.providerProfile.count({
         where: { status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEED_INFO"] } },
@@ -152,13 +153,17 @@ export class AdminService {
         day: new Date(from + 3600000).toISOString().slice(0, 10),
         rides: rs.length,
         deliveries: ds.length,
-        volume: [...rs, ...ds].filter((x) => x.status === "COMPLETED").reduce((a, x) => a + x.price, 0),
+        volume: [...rs, ...ds].filter((x) => x.status === "COMPLETED" && x.createdAt >= moneyFrom).reduce((a, x) => a + x.price, 0),
       };
     });
     const today = week[6];
 
-    const rideCommissions = completedRides.reduce((s, r) => s + r.commission, 0);
-    const deliveryCommissions = completedDeliveries.reduce((s, d) => s + Math.round(d.price * 0.15), 0);
+    // Chiffres d'argent : comptés à partir de la dernière remise à zéro (les compteurs de courses restent complets)
+    const moneyFrom = (await moneyBaseline(this.prisma)) ?? new Date(0);
+    const countedRides = completedRides.filter((r) => r.createdAt >= moneyFrom);
+    const countedDeliveries = completedDeliveries.filter((d) => d.createdAt >= moneyFrom);
+    const rideCommissions = countedRides.reduce((s, r) => s + r.commission, 0);
+    const deliveryCommissions = countedDeliveries.reduce((s, d) => s + Math.round(d.price * 0.15), 0);
 
     return {
       users,
@@ -175,7 +180,7 @@ export class AdminService {
       newUsers7d,
       today: { rides: today.rides, deliveries: today.deliveries, volume: today.volume },
       inProgress: openRides + openDeliveries,
-      volumeTotal: completedRides.reduce((a, r) => a + r.price, 0) + completedDeliveries.reduce((a, d) => a + d.price, 0),
+      volumeTotal: countedRides.reduce((a, r) => a + r.price, 0) + countedDeliveries.reduce((a, d) => a + d.price, 0),
       week,
       providerWithdrawalsPending: { count: withdrawalsPending._count, amount: withdrawalsPending._sum.amount ?? 0 },
       averageRating: ratingAgg._count.rating > 0 ? Math.round((ratingAgg._avg.rating ?? 0) * 10) / 10 : null,
