@@ -117,6 +117,28 @@ describe("sécurisation de l'arrivée et du démarrage d'une course", () => {
     expect(result).not.toHaveProperty("pickupCode");
   });
 
+  it("le compteur de kilomètres part de la position du chauffeur au départ (si elle est récente)", async () => {
+    const fresh = makeService("ARRIVED");
+    (fresh.ride as any).driverLat = 6.37;
+    (fresh.ride as any).driverLng = 2.39;
+    (fresh.ride as any).driverLocatedAt = new Date(Date.now() - 5_000);
+    await fresh.service.start(rideId, driverId, pickupCode);
+    const data = fresh.prisma.ride.updateMany.mock.calls[0][0].data;
+    expect(data).toMatchObject({ odoLat: 6.37, odoLng: 2.39 });
+    expect(data.odoAt).toBeInstanceOf(Date);
+
+    const stale = makeService("ARRIVED");
+    (stale.ride as any).driverLat = 6.37;
+    (stale.ride as any).driverLng = 2.39;
+    (stale.ride as any).driverLocatedAt = new Date(Date.now() - 10 * 60_000);
+    await stale.service.start(rideId, driverId, pickupCode);
+    expect(stale.prisma.ride.updateMany.mock.calls[0][0].data).not.toHaveProperty("odoLat");
+
+    const unknown = makeService("ARRIVED");
+    await unknown.service.start(rideId, driverId, pickupCode);
+    expect(unknown.prisma.ride.updateMany.mock.calls[0][0].data).not.toHaveProperty("odoLat");
+  });
+
   it("notifie le client à l'arrivée et n'expose pas son code au chauffeur", async () => {
     const { service, prisma, notifications, gateway } = makeService("MATCHED");
     prisma.ride.findUniqueOrThrow.mockResolvedValue({ ...makeService("ARRIVED").ride, status: "ARRIVED" });

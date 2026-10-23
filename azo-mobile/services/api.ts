@@ -704,6 +704,8 @@ export type Delivery = {
   pickupAddress: string;
   dropAddress: string;
   payer: "SENDER" | "RECIPIENT";
+  /** Livraison express : numéro du destinataire (masqué pour le coursier). */
+  recipientPhone?: string | null;
   price: number;
   commission?: number;
   /** Commission téléphone prélevée en plus (prestataire dont le téléphone a été fourni par une boutique partenaire). */
@@ -782,6 +784,8 @@ export const deliveryApi = {
     pickupLng?: number;
     dropLat?: number;
     dropLng?: number;
+    /** Livraison express : numéro du destinataire (obligatoire), il reçoit le code de remise. */
+    recipientPhone?: string;
   }) => api.post<Delivery>(`${P}/deliveries`, body),
   mine: () => api.get<Delivery[]>(`${P}/deliveries`),
   /** Prix exact d'un colis, calculé par le serveur sur la distance de l'itinéraire. */

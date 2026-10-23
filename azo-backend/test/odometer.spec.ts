@@ -198,3 +198,31 @@ describe("odometerStep en mode strict (coursier personnel, livreur express)", ()
     expect(total).toBeLessThan(1_060);
   });
 });
+
+describe("point de départ du compteur au démarrage de la course", () => {
+  const { startAnchor, START_ANCHOR_MAX_AGE_MS } = require("../src/rides/odometer");
+  const now = new Date("2026-10-23T10:00:00Z");
+
+  it("part de la dernière position connue du chauffeur si elle est récente", () => {
+    const anchor = startAnchor({ lat: 6.37, lng: 2.39, at: new Date(now.getTime() - 5_000) }, now);
+    expect(anchor).toEqual({ odoLat: 6.37, odoLng: 2.39, odoAt: now });
+  });
+
+  it("ignore une position absente, invalide ou trop ancienne (le premier relevé après le départ servira de point de départ)", () => {
+    expect(startAnchor(null, now)).toBeNull();
+    expect(startAnchor({ lat: null, lng: 2.39, at: now }, now)).toBeNull();
+    expect(startAnchor({ lat: 6.37, lng: 2.39, at: null }, now)).toBeNull();
+    expect(startAnchor({ lat: Number.NaN, lng: 2.39, at: now }, now)).toBeNull();
+    expect(startAnchor({ lat: 6.37, lng: 2.39, at: new Date(now.getTime() - START_ANCHOR_MAX_AGE_MS - 1) }, now)).toBeNull();
+  });
+
+  it("avec ce point de départ, le tout premier déplacement est compté dès le premier relevé après le départ", () => {
+    const anchor = { ...pointAtMeters(0, 1_000), at: 1_000 };
+    // moto qui démarre : 20 m en 1,5 s à 8 m/s
+    const first = odometerStep(anchor, pointAtMeters(20, 2_500), 8, 8, { strict: true });
+    expect(first?.accepted).toBe(true);
+    expect(first?.meters).toBeCloseTo(20, 0);
+    // course simple (mode normal) : même résultat
+    expect(odometerStep(anchor, pointAtMeters(20, 2_500), 8, 8)?.meters).toBeCloseTo(20, 0);
+  });
+});

@@ -428,6 +428,8 @@ model Delivery {
   odoCred       Float    @default(0)
   // Coursier personnel : le coursier a signalé son arrivée chez le client (« Je suis arrivé ») ; le départ n'est possible qu'ensuite
   courierArrivedAt DateTime?
+  /// Livraison express : numéro du destinataire (obligatoire à la commande, forme +229 01…). Son code de remise lui est envoyé dans l'application s'il a un compte AZƆ̀.
+  recipientPhone String?
   /// Commission téléphone prélevée sur cette livraison (coursier ou livreur dont le téléphone a été fourni par une boutique partenaire)
   phoneCommission Int @default(0)
 }

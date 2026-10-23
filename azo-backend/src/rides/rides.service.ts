@@ -16,7 +16,7 @@ import { PricingService } from "../pricing/pricing.module";
 import { RidesGateway } from "./rides.gateway";
 import { CreateRideDto } from "./dto/create-ride.dto";
 import { LatLng, buildRadar, haversineKm, isRideExpired, rideAgeMinutes } from "./radar";
-import { haversineMeters } from "./odometer";
+import { haversineMeters, startAnchor } from "./odometer";
 import { buildDisplayName, buildDriverDisplayName } from "./display-name";
 import { maskPlate } from "./plate";
 import { assertClientAllowed, assertDriverAllowed } from "./standing";
@@ -1173,6 +1173,8 @@ export class RidesService {
         clientLat: null,
         clientLng: null,
         clientLocatedAt: null,
+        // Le compteur de kilomètres part tout de suite de la position du chauffeur au départ (au lieu d'attendre un premier relevé valide)
+        ...(startAnchor({ lat: ride.driverLat, lng: ride.driverLng, at: ride.driverLocatedAt }) ?? {}),
       },
     });
     if (count === 0) throw new BadRequestException("Le statut de la course a changé. Actualise l'écran.");

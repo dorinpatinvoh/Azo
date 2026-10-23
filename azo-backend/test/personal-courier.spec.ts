@@ -45,7 +45,7 @@ describe("Réservation d'un coursier personnel", () => {
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: "d1", ...data })),
       },
-      user: { findMany: jest.fn().mockResolvedValue([]) },
+      user: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null) },
       ...over,
     };
     const wallet: any = { getWallet: jest.fn().mockResolvedValue({ balance: 50000 }) };
@@ -180,7 +180,7 @@ describe("Réservation d'un coursier personnel", () => {
   it("colis : prix serveur = base du colis + km × tarif du Speeder (moto 70/km, tricycle 225 + 80/km)", async () => {
     const { service, prisma } = make();
     jest.spyOn(service as any, "routeKm").mockResolvedValue(10);
-    const dto = { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER", price: 200, pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
+    const dto = { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER", recipientPhone: "0197000042", price: 200, pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
     await service.create("c1", { ...dto, vehicleType: "ZEM_ESSENCE" });
     expect(prisma.delivery.create.mock.calls[0][0].data.price).toBe(820); // petit colis : 120 + 10 × 70
     await service.create("c1", { ...dto, packageType: "large", vehicleType: "ZEM_TRICYCLE" });
@@ -189,7 +189,7 @@ describe("Réservation d'un coursier personnel", () => {
 
   it("colis : une voiture ne livre pas, et les coordonnées sont obligatoires", async () => {
     const { service } = make();
-    const dto = { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
+    const dto = { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER", recipientPhone: "0197000042", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
     await expect(service.create("c1", { ...dto, vehicleType: "GAZELLE" })).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.create("c1", { packageType: "small", pickupAddress: "A", dropAddress: "B", payer: "SENDER" } as any)).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -209,7 +209,7 @@ describe("Réservation d'un coursier personnel", () => {
   it("gros colis : réservé au tricycle", async () => {
     const { service } = make();
     jest.spyOn(service as any, "routeKm").mockResolvedValue(2);
-    const dto = { packageType: "large", pickupAddress: "A", dropAddress: "B", payer: "SENDER", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
+    const dto = { packageType: "large", pickupAddress: "A", dropAddress: "B", payer: "SENDER", recipientPhone: "0197000042", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
     await expect(service.create("c1", { ...dto, vehicleType: "ZEM_ESSENCE" })).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.create("c1", { ...dto, vehicleType: "ZEM_TRICYCLE" })).resolves.toBeDefined();
   });
@@ -222,7 +222,7 @@ describe("Réservation d'un coursier personnel", () => {
     for (const packageType of ["doc", "small", "medium"]) {
       await expect(service.quote("ZEM_TRICYCLE", packageType, a, b)).rejects.toBeInstanceOf(BadRequestException);
     }
-    const dto = { packageType: "medium", pickupAddress: "A", dropAddress: "B", payer: "SENDER", vehicleType: "ZEM_TRICYCLE", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
+    const dto = { packageType: "medium", pickupAddress: "A", dropAddress: "B", payer: "SENDER", recipientPhone: "0197000042", vehicleType: "ZEM_TRICYCLE", pickupLat: 6.37, pickupLng: 2.39, dropLat: 6.4, dropLng: 2.4 } as any;
     await expect(service.create("c1", dto)).rejects.toThrow(/réservé aux gros colis/);
     await expect(service.quote("ZEM_TRICYCLE", "large", a, b)).resolves.toEqual({ km: 1, price: 305 });
   });
@@ -371,6 +371,15 @@ describe("Réservation d'un coursier personnel", () => {
       await expect(arrived.service.confirmPickup("k1", "d1", "0000")).rejects.toThrow(/invalide/);
       await arrived.service.confirmPickup("k1", "d1", "1234");
       expect(arrived.prisma.delivery.update.mock.calls[0][0].data.status).toBe("IN_PROGRESS");
+    });
+
+    it("le compteur de kilomètres part de la position du coursier au départ (si elle est récente)", async () => {
+      const fresh = withRow({ courierArrivedAt: new Date(), courierLat: 6.37, courierLng: 2.39, courierLocatedAt: new Date(Date.now() - 4_000) });
+      await fresh.service.confirmPickup("k1", "d1", "1234");
+      expect(fresh.prisma.delivery.update.mock.calls[0][0].data).toMatchObject({ status: "IN_PROGRESS", odoLat: 6.37, odoLng: 2.39, odoCred: 0 });
+      const stale = withRow({ courierArrivedAt: new Date(), courierLat: 6.37, courierLng: 2.39, courierLocatedAt: new Date(Date.now() - 10 * 60_000) });
+      await stale.service.confirmPickup("k1", "d1", "1234");
+      expect(stale.prisma.delivery.update.mock.calls[0][0].data).not.toHaveProperty("odoLat");
     });
 
     it("une livraison express n'a pas besoin de signaler d'arrivée", async () => {

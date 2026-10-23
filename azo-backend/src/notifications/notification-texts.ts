@@ -138,6 +138,12 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     es: t("Pago recibido", "Carrera {amount} FCFA · el {pct} % de la carrera (−{commission} F) se paga a la empresa AZƆ̀ · recibes +{driverGain} FCFA."),
     de: t("Zahlung erhalten", "Fahrt {amount} FCFA · {pct} % der Fahrt (−{commission} F) gehen an das Unternehmen AZƆ̀ · du erhältst +{driverGain} FCFA."),
   },
+  NOTIFICATION_DELIVERY_RECIPIENT_CODE: {
+    fr: t("Un colis arrive pour toi 📦", "{sender} t'envoie un colis. Ton code de remise : {code}. Donne-le au livreur seulement quand il te remet le colis."),
+    en: t("A parcel is coming for you 📦", "{sender} is sending you a parcel. Your handover code: {code}. Give it to the courier only when they hand you the parcel."),
+    es: t("Te llega un paquete 📦", "{sender} te envía un paquete. Tu código de entrega: {code}. Dáselo al mensajero solo cuando te entregue el paquete."),
+    de: t("Ein Paket kommt für dich 📦", "{sender} schickt dir ein Paket. Dein Übergabecode: {code}. Gib ihn dem Kurier erst, wenn er dir das Paket übergibt."),
+  },
   NOTIFICATION_DELIVERY_PAID_COURIER_PHONE: {
     fr: t("Paiement reçu", "Mission {amount} FCFA · {pct} % (−{commission} F) pour l'entreprise AZƆ̀ + commission téléphone (−{phoneCommission} F) · tu reçois +{net} FCFA."),
     en: t("Payment received", "Job {amount} FCFA · {pct}% (−{commission} F) to the AZƆ̀ company + phone commission (−{phoneCommission} F) · you receive +{net} FCFA."),

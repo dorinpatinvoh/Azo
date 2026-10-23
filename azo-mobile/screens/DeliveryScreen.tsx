@@ -60,6 +60,10 @@ export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initial
   // Prix exact calculé par le serveur sur la distance de l'itinéraire (base + km × tarif du Speeder)
   const [quote, setQuote] = useState<{ km: number; price: number } | null>(null);
   const [payer, setPayer] = useState<"me" | "recipient">("me");
+  // Numéro du destinataire : saisi pour CHAQUE commande (jamais repris d'une livraison précédente) ; il reçoit le code de remise
+  const [recipientPhone, setRecipientPhone] = useState("");
+  const recipientDigits = recipientPhone.replace(/\D/g, "");
+  const recipientValid = recipientDigits.length === 10 && recipientDigits.startsWith("01");
   const [loading, setLoading] = useState(false);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -120,9 +124,14 @@ export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initial
       BrandAlert.alert("Adresses requises", "Indique l'adresse de ramassage et l'adresse de livraison.");
       return;
     }
+    if (!recipientValid) {
+      BrandAlert.alert("Numéro du destinataire", "Indique le numéro du destinataire (10 chiffres commençant par 01). C'est lui qui reçoit le code de remise.");
+      return;
+    }
     setLoading(true);
     try {
       const d = await deliveryApi.create({
+        recipientPhone: recipientDigits,
         packageType: selectedType,
         pickupAddress: pickup.title,
         dropAddress: drop.title,
@@ -134,9 +143,10 @@ export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initial
         payer: payer === "me" ? "SENDER" : "RECIPIENT",
       });
       await loadMine();
+      setRecipientPhone(""); // la prochaine commande repart d'un champ vide
       BrandAlert.alert(
         "Livreur en recherche 📦",
-        `Code de ramassage (expéditeur) : ${d.pickupCode}\nCode de remise (destinataire) : ${d.deliveryCode}\n\nConserve ces codes : le livreur en aura besoin pour valider chaque étape.`,
+        `Code de ramassage (expéditeur) : ${d.pickupCode}\nCode de remise (destinataire) : ${d.deliveryCode}\n\nLe destinataire reçoit son code dans son application s'il a un compte AZƆ̀ ; sinon transmets-le-lui. Le livreur ne voit pas le code de remise : le destinataire le lui donne à la réception.`,
         [{ text: "OK" }, { text: "Suivre ma commande", onPress: onConfirm }]
       );
     } catch (e) {
@@ -326,6 +336,21 @@ export default function DeliveryScreen({ onBack, onConfirm, initialDrop, initial
             Double sécurité OTP antivol — 1 code au ramassage + 1 code à la remise finale
           </Text>
         </View>
+
+        <Text style={styles.sectionTitle}>Numéro du destinataire *</Text>
+        <TextInput
+          style={styles.recipientInput}
+          value={recipientPhone}
+          onChangeText={(v) => setRecipientPhone(v.replace(/[^\d ]/g, "").slice(0, 14))}
+          placeholder="01 XX XX XX XX"
+          placeholderTextColor={colors.outline}
+          keyboardType="number-pad"
+          maxLength={14}
+          accessibilityLabel="Numéro du destinataire"
+        />
+        <Text style={styles.typeNote}>
+          {recipientPhone !== "" && !recipientValid ? "10 chiffres commençant par 01." : "Le destinataire reçoit le code de remise (dans son application s'il a un compte AZƆ̀). Le livreur ne le voit pas."}
+        </Text>
 
         <Text style={styles.sectionTitle}>Règlement de la course{estimate !== null ? ` (${fcfa(estimate)})` : ""}</Text>
         {quote ? <Text style={styles.typeNote}>Distance : {quote.km.toLocaleString("fr-FR")} km · prix calculé sur l'itinéraire</Text> : null}
@@ -519,6 +544,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   otpTitle: { ...typography.labelSm, color: colors.onPrimaryFixed, flex: 1, fontWeight: "600" },
+  recipientInput: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.surfaceContainer,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    ...typography.bodyMd,
+    color: colors.onSurface,
+  },
   payerRow: { flexDirection: "row", gap: spacing.sm },
   payerChip: {
     flex: 1,

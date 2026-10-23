@@ -19,7 +19,7 @@ import {
 import { IsEnum, IsIn, IsInt, IsISO8601, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 import { Delivery, Payer, Prisma, VehicleType } from "@prisma/client";
 import { haversineKm } from "../rides/radar";
-import { odometerStep } from "../rides/odometer";
+import { odometerStep, startAnchor } from "../rides/odometer";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -27,6 +27,8 @@ import { WalletModule, WalletService } from "../wallet/wallet.module";
 import { NotificationsModule, NotificationsService } from "../notifications/notifications.module";
 import { PricingModule, PricingService } from "../pricing/pricing.module";
 import { RegistrationCompleteGuard } from "../common/guards/registration-complete.guard";
+import { beninPhoneVariants, extractLocalBeninDigits, normalizeBeninPhone } from "../common/phone";
+import { maskPhone } from "../referrals/referral-logic";
 import { RidesGateway } from "../rides/rides.gateway";
 import { RidesModule } from "../rides/rides.module";
 import { COURIER_PROFILE_SELECT, buildPublicCourierProfile } from "./courier-profile";
@@ -51,6 +53,8 @@ class CreateDeliveryDto {
   @IsOptional() @IsLongitude() pickupLng?: number;
   @IsOptional() @IsLatitude() dropLat?: number;
   @IsOptional() @IsLongitude() dropLng?: number;
+  /** Livraison express : numéro du destinataire (obligatoire). Il reçoit le code de remise, pas le coursier. Ignoré pour un coursier personnel. */
+  @IsOptional() @IsString() @MaxLength(20) recipientPhone?: string;
 }
 
 class CourierLocationDto {
@@ -74,6 +78,18 @@ class ConfirmCodeDto {
 const PICKUP_RADIUS_KM = 20;
 
 const code4 = () => Math.floor(1000 + Math.random() * 9000).toString();
+
+/** Numéro du destinataire tel que le coursier peut le voir : partiellement masqué (« 01 •• •• •• 42 »). */
+const maskedRecipient = (phone?: string | null) => (phone ? maskPhone(phone) : null);
+
+/**
+ * Livraison telle que la voit le COURSIER : le code de remise (arrivée) n'est jamais montré — c'est le destinataire qui le lui donne —,
+ * le code de ramassage seulement en simulation (SMS pas encore en service), et le numéro du destinataire est masqué.
+ */
+function forCourier<T extends { pickupCode?: string; deliveryCode?: string; recipientPhone?: string | null }>(d: T): T {
+  const isLiveSms = process.env.SMS_PROVIDER === "live";
+  return { ...d, pickupCode: isLiveSms ? "••••" : d.pickupCode, deliveryCode: "••••", recipientPhone: maskedRecipient(d.recipientPhone) };
+}
 
 @Injectable()
 export class DeliveryService {
@@ -139,8 +155,18 @@ export class DeliveryService {
   }
 
   async create(clientId: string, dto: CreateDeliveryDto) {
-    const { mode, vehicleType, bookingHours, pickupLat, pickupLng, dropLat, dropLng, scheduledAt: scheduledRaw, price: askedPrice, dropAddress: askedDrop, ...base } = dto;
+    const { mode, vehicleType, bookingHours, pickupLat, pickupLng, dropLat, dropLng, scheduledAt: scheduledRaw, price: askedPrice, dropAddress: askedDrop, recipientPhone: askedRecipient, ...base } = dto;
     const personal = mode === "PERSONAL";
+    // Livraison express : le numéro du destinataire est obligatoire (c'est lui qui reçoit le code de remise). Il est saisi pour CETTE
+    // commande : rien n'est repris d'une livraison précédente.
+    let recipientPhone: string | null = null;
+    if (!personal) {
+      const local = extractLocalBeninDigits(askedRecipient ?? "");
+      if (!((local.length === 10 && local.startsWith("01")) || (local.length === 8 && !local.startsWith("01")))) {
+        throw new BadRequestException("Indique le numéro du destinataire : 10 chiffres commençant par 01. C'est lui qui reçoit le code de remise.");
+      }
+      recipientPhone = normalizeBeninPhone(askedRecipient as string);
+    }
     let price = askedPrice ?? 0;
     let dropAddress = askedDrop?.trim() ?? "";
     let extra: Record<string, unknown> = {};
@@ -201,9 +227,27 @@ export class DeliveryService {
       }
     }
     const created = await this.prisma.delivery.create({
-      data: { ...base, dropAddress, pickupLat, pickupLng, dropLat, dropLng, ...(personal ? { payer: "SENDER" as Payer } : {}), ...extra, price, clientId, pickupCode: code4(), deliveryCode: code4() } as Prisma.DeliveryUncheckedCreateInput,
+      data: { ...base, dropAddress, pickupLat, pickupLng, dropLat, dropLng, ...(personal ? { payer: "SENDER" as Payer } : {}), ...extra, price, clientId, recipientPhone, pickupCode: code4(), deliveryCode: code4() } as Prisma.DeliveryUncheckedCreateInput,
       include: { client: { select: { fullName: true, phone: true } } },
     });
+    // Le destinataire a un compte AZƆ̀ : son code de remise lui arrive dans l'application (notification). Sinon l'expéditeur le lui transmet.
+    if (recipientPhone) {
+      const recipient = await this.prisma.user
+        .findFirst({ where: { phone: { in: beninPhoneVariants(recipientPhone) } }, select: { id: true } })
+        .catch(() => null);
+      if (recipient && recipient.id !== clientId) {
+        const sender = created.client?.fullName?.trim() || "Un client AZƆ̀";
+        await this.notifications
+          .push(
+            recipient.id,
+            "Un colis arrive pour toi 📦",
+            `${sender} t'envoie un colis. Ton code de remise : ${created.deliveryCode}. Donne-le au livreur seulement quand il te remet le colis.`,
+            "DELIVERY",
+            { sendPush: true, titleKey: "NOTIFICATION_DELIVERY_RECIPIENT_CODE", params: { sender, code: created.deliveryCode }, data: { event: "delivery-recipient-code", deliveryId: created.id } }
+          )
+          .catch(() => null);
+      }
+    }
     const [enriched] = await this.enrich([created]);
     return enriched;
   }
@@ -285,6 +329,7 @@ export class DeliveryService {
       ...rest,
       pickupCode: "••••",
       deliveryCode: "••••",
+      recipientPhone: maskedRecipient(rest.recipientPhone),
     }));
   }
 
@@ -297,12 +342,7 @@ export class DeliveryService {
       take: 50,
     });
     const enriched = await this.enrich(items);
-    const isLiveSms = process.env.SMS_PROVIDER === "live";
-    return enriched.map(({ pickupCode, deliveryCode, ...rest }) => ({
-      ...rest,
-      pickupCode: isLiveSms ? "••••" : pickupCode,
-      deliveryCode: isLiveSms ? "••••" : deliveryCode,
-    }));
+    return enriched.map((d) => forCourier(d));
   }
 
   // Acceptation atomique d'une mission par un coursier / livreur
@@ -380,7 +420,7 @@ export class DeliveryService {
         include: { client: { select: { fullName: true, phone: true } } },
       });
       const [enrichedOffer] = await this.enrich([offered]);
-      return { ...enrichedOffer, pickupCode: "••••", deliveryCode: "••••" };
+      return { ...enrichedOffer, pickupCode: "••••", deliveryCode: "••••", recipientPhone: maskedRecipient(enrichedOffer.recipientPhone) };
     }
 
     const updated = await this.prisma.delivery.updateMany({
@@ -407,10 +447,7 @@ export class DeliveryService {
     );
 
     const [enriched] = await this.enrich([fresh]);
-    const isLiveSms = process.env.SMS_PROVIDER === "live";
-    return isLiveSms
-      ? { ...enriched, pickupCode: "••••", deliveryCode: "••••" }
-      : enriched;
+    return forCourier(enriched);
   }
 
   /* ------------------------------------------------------------------------------------------------------------------ */
@@ -750,7 +787,8 @@ export class DeliveryService {
 
     const updated = await this.prisma.delivery.update({
       where: { id },
-      data: { status: "IN_PROGRESS", courierId: d.courierId ?? userId },
+      // Le compteur de kilomètres part tout de suite de la position du coursier au départ (au lieu d'attendre un premier relevé valide)
+      data: { status: "IN_PROGRESS", courierId: d.courierId ?? userId, odoCred: 0, ...(startAnchor({ lat: d.courierLat, lng: d.courierLng, at: d.courierLocatedAt }) ?? {}) },
       include: { client: { select: { fullName: true, phone: true } } },
     });
 
@@ -765,10 +803,7 @@ export class DeliveryService {
     );
 
     const [enriched] = await this.enrich([updated]);
-    const isLiveSms = process.env.SMS_PROVIDER === "live";
-    return userId === d.clientId || !isLiveSms
-      ? enriched
-      : { ...enriched, pickupCode: "••••", deliveryCode: "••••" };
+    return userId === d.clientId ? enriched : forCourier(enriched);
   }
 
   // Étape 2 : le coursier saisit le code de remise à 4 chiffres du destinataire -> paiement
@@ -906,7 +941,7 @@ export class DeliveryService {
       await this.withdrawOffer(id, userId);
       const back = await this.prisma.delivery.findUniqueOrThrow({ where: { id }, include: { client: { select: { fullName: true, phone: true } } } });
       const [enrichedBack] = await this.enrich([back]);
-      return { ...enrichedBack, pickupCode: "••••", deliveryCode: "••••" };
+      return { ...enrichedBack, pickupCode: "••••", deliveryCode: "••••", recipientPhone: maskedRecipient(enrichedBack.recipientPhone) };
     }
 
     if (d.courierId === userId) {

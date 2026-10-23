@@ -35,6 +35,22 @@ const STATIONARY_SPEED_MPS = 0.5;
 /** Durée maximale (s) d'un intervalle compté à partir de la vitesse : au-delà, les données sont trop anciennes. */
 const MAX_SPEED_INTERVAL_S = 5;
 
+/**
+ * Point de départ du compteur au moment où la course démarre : la dernière position connue du chauffeur, si elle est récente. Sans cela,
+ * le compteur attendait une première position valide APRÈS le départ (précision du GPS, délai d'envoi) avant de pouvoir mesurer, et
+ * démarrait en retard. Renvoie `null` si la position est inconnue ou trop ancienne : le premier relevé après le départ servira alors de point de départ.
+ */
+export const START_ANCHOR_MAX_AGE_MS = 60_000;
+export function startAnchor(
+  location: { lat?: number | null; lng?: number | null; at?: Date | null } | null | undefined,
+  now: Date = new Date()
+): { odoLat: number; odoLng: number; odoAt: Date } | null {
+  if (!location || typeof location.lat !== "number" || typeof location.lng !== "number" || !location.at) return null;
+  if (!Number.isFinite(location.lat) || !Number.isFinite(location.lng)) return null;
+  if (now.getTime() - location.at.getTime() > START_ANCHOR_MAX_AGE_MS) return null;
+  return { odoLat: location.lat, odoLng: location.lng, odoAt: now };
+}
+
 /** Mode strict (coursier personnel, livreur express) : vitesse (m/s) à partir de laquelle le téléphone est considéré en mouvement (≈ 5,4 km/h). */
 const STRICT_MOVING_SPEED_MPS = 1.5;
 /** Mode strict : en dessous de cette vitesse (m/s), le téléphone est pratiquement à l'arrêt. */

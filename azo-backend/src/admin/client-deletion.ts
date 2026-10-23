@@ -106,7 +106,7 @@ export async function deleteClientAccount(
       ]
     : [];
 
-  if (hasHistory) {
+  const anonymize = async (): Promise<ClientDeletionResult> => {
     const settleOps =
       settle && user.wallet
         ? [
@@ -150,14 +150,23 @@ export async function deleteClientAccount(
     ]);
     logger.warn(`Compte ${user.role} ${userId} anonymisé par l'administrateur ${adminId} (historique conservé)`);
     return { userId, mode: "anonymized", detachedReferrals };
-  }
+  };
 
-  await prisma.$transaction([
-    ...dropReferrer,
-    ...wipePersonal,
-    ...(user.wallet ? [prisma.transaction.deleteMany({ where: { walletId: user.wallet.id } }), prisma.wallet.delete({ where: { id: user.wallet.id } })] : []),
-    prisma.user.delete({ where: { id: userId } }),
-  ]);
+  if (hasHistory) return anonymize();
+
+  try {
+    await prisma.$transaction([
+      ...dropReferrer,
+      ...wipePersonal,
+      ...(user.wallet ? [prisma.transaction.deleteMany({ where: { walletId: user.wallet.id } }), prisma.wallet.delete({ where: { id: user.wallet.id } })] : []),
+      prisma.user.delete({ where: { id: userId } }),
+    ]);
+  } catch (e: any) {
+    // Une donnée liée au compte empêche l'effacement définitif (clé étrangère) : on anonymise à la place
+    if (e?.code !== "P2003") throw e;
+    logger.warn(`Effacement définitif impossible pour ${userId} (donnée liée) : anonymisation`);
+    return anonymize();
+  }
   logger.warn(`Compte ${user.role} ${userId} supprimé par l'administrateur ${adminId}`);
   return { userId, mode: "deleted", detachedReferrals };
 }

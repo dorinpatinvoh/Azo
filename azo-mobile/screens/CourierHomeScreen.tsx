@@ -169,10 +169,8 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
 
   const currentSimCode = useMemo(() => {
     if (!activeDelivery) return null;
-    const raw =
-      activeDelivery.status === "MATCHED"
-        ? activeDelivery.pickupCode
-        : activeDelivery.deliveryCode;
+    // Seul le code de ramassage / de départ peut s'afficher (en simulation) ; le code de remise ne vient jamais chez le coursier : le destinataire le lui donne
+    const raw = activeDelivery.status === "MATCHED" ? activeDelivery.pickupCode : null;
     return raw && /^\d{4}$/.test(raw) ? raw : null;
   }, [activeDelivery]);
 
