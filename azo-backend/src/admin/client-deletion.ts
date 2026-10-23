@@ -12,17 +12,21 @@ export type ClientDeletionResult = {
 };
 
 /**
- * Suppression d'un compte CLIENT ou COMMERCIAL par un administrateur.
+ * Suppression d'un compte utilisateur par un administrateur : client, commercial, prestataire (Speeder, livreur, coursier,
+ * artisan), agence, ou autre administrateur.
  *
- * Un commercial est supprimé comme un client ; en plus, son profil de parrain (et son code) disparaît et les prestataires
- * qu'il avait recrutés restent en place, simplement sans commercial rattaché.
+ * - Un commercial perd son profil de parrain (et son code) ; les prestataires qu'il avait recrutés restent en place, sans commercial.
+ * - Un prestataire ou une agence : son dossier, ses pièces et son journal disparaissent (suppression), ou sont vidés de
+ *   leurs données personnelles (anonymisation) si le compte a un historique. Une agence supprimée ne supprime pas ses
+ *   conducteurs : ils restent rattachés à la structure.
+ * - Un administrateur : le compte perd ses droits (anonymisé en simple client bloqué) ou disparaît.
  *
- * Refusée pour : son propre compte, tout compte qui n'est ni un client simple ni un commercial (prestataire, agence,
- * administrateur), un client dont une course ou une livraison est en cours, un client dont le portefeuille n'est pas à zéro
- * (il faut d'abord solder l'argent qui lui appartient, ou passer `settleBalance` : le solde est alors remis à zéro par une
- * écriture visible dans l'historique conservé, et le compte est anonymisé).
+ * Refusée pour : son propre compte, le dernier administrateur actif (sinon plus personne ne pourrait gérer la plateforme),
+ * un compte dont une course ou une livraison est en cours (comme client ou comme conducteur), un compte dont le portefeuille
+ * n'est pas à zéro (il faut d'abord solder l'argent qui lui appartient, ou passer `settleBalance` : le solde est alors remis
+ * à zéro par une écriture visible dans l'historique conservé, et le compte est anonymisé).
  *
- * Un client qui n'a jamais rien commandé ni payé est effacé pour de bon. Un client qui a un historique (courses,
+ * Un compte qui n'a jamais rien commandé, conduit ni payé est effacé pour de bon. Un compte qui a un historique (courses,
  * livraisons, mouvements d'argent) est ANONYMISÉ : les écritures comptables restent, mais son nom, son numéro, son NPI et
  * ses appareils disparaissent et le numéro redevient libre pour une nouvelle inscription.
  */
@@ -39,8 +43,10 @@ export async function deleteClientAccount(
     include: { provider: { select: { id: true } }, referrerProfile: { select: { id: true, _count: { select: { referrals: true } } } }, wallet: { select: { id: true, balance: true } } },
   });
   if (!user) throw new NotFoundException("Utilisateur introuvable");
-  if (user.role !== "CLIENT" || user.provider || user.agencyId)
-    throw new BadRequestException("Seul un client ou un commercial peut être supprimé ici (pas un prestataire, une agence ou un administrateur).");
+  if (user.role === "ADMIN") {
+    const otherAdmins = await prisma.user.count({ where: { role: "ADMIN", status: "ACTIVE", id: { not: userId } } });
+    if (otherAdmins === 0) throw new BadRequestException("C'est le dernier administrateur actif : crée-en un autre avant de supprimer ce compte.");
+  }
   const referrer = user.referrerProfile;
   // Commercial : ses filleuls sont détachés, puis son profil de parrain est supprimé (avant le compte, clé étrangère)
   const dropReferrer = referrer
@@ -53,27 +59,28 @@ export async function deleteClientAccount(
   const settle = !!options.settleBalance && !!user.wallet && user.wallet.balance !== 0;
   if (user.wallet && user.wallet.balance !== 0 && !settle)
     throw new BadRequestException(
-      `Le portefeuille de ce client contient ${user.wallet.balance.toLocaleString("fr-FR")} FCFA : règle d'abord cet argent avant de supprimer le compte.`
+      `Le portefeuille de ce compte contient ${user.wallet.balance.toLocaleString("fr-FR")} FCFA : règle d'abord cet argent avant de supprimer le compte.`
     );
 
   const open = { in: ["PENDING", "OFFERED", "MATCHED", "ARRIVED", "IN_PROGRESS"] as ("PENDING" | "OFFERED" | "MATCHED" | "ARRIVED" | "IN_PROGRESS")[] };
   const [openRides, openDeliveries] = await Promise.all([
-    prisma.ride.count({ where: { clientId: userId, status: open } }),
-    prisma.delivery.count({ where: { clientId: userId, status: open } }),
+    prisma.ride.count({ where: { OR: [{ clientId: userId }, { driverId: userId }], status: open } }),
+    prisma.delivery.count({ where: { OR: [{ clientId: userId }, { courierId: userId }], status: open } }),
   ]);
   if (openRides + openDeliveries > 0)
-    throw new BadRequestException("Ce client a une course ou une livraison en cours : attends qu'elle soit terminée ou annulée.");
+    throw new BadRequestException("Ce compte a une course ou une livraison en cours : attends qu'elle soit terminée ou annulée.");
 
-  const [rides, deliveries, rentals, orders, artisans, tips, movements] = await Promise.all([
-    prisma.ride.count({ where: { clientId: userId } }),
-    prisma.delivery.count({ where: { clientId: userId } }),
+  const [rides, deliveries, rentals, orders, artisans, tips, offers, movements] = await Promise.all([
+    prisma.ride.count({ where: { OR: [{ clientId: userId }, { driverId: userId }] } }),
+    prisma.delivery.count({ where: { OR: [{ clientId: userId }, { courierId: userId }] } }),
     prisma.rentalBooking.count({ where: { clientId: userId } }),
     prisma.marketplaceOrder.count({ where: { clientId: userId } }),
     prisma.artisanRequest.count({ where: { clientId: userId } }),
-    prisma.rideTip.count({ where: { clientId: userId } }),
+    prisma.rideTip.count({ where: { OR: [{ clientId: userId }, { driverId: userId }] } }),
+    prisma.rideOffer.count({ where: { driverId: userId } }),
     user.wallet ? prisma.transaction.count({ where: { walletId: user.wallet.id, status: { not: "PENDING" } } }) : Promise.resolve(0),
   ]);
-  const hasHistory = settle || rides + deliveries + rentals + orders + artisans + tips + movements > 0;
+  const hasHistory = settle || rides + deliveries + rentals + orders + artisans + tips + offers + movements > 0;
 
   // Données personnelles et techniques : effacées dans les deux cas
   const wipePersonal = [
@@ -87,6 +94,17 @@ export async function deleteClientAccount(
     prisma.userProfileChange.deleteMany({ where: { userId } }),
     prisma.otpCode.deleteMany({ where: { phone: user.phone } }),
   ];
+
+  // Prestataire / agence : en cas d'anonymisation, le dossier reste (statistiques) mais vidé de ses données personnelles et de ses pièces
+  const wipeProvider = user.provider
+    ? [
+        prisma.providerDocument.deleteMany({ where: { providerId: user.provider.id } }),
+        prisma.providerProfile.update({
+          where: { id: user.provider.id },
+          data: { fullName: null, city: null, zones: [], bio: null, vehicleModel: null, plateNumber: null, agencyName: null, phoneShop: null, status: "SUSPENDED", suspensionReason: "Compte supprimé" },
+        }),
+      ]
+    : [];
 
   if (hasHistory) {
     const settleOps =
@@ -107,6 +125,7 @@ export async function deleteClientAccount(
     await prisma.$transaction([
       ...settleOps,
       ...dropReferrer,
+      ...wipeProvider,
       ...wipePersonal,
       prisma.user.update({
         where: { id: userId },
@@ -123,11 +142,13 @@ export async function deleteClientAccount(
           emergencyContactName: null,
           emergencyContactPhone: null,
           passwordHash: null,
+          role: "CLIENT",
+          agencyId: null,
           status: "BLOCKED",
         },
       }),
     ]);
-    logger.warn(`Compte client ${userId} anonymisé par l'administrateur ${adminId} (historique conservé)`);
+    logger.warn(`Compte ${user.role} ${userId} anonymisé par l'administrateur ${adminId} (historique conservé)`);
     return { userId, mode: "anonymized", detachedReferrals };
   }
 
@@ -137,6 +158,6 @@ export async function deleteClientAccount(
     ...(user.wallet ? [prisma.transaction.deleteMany({ where: { walletId: user.wallet.id } }), prisma.wallet.delete({ where: { id: user.wallet.id } })] : []),
     prisma.user.delete({ where: { id: userId } }),
   ]);
-  logger.warn(`Compte client ${userId} supprimé par l'administrateur ${adminId}`);
+  logger.warn(`Compte ${user.role} ${userId} supprimé par l'administrateur ${adminId}`);
   return { userId, mode: "deleted", detachedReferrals };
 }
