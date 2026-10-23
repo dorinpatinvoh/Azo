@@ -70,6 +70,11 @@ class MarkPaidDto {
   reference?: string;
 }
 
+class UpdateUserNameDto {
+  @IsString() @MinLength(2) @MaxLength(80) firstName: string;
+  @IsOptional() @IsString() @MaxLength(80) lastName?: string;
+}
+
 class UpdateUserStatusDto {
   @IsIn(["ACTIVE", "BLOCKED"])
   status: UserStatus;
@@ -177,6 +182,46 @@ export class AdminService {
     const at = new Date();
     await this.prisma.user.update({ where: { id: userId }, data: { ratingResetAt: at } });
     return { userId, ratingResetAt: at.toISOString(), by: adminId };
+  }
+
+  /** Corrige le nom d'une personne (compte, et dossier prestataire s'il existe). Chaque changement est noté au journal du compte. */
+  async renameUser(adminId: string, userId: string, dto: UpdateUserNameDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, fullName: true, phone: true, provider: { select: { id: true } } } });
+    if (!user || user.phone.startsWith("supprime-")) throw new NotFoundException("Utilisateur introuvable");
+    const firstName = dto.firstName.trim().replace(/\s+/g, " ");
+    const lastName = (dto.lastName ?? "").trim().replace(/\s+/g, " ");
+    if (firstName.length < 2) throw new BadRequestException("Le prénom est trop court");
+    const fullName = [firstName, lastName].filter(Boolean).join(" ");
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { firstName, lastName: lastName || null, fullName } }),
+      ...(user.provider ? [this.prisma.providerProfile.update({ where: { id: user.provider.id }, data: { fullName } })] : []),
+      this.prisma.userProfileChange.create({ data: { userId, field: "fullName (administrateur)", oldValue: user.fullName, newValue: fullName } }),
+    ]);
+    return { userId, fullName, by: adminId };
+  }
+
+  /** Remet le portefeuille d'un client ou d'un prestataire à zéro par une écriture visible dans son historique (jamais en silence). */
+  async resetWallet(adminId: string, userId: string, reason?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { wallet: true } });
+    if (!user || user.phone.startsWith("supprime-")) throw new NotFoundException("Utilisateur introuvable");
+    if (user.role === "ADMIN" || user.role === "AGENCY") throw new BadRequestException("Le portefeuille d'un administrateur ou d'une agence ne se remet pas à zéro ici");
+    if (!user.wallet) throw new BadRequestException("Ce compte n'a pas de portefeuille");
+    const before = user.wallet.balance;
+    if (before === 0) return { userId, before, after: 0 };
+    await this.prisma.$transaction([
+      this.prisma.transaction.create({
+        data: {
+          walletId: user.wallet.id,
+          type: before > 0 ? "DEBIT" : "CREDIT",
+          amount: Math.abs(before),
+          label: "Portefeuille remis à zéro par l'administrateur",
+          meta: `Par ${adminId}${reason ? ` : ${reason}` : ""}`,
+          kind: "ADMIN_RESET",
+        },
+      }),
+      this.prisma.wallet.update({ where: { id: user.wallet.id }, data: { balance: 0 } }),
+    ]);
+    return { userId, before, after: 0 };
   }
 
   async setUserStatus(adminId: string, userId: string, dto: UpdateUserStatusDto) {
@@ -339,6 +384,18 @@ export class AdminController {
   @Post("users/:id/ratings-reset")
   resetRatings(@CurrentUser() u, @Param("id") id: string) {
     return this.svc.resetRatings(u.userId, id);
+  }
+
+  // POST /admin/users/:id/name {firstName, lastName?} — corrige le nom d'une personne
+  @Post("users/:id/name")
+  renameUser(@CurrentUser() u, @Param("id") id: string, @Body() dto: UpdateUserNameDto) {
+    return this.svc.renameUser(u.userId, id, dto);
+  }
+
+  // POST /admin/users/:id/wallet-reset {reason?} — remet le portefeuille d'un client ou prestataire à zéro (écriture conservée)
+  @Post("users/:id/wallet-reset")
+  resetWallet(@CurrentUser() u, @Param("id") id: string, @Body() dto: { reason?: string }) {
+    return this.svc.resetWallet(u.userId, id, typeof dto?.reason === "string" ? dto.reason.slice(0, 200) : undefined);
   }
 
   // DELETE /admin/users/:id[?settle=1] — supprime un compte client (anonymisé s'il a un historique) ; settle=1 remet son solde à zéro

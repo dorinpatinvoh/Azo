@@ -11,7 +11,29 @@ const USER_STATUS: Record<string, { label: string; tone: string }> = {
   BLOCKED: { label: "Bloqué", tone: "err" },
 };
 
-type Action = null | { kind: "block" | "unblock" | "ratings" | "delete"; user: UserRow } | { kind: "npi"; user: UserRow };
+type Action = null | { kind: "block" | "unblock" | "ratings" | "delete" | "wallet" | "rename"; user: UserRow } | { kind: "npi"; user: UserRow };
+
+function RenameModal({ user, onClose, onDone }: { user: UserRow; onClose: () => void; onDone: () => void }) {
+  const parts = (user.fullName ?? "").trim().split(/s+/).filter(Boolean);
+  const [first, setFirst] = useState(parts[0] ?? "");
+  const [last, setLast] = useState(parts.slice(1).join(" "));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const toast = useToast();
+  const save = async () => {
+    setBusy(true); setErr("");
+    try { await api.post(`/admin/users/${user.id}/name`, { firstName: first, lastName: last }); toast("Nom modifié."); onDone(); }
+    catch (e: any) { setErr(e?.message ?? "Échec"); setBusy(false); }
+  };
+  return (
+    <Modal title={`Modifier le nom — ${phone(user.phone)}`} onClose={onClose}>
+      <label>Prénom<input value={first} onChange={(e) => setFirst(e.target.value)} maxLength={80} /></label>
+      <label>Nom<input value={last} onChange={(e) => setLast(e.target.value)} maxLength={80} /></label>
+      {err ? <div className="errorbox">{err}</div> : null}
+      <div className="actions"><button className="btn ghost" onClick={onClose}>Annuler</button><button className="btn" disabled={busy || first.trim().length < 2} onClick={save}>Enregistrer</button></div>
+    </Modal>
+  );
+}
 
 export default function Users() {
   const toast = useToast();
@@ -82,6 +104,8 @@ export default function Users() {
                         ) : u.role !== "ADMIN" ? (
                           <button className="btn danger sm" onClick={() => setAction({ kind: "block", user: u })}>Bloquer</button>
                         ) : null}
+                        {!u.phone.startsWith("supprime-") ? <button className="btn ghost sm" onClick={() => setAction({ kind: "rename", user: u })}>Modifier le nom</button> : null}
+                        {(u.role === "CLIENT" || u.role === "DRIVER" || u.role === "ARTISAN") && (u.wallet?.balance ?? 0) !== 0 && !u.phone.startsWith("supprime-") ? <button className="btn ghost sm" onClick={() => setAction({ kind: "wallet", user: u })}>Solde à zéro</button> : null}
                         <button className="btn ghost sm" onClick={() => setAction({ kind: "ratings", user: u })}>Notes à zéro</button>
                         <button className="btn ghost sm" onClick={() => setAction({ kind: "npi", user: u })}>NPI</button>
                         {!u.phone.startsWith("supprime-") ? (
@@ -110,6 +134,13 @@ export default function Users() {
           message={<>{(action.user.wallet?.balance ?? 0) !== 0 ? <><b>Son portefeuille contient {fcfa(action.user.wallet?.balance)} : en confirmant, ce solde est remis à zéro (écriture conservée dans l'historique). Rembourse-le-lui avant si cet argent lui appartient.</b><br /><br /></> : null}Le compte de <b>{phone(action.user.phone)}</b> sera supprimé. S'il a déjà des courses, des livraisons ou des mouvements d'argent, ils sont conservés pour la comptabilité mais son nom, son numéro et son NPI sont effacés. Si c'est un commercial, son code disparaît et les prestataires qu'il a recrutés restent sans commercial. Si c'est un prestataire ou une agence, son dossier et ses pièces sont effacés (ses conducteurs restent rattachés à l'agence). Si c'est un administrateur, il perd tous ses droits : le dernier administrateur ne peut pas être supprimé. Cette action est définitive. Aucune course ne doit être en cours.</>}
           onClose={() => setAction(null)}
           onConfirm={() => api.delete<{ mode: "deleted" | "anonymized" }>(`/admin/users/${action.user.id}${(action.user.wallet?.balance ?? 0) !== 0 ? "?settle=1" : ""}`).then((r) => { toast(r.mode === "deleted" ? "Compte supprimé." : "Compte supprimé (historique conservé, données personnelles effacées)."); return reload(); })} />
+      ) : null}
+      {action && action.kind === "rename" ? <RenameModal user={action.user} onClose={() => setAction(null)} onDone={() => { setAction(null); reload(); }} /> : null}
+      {action && action.kind === "wallet" ? (
+        <ConfirmModal title={`Remettre à zéro le portefeuille de ${action.user.fullName ?? phone(action.user.phone)}`} danger confirmLabel="Remettre à zéro" reasonLabel="Motif (facultatif)"
+          message={<>Solde actuel : <b>{fcfa(action.user.wallet?.balance)}</b>. Une écriture « Portefeuille remis à zéro par l'administrateur » est ajoutée à son historique ; rembourse-le avant si cet argent lui appartient.</>}
+          onClose={() => setAction(null)}
+          onConfirm={(reason) => api.post(`/admin/users/${action.user.id}/wallet-reset`, { reason }).then(() => { toast("Portefeuille remis à zéro."); return reload(); })} />
       ) : null}
       {action && action.kind === "ratings" ? (
         <ConfirmModal title="Remettre les notes à zéro" confirmLabel="Remettre à zéro" message={`Les avis reçus par ${action.user.fullName ?? phone(action.user.phone)} avant aujourd'hui ne comptent plus (cela lève aussi une éventuelle restriction due à une mauvaise note).`} onClose={() => setAction(null)}
