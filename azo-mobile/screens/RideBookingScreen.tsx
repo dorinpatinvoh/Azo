@@ -25,6 +25,11 @@ import { getDrivingRoute, type DrivingRoute } from "../services/routing";
 import { getLanguage, languageInfo, tr, useI18n, type MessageKey } from "../i18n";
 import { BrandAlert } from "../components/BrandAlert";
 import { ZEM_ESSENCE_BG } from "../assets/vehicles/zem-essence-bg";
+import { ZEM_ELECTRIC_BG } from "../assets/vehicles/zem-electric-bg";
+import { TRICYCLE_BG } from "../assets/vehicles/tricycle-bg";
+
+/** Photo de fond (45 % d'opacité) des cartes de choix des Speeders moto et tricycle ; les voitures n'en ont pas. */
+const CARD_BG: Partial<Record<VehicleType, string>> = { ZEM_ESSENCE: ZEM_ESSENCE_BG, ZEM_ELECTRIC: ZEM_ELECTRIC_BG, ZEM_TRICYCLE: TRICYCLE_BG };
 
 type Props = {
   service: "transport" | "zem";
@@ -166,8 +171,8 @@ function VehicleOfferCard({
           : tr("ride.a11y.offer", { vehicle: vLabel(vehicle) })
       }
     >
-      {/* Photo de fond de la carte Speeder à essence, à 45 % d'opacité */}
-      {vehicle === "ZEM_ESSENCE" ? <Image source={{ uri: ZEM_ESSENCE_BG }} style={styles.zemCardBg} resizeMode="cover" /> : null}
+      {/* Photo de fond de la carte, à 45 % d'opacité */}
+      {CARD_BG[vehicle] ? <Image source={{ uri: CARD_BG[vehicle] }} style={styles.zemCardBg} resizeMode="cover" /> : null}
       <View style={styles.zemCardTop}>
         <View style={styles.zemCardIcon}>
           <MaterialIcons name={VEHICLES[vehicle].icon} size={30} color={colors.primary} />
