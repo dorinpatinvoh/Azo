@@ -8,6 +8,7 @@ import * as SecureStore from "expo-secure-store";
 import OSMMapView, { type LatLng } from "../components/OSMMapView";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, spacing } from "../theme/colors";
 import { typography } from "../theme/typography";
 import { Estimate, Place, PlaceSuggestion, VehicleType, errorCode, errorMessage, placesApi, rideApi, ridesApi, walletApi } from "../services/api";
@@ -171,8 +172,20 @@ function VehicleOfferCard({
           : tr("ride.a11y.offer", { vehicle: vLabel(vehicle) })
       }
     >
-      {/* Photo de fond de la carte, à 45 % d'opacité */}
-      {CARD_BG[vehicle] ? <Image source={{ uri: CARD_BG[vehicle] }} style={styles.zemCardBg} resizeMode="cover" /> : null}
+      {/* Photo de fond de la carte : en couleurs, avec un voile blanc dégradé (fort à gauche, là où est le texte) */}
+      {CARD_BG[vehicle] ? (
+        <>
+          <Image source={{ uri: CARD_BG[vehicle] }} style={styles.zemCardBg} resizeMode="cover" />
+          <LinearGradient
+            colors={["rgba(255,255,255,0.9)", "rgba(255,255,255,0.55)", "rgba(255,255,255,0.05)"]}
+            locations={[0, 0.5, 1]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        </>
+      ) : null}
       <View style={styles.zemCardTop}>
         <View style={styles.zemCardIcon}>
           <MaterialIcons name={VEHICLES[vehicle].icon} size={30} color={colors.primary} />
@@ -1041,7 +1054,7 @@ const styles = StyleSheet.create({
   zemList: { paddingHorizontal: spacing.md, gap: spacing.md },
   zemStep: { ...typography.labelSm, color: colors.primary, letterSpacing: 1 },
   // Carte de choix du Speeder : en-tête (icône, titre, chevron), puis le détail du prix en dessous
-  zemCardBg: { ...StyleSheet.absoluteFill, opacity: 0.45 },
+  zemCardBg: { ...StyleSheet.absoluteFill },
   zemCard: { overflow: "hidden", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
   zemCardPressed: { borderColor: colors.primary, backgroundColor: colors.primaryFixed },
   zemCardTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },
@@ -1054,7 +1067,7 @@ const styles = StyleSheet.create({
   zemBaseRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, paddingHorizontal: spacing.sm + 2, paddingVertical: 8, marginTop: spacing.xs },
   zemBaseLabel: { ...typography.labelMd, color: colors.onSurfaceVariant },
   zemBaseValue: { ...typography.labelLg, color: colors.primary },
-  zemTiers: { flexDirection: "row", borderWidth: 1, borderColor: colors.surfaceContainer, borderRadius: radius.md, overflow: "hidden" },
+  zemTiers: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.82)", borderWidth: 1, borderColor: colors.surfaceContainer, borderRadius: radius.md, overflow: "hidden" },
   zemTier: { flex: 1, alignItems: "center", paddingVertical: 8, paddingHorizontal: 4, gap: 2 },
   zemTierDivider: { borderRightWidth: 1, borderRightColor: colors.surfaceContainer },
   zemTierLabel: { ...typography.bodySm, color: colors.onSurfaceVariant, fontSize: 11 },
