@@ -35,7 +35,7 @@ export default function Finance() {
     <>
       <PageHead title="Finances" subtitle="Gains de l'entreprise, commission de chaque course, retraits">
         <button className="btn ghost sm" onClick={reload}>Actualiser</button>
-        <button className="btn danger" onClick={() => setResetting(true)} disabled={!s}>Remettre à 0 F</button>
+        <button className="btn danger" onClick={() => setResetting(true)} disabled={!s}>Remettre le tableau de bord à 0</button>
         <button className="btn" onClick={() => setAsking(true)} disabled={!s || s.available < s.minWithdrawal}>Faire un retrait</button>
       </PageHead>
       <ErrorBox error={error} onRetry={reload} />
@@ -175,8 +175,8 @@ export default function Finance() {
 
       {asking && s ? <WithdrawalModal available={s.available} min={s.minWithdrawal} onClose={() => setAsking(false)} onDone={() => { toast("Demande de retrait enregistrée."); reload(); }} /> : null}
       {paying ? <PaidModal w={paying} onClose={() => setPaying(null)} onDone={() => { toast("Retrait marqué comme versé."); reload(); }} /> : null}
-      {resetting && s ? <ConfirmModal title="Remettre les chiffres d'argent à 0 F" danger confirmLabel="Remettre à 0 F" reasonLabel="Motif (facultatif)"
-        message={<>Tous les chiffres d'argent de l'entreprise (gains cumulés, gains du mois, disponible, commissions, volumes du tableau de bord, retraits) repartent de <b>0 F à partir de maintenant</b>, et le solde du portefeuille administrateur repasse à 0 F. <b>Rien n'est effacé</b> : courses, livraisons et écritures restent en base et dans les historiques. Les compteurs de courses et de comptes ne changent pas. Aucun argent n'est versé. Cette remise à zéro ne peut pas être annulée.</>}
+      {resetting && s ? <ConfirmModal title="Remettre le tableau de bord à 0" danger confirmLabel="Tout remettre à 0" reasonLabel="Motif (facultatif)"
+        message={<>Le tableau de bord et les finances repartent de <b>0 à partir de maintenant</b> : gains, commissions, volumes, retraits, nombre de comptes, de courses et de livraisons, graphique et note moyenne. Le solde du portefeuille administrateur repasse aussi à 0 F. <b>Rien n'est effacé</b> : comptes, courses, livraisons et écritures restent en base et dans les historiques (liste des utilisateurs, dossiers). Aucun argent n'est versé. Cette remise à zéro ne peut pas être annulée.</>}
         onClose={() => setResetting(false)} onConfirm={(reason) => api.post("/admin/finance/reset", { reason }).then(() => { toast("Portefeuille de l'entreprise remis à 0 F."); return reload(); })} /> : null}
       {cancelling ? <ConfirmModal title="Annuler cette demande" confirmLabel="Annuler la demande" danger message={`Retrait de ${fcfa(cancelling.amount)} vers ${phone(cancelling.phone)} : le montant redevient disponible.`} onClose={() => setCancelling(null)} onConfirm={() => api.post(`/admin/finance/withdrawals/${cancelling.id}/cancel`).then(() => { toast("Demande annulée."); return reload(); })} /> : null}
       {detail ? (

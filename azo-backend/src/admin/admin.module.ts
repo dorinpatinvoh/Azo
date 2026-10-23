@@ -103,6 +103,9 @@ export class AdminService {
 
   // Indicateurs globaux de l'écran "Tableau de bord administrateur"
   async stats() {
+    // Remise à zéro du tableau de bord : tout est compté à partir de la date de départ (rien n'est effacé en base)
+    const moneyFrom = (await moneyBaseline(this.prisma)) ?? new Date(0);
+    const sinceReset = { gte: moneyFrom };
     const [
       users,
       rides,
@@ -114,35 +117,35 @@ export class AdminService {
       providersApproved,
       blockedUsers,
     ] = await Promise.all([
-      this.prisma.user.count({ where: { NOT: { phone: { startsWith: "supprime-" } } } }),
-      this.prisma.ride.count(),
-      this.prisma.ride.findMany({ where: { status: "COMPLETED" }, select: { commission: true, price: true, createdAt: true } }),
-      this.prisma.delivery.count(),
-      this.prisma.delivery.findMany({ where: { status: "COMPLETED" }, select: { price: true, createdAt: true } }),
+      this.prisma.user.count({ where: { createdAt: sinceReset, NOT: { phone: { startsWith: "supprime-" } } } }),
+      this.prisma.ride.count({ where: { createdAt: sinceReset } }),
+      this.prisma.ride.findMany({ where: { status: "COMPLETED", createdAt: sinceReset }, select: { commission: true, price: true, createdAt: true } }),
+      this.prisma.delivery.count({ where: { createdAt: sinceReset } }),
+      this.prisma.delivery.findMany({ where: { status: "COMPLETED", createdAt: sinceReset }, select: { price: true, createdAt: true } }),
       this.prisma.agency.count(),
       this.prisma.providerProfile.count({
         where: { status: { in: ["SUBMITTED", "UNDER_REVIEW", "NEED_INFO"] } },
       }),
       this.prisma.providerProfile.count({ where: { status: "APPROVED" } }),
-      this.prisma.user.count({ where: { status: "BLOCKED", NOT: { phone: { startsWith: "supprime-" } } } }),
+      this.prisma.user.count({ where: { status: "BLOCKED", createdAt: sinceReset, NOT: { phone: { startsWith: "supprime-" } } } }),
     ]);
 
     // Activité récente : jours calendaires à l'heure du Bénin (UTC+1)
     const DAY = 86400000;
     const beninNow = Date.now() + 3600000;
     const startOfBeninToday = Math.floor(beninNow / DAY) * DAY - 3600000;
-    const since = new Date(startOfBeninToday - 6 * DAY);
+    const since = new Date(Math.max(startOfBeninToday - 6 * DAY, moneyFrom.getTime()));
     const open = ["PENDING", "OFFERED", "MATCHED", "ARRIVED", "IN_PROGRESS"] as any[];
     const real = { NOT: { phone: { startsWith: "supprime-" } } };
     const [clients, newUsers7d, recentRides, recentDeliveries, openRides, openDeliveries, withdrawalsPending, ratingAgg] = await Promise.all([
-      this.prisma.user.count({ where: { role: "CLIENT", provider: null, ...real } }),
+      this.prisma.user.count({ where: { role: "CLIENT", provider: null, createdAt: sinceReset, ...real } }),
       this.prisma.user.count({ where: { createdAt: { gte: since }, ...real } }),
       this.prisma.ride.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true, status: true, price: true } }),
       this.prisma.delivery.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true, status: true, price: true } }),
       this.prisma.ride.count({ where: { status: { in: open } } }),
       this.prisma.delivery.count({ where: { status: { in: open } } }),
-      this.prisma.transaction.aggregate({ where: { labelKey: "TRANSACTION_WITHDRAWAL", status: "PENDING" }, _count: true, _sum: { amount: true } }),
-      this.prisma.ride.aggregate({ where: { rating: { not: null } }, _avg: { rating: true }, _count: { rating: true } }),
+      this.prisma.transaction.aggregate({ where: { labelKey: "TRANSACTION_WITHDRAWAL", status: "PENDING", createdAt: sinceReset }, _count: true, _sum: { amount: true } }),
+      this.prisma.ride.aggregate({ where: { rating: { not: null }, createdAt: sinceReset }, _avg: { rating: true }, _count: { rating: true } }),
     ]);
     const week = Array.from({ length: 7 }, (_, i) => {
       const from = startOfBeninToday - (6 - i) * DAY;
@@ -153,15 +156,13 @@ export class AdminService {
         day: new Date(from + 3600000).toISOString().slice(0, 10),
         rides: rs.length,
         deliveries: ds.length,
-        volume: [...rs, ...ds].filter((x) => x.status === "COMPLETED" && x.createdAt >= moneyFrom).reduce((a, x) => a + x.price, 0),
+        volume: [...rs, ...ds].filter((x) => x.status === "COMPLETED").reduce((a, x) => a + x.price, 0),
       };
     });
     const today = week[6];
 
-    // Chiffres d'argent : comptés à partir de la dernière remise à zéro (les compteurs de courses restent complets)
-    const moneyFrom = (await moneyBaseline(this.prisma)) ?? new Date(0);
-    const countedRides = completedRides.filter((r) => r.createdAt >= moneyFrom);
-    const countedDeliveries = completedDeliveries.filter((d) => d.createdAt >= moneyFrom);
+    const countedRides = completedRides;
+    const countedDeliveries = completedDeliveries;
     const rideCommissions = countedRides.reduce((s, r) => s + r.commission, 0);
     const deliveryCommissions = countedDeliveries.reduce((s, d) => s + Math.round(d.price * 0.15), 0);
 
