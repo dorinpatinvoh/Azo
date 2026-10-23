@@ -1345,17 +1345,11 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
             )}
 
             {!online ? (
-              <Text style={styles.emptyText}>Passe en ligne pour voir les demandes autour de toi.</Text>
+              <View style={styles.emptyRow}><MaterialIcons name="pause-circle-outline" size={26} color={colors.outline} /><Text style={styles.emptyShort}>Hors ligne</Text></View>
             ) : loading ? (
               <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.md }} />
             ) : requests.length === 0 ? (
-              <Text style={styles.emptyText}>
-                {myVehicle
-                  ? `Aucune demande « ${VEHICLE_LABEL[myVehicle]} » ${
-                      searchRadiusKm > 0 ? `dans un rayon de ${searchRadiusKm} km` : "autour de toi"
-                    } pour l'instant. Reste en ligne : la liste se met à jour toute seule.`
-                  : "Aucune demande pour l'instant. Reste en ligne : la liste se met à jour toute seule."}
-              </Text>
+              <View style={styles.emptyRow}><MaterialIcons name="hourglass-empty" size={26} color={colors.outline} /><Text style={styles.emptyShort}>{searchRadiusKm > 0 ? `Aucune demande · ${searchRadiusKm} km` : "Aucune demande"}</Text></View>
             ) : (
               <View style={{ gap: spacing.sm }}>
                 {requests.map(({ ride, km }) => (
@@ -1432,7 +1426,7 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
         {/* --- Activité récente --- */}
         <Text style={styles.sectionTitle}>Activité récente</Text>
         {recent.length === 0 ? (
-          <Text style={styles.emptyText}>Tes courses terminées apparaîtront ici.</Text>
+          <View style={styles.emptyRow}><MaterialIcons name="history" size={26} color={colors.outline} /><Text style={styles.emptyShort}>Aucune course</Text></View>
         ) : (
           <View style={{ gap: spacing.sm }}>
             {recent.map((r) => (
@@ -1505,7 +1499,6 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
                   <View style={styles.pfIcon}><MaterialIcons name="badge" size={20} color={colors.primary} /></View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.pfLabel}>Modifier mes informations</Text>
-                    <Text style={styles.pfHint}>Nom, e-mail, contact d'urgence, numéro</Text>
                   </View>
                   <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
                 </Pressable>
@@ -1520,7 +1513,6 @@ export default function DriverHomeScreen({ onLogout, onOpenDossier, onOpenSuppor
                   <View style={styles.pfIcon}><MaterialIcons name="verified-user" size={20} color={colors.primary} /></View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.pfLabel}>Mon dossier</Text>
-                    <Text style={styles.pfHint}>Pièces, véhicule, statut de validation</Text>
                   </View>
                   <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
                 </Pressable>
@@ -1666,6 +1658,8 @@ const styles = StyleSheet.create({
   sectionBadge: { ...typography.labelSm, color: colors.onPrimary, backgroundColor: colors.secondary, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2, fontWeight: "800", overflow: "hidden" },
   radarFilter: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.primaryFixed, borderRadius: radius.md, paddingHorizontal: spacing.sm + 2, paddingVertical: 8, marginBottom: spacing.sm },
   radarFilterText: { ...typography.bodySm, color: colors.primary, fontWeight: "700", flex: 1 },
+  emptyRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, padding: spacing.md },
+  emptyShort: { ...typography.bodySm, color: colors.onSurfaceVariant },
   emptyText: { ...typography.bodySm, color: colors.onSurfaceVariant, backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, padding: spacing.md },
   requestCard: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.lg, padding: spacing.md, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   ongoingCard: { backgroundColor: colors.primary, borderRadius: radius.xl, padding: spacing.md, gap: 6, marginBottom: spacing.md },

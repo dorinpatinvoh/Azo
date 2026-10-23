@@ -230,7 +230,6 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.quickSearchTitle} numberOfLines={1}>{t("home.search.title")}</Text>
-            <Text style={styles.quickSearchSub} numberOfLines={1}>{t("home.search.sub")}</Text>
           </View>
           <MaterialIcons name="arrow-forward-ios" size={14} color={colors.onSurfaceVariant} />
         </Pressable>
@@ -295,7 +294,6 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
         {/* Section 1 : Déplacement immédiat (2 grandes cartes côte à côte) */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{t("home.section.order")}</Text>
-          <Text style={styles.sectionHint} numberOfLines={1}>{t("home.section.orderHint")}</Text>
         </View>
         <View style={styles.mainServicesRow}>
           {MAIN_SERVICES.map((s) => (
@@ -313,7 +311,6 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
                 </View>
               </View>
               <Text style={styles.mainServiceText} numberOfLines={2}>{t(s.labelKey)}</Text>
-              <Text style={styles.mainServiceSub} numberOfLines={2}>{t(s.subKey)}</Text>
             </Pressable>
           ))}
         </View>
@@ -321,7 +318,6 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
         {/* Section 2 : Tous les services AZƆ̀ (Grille symétrique 3 × 2) */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>{t("home.section.services")}</Text>
-          <Text style={styles.sectionHint} numberOfLines={1}>{t("home.section.servicesHint")}</Text>
         </View>
         <View style={styles.otherServicesGrid}>
           {OTHER_SERVICES.map((s, i) => (
@@ -356,9 +352,6 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
               </Text>
             </View>
             <Text style={styles.promoTitle}>{t("home.promo.title")}</Text>
-            <Text style={styles.promoSubtitle}>
-              {t("home.promo.text")}
-            </Text>
           </View>
           <Pressable style={styles.promoCta} onPress={() => onSelectService("zem")}>
             <Text style={styles.promoCtaText}>{t("home.promo.cta")}</Text>

@@ -723,19 +723,11 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
             <View style={styles.emptyCard}>
               <MaterialIcons name="pause-circle-outline" size={34} color={colors.outline} />
               <Text style={styles.emptyTitle}>Tu es hors ligne</Text>
-              <Text style={styles.muted}>
-                Active l'interrupteur en haut à droite pour voir et accepter les missions
-                autour de toi.
-              </Text>
             </View>
           ) : pending.length === 0 ? (
             <View style={styles.emptyCard}>
               <MaterialIcons name="inventory-2" size={34} color={colors.outline} />
               <Text style={styles.emptyTitle}>Aucune mission en attente</Text>
-              <Text style={styles.muted}>
-                Les nouvelles missions de ton activité s'affichent ici
-                automatiquement.
-              </Text>
             </View>
           ) : (
             <View style={{ gap: spacing.sm }}>
@@ -856,7 +848,7 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
 
           <Text style={[styles.sectionTitle, { marginBottom: spacing.sm }]}>Livraisons effectuées</Text>
           {history.filter((d) => d.status === "COMPLETED" || d.status === "CANCELLED").length === 0 ? (
-            <Text style={styles.muted}>Tes livraisons terminées apparaîtront ici.</Text>
+            <MaterialIcons name="history" size={26} color={colors.outline} style={{ alignSelf: "center" }} />
           ) : (
             <View style={{ gap: spacing.xs }}>
               {history
@@ -915,7 +907,6 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                     <View style={styles.pfIcon}><MaterialIcons name="badge" size={20} color={colors.primary} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.pfLabel}>Modifier mes informations</Text>
-                      <Text style={styles.pfHint}>Nom, e-mail, contact d'urgence, numéro</Text>
                     </View>
                     <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
                   </Pressable>
@@ -930,7 +921,6 @@ export default function CourierHomeScreen({ onLogout, onOpenDossier, onOpenSuppo
                     <View style={styles.pfIcon}><MaterialIcons name="verified-user" size={20} color={colors.primary} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.pfLabel}>Mon dossier</Text>
-                      <Text style={styles.pfHint}>Pièces, véhicule, statut de validation</Text>
                     </View>
                     <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
                   </Pressable>

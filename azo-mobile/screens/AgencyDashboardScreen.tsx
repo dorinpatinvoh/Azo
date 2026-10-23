@@ -712,7 +712,6 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                     <View style={styles.pfIcon}><MaterialIcons name="badge" size={20} color={colors.primary} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.pfLabel}>Modifier mes informations</Text>
-                      <Text style={styles.pfHint}>Nom, e-mail, contact d'urgence, numéro</Text>
                     </View>
                     <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
                   </Pressable>
@@ -727,7 +726,6 @@ export default function AgencyDashboardScreen({ onBack, onOpenDossier, onOpenWal
                     <View style={styles.pfIcon}><MaterialIcons name="verified-user" size={20} color={colors.primary} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.pfLabel}>Mon dossier</Text>
-                      <Text style={styles.pfHint}>Pièces, statut de validation</Text>
                     </View>
                     <MaterialIcons name="chevron-right" size={20} color={colors.outline} />
                   </Pressable>
