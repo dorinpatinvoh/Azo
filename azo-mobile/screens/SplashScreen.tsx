@@ -39,35 +39,50 @@ type Slide = {
   /** Clé de traduction de la ligne qui précise la promesse */
   subtitleKey: MessageKey;
   image: ImageSourcePropType;
+  /** Mention de la photo (licence libre CC BY-SA 4.0 : l'auteur doit être cité). Absente pour nos propres visuels. */
+  credit?: string;
 };
 
 /**
- * Les trois pages. Pour changer une image : remplacer le `require(...)` ; pour changer un
- * texte : modifier la clé `onboarding.slideN.*` dans i18n/fr.ts (et dans les autres langues). Chaque promesse correspond à une fonction réelle de
- * l'application (commande rapide, chauffeurs vérifiés + code de sécurité, Speeder électrique).
+ * Les quatre pages. Pour changer une image : remplacer le `require(...)` (photos recadrées en 1080×1240 dans
+ * assets/onboarding/) ; pour changer un texte : modifier la clé `onboarding.slideN.*` dans i18n/fr.ts (et dans les autres langues).
+ * Chaque promesse correspond à une fonction réelle de l'application : commande rapide, livraison, Speeders vérifiés + code de
+ * sécurité, Speeder électrique. Les photos viennent de Wikimedia Commons (CC BY-SA 4.0) : voir CREDITS_PHOTOS.md.
  */
 const SLIDES: Slide[] = [
   {
-    id: "zem",
+    id: "commande",
     titleKey: "onboarding.slide1.title",
     subtitleKey: "onboarding.slide1.subtitle",
-    image: require("../assets/zem-essence.jpg"),
+    image: require("../assets/onboarding/commande.jpg"),
+    credit: "© Jean-Baptiste Amagbegnon · CC BY-SA 4.0 · Wikimedia Commons",
+  },
+  {
+    id: "livraison",
+    titleKey: "onboarding.slide2.title",
+    subtitleKey: "onboarding.slide2.subtitle",
+    image: require("../assets/onboarding/livraison.jpg"),
+    credit: "© DEGAN Gabin · CC BY-SA 4.0 · Wikimedia Commons",
   },
   {
     id: "confiance",
-    titleKey: "onboarding.slide2.title",
-    subtitleKey: "onboarding.slide2.subtitle",
-    image: require("../assets/zem-essence1.jpg"),
+    titleKey: "onboarding.slide3.title",
+    subtitleKey: "onboarding.slide3.subtitle",
+    image: require("../assets/onboarding/confiance.jpg"),
+    credit: "© Oloudare king · CC BY-SA 4.0 · Wikimedia Commons",
   },
   {
     id: "electrique",
-    titleKey: "onboarding.slide3.title",
-    subtitleKey: "onboarding.slide3.subtitle",
-    image: require("../assets/moto-electrique.png"),
+    titleKey: "onboarding.slide4.title",
+    subtitleKey: "onboarding.slide4.subtitle",
+    image: require("../assets/onboarding/electrique.jpg"),
   },
 ];
 
 const LAST = SLIDES.length - 1;
+/** Les photos font 1080×1240 ; sur un écran plus étroit, on garde la partie gauche (le sujet) en priorité. */
+const PHOTO_RATIO = 1080 / 1240;
+const FOCUS_X = 0.3;
 
 export default function SplashScreen({ onStart }: Props) {
   const { t } = useI18n();
@@ -76,6 +91,8 @@ export default function SplashScreen({ onStart }: Props) {
   // Hauteur réelle de la zone d'affichage (sous la barre d'état et la barre de navigation comprises) : les images la remplissent entièrement
   const [measuredHeight, setMeasuredHeight] = useState(0);
   const pageHeight = measuredHeight || windowHeight;
+  // La photo occupe le haut de l'écran et s'estompe dans le fond violet ; le texte et les boutons se posent en dessous
+  const photoHeight = Math.min(pageHeight * 0.56, width * 1.18);
   const onRootLayout = (e: LayoutChangeEvent) => setMeasuredHeight(Math.round(e.nativeEvent.layout.height));
 
   const listRef = useRef<FlatList<Slide>>(null);
@@ -100,7 +117,6 @@ export default function SplashScreen({ onStart }: Props) {
   };
 
   return (
-    // Les images occupent TOUT l'écran (derrière la barre d'état et la barre de navigation) ; le texte et les boutons se posent par-dessus
     <View style={styles.root} onLayout={onRootLayout}>
       <StatusBar style="light" />
 
@@ -119,16 +135,25 @@ export default function SplashScreen({ onStart }: Props) {
         style={StyleSheet.absoluteFill}
         renderItem={({ item }) => (
           <View style={{ width, height: pageHeight }}>
-            <Image source={item.image} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel={t(item.titleKey)} />
-            {/* Voile sombre en haut (logo, « Passer ») et en bas (texte, boutons) pour que tout reste lisible */}
+            {/* Photo plein écran (largeur et hauteur de l'écran) : agrandie pour tout couvrir, recadrée sans déborder, sujet gardé du côté gauche */}
+            <View style={{ width, height: pageHeight, overflow: "hidden" }}>
+              <Image
+                source={item.image}
+                style={{ width: Math.max(width, pageHeight * PHOTO_RATIO), height: pageHeight, marginLeft: -Math.max(0, pageHeight * PHOTO_RATIO - width) * FOCUS_X }}
+                resizeMode="cover"
+                accessibilityLabel={t(item.titleKey)}
+              />
+            </View>
+            {/* Voile en haut (logo, « Passer ») et fondu de la photo vers le fond violet, pour que tout reste lisible */}
             <LinearGradient colors={["rgba(20,0,34,0.65)", "rgba(20,0,34,0)"]} style={[styles.shadeTop, { height: insets.top + 110 }]} pointerEvents="none" />
             <LinearGradient
-              colors={["rgba(20,0,34,0)", "rgba(20,0,34,0.82)", "rgba(20,0,34,0.96)"]}
-              locations={[0, 0.55, 1]}
-              style={[styles.shadeBottom, { height: insets.bottom + 340 }]}
+              colors={["rgba(47,0,76,0)", "rgba(47,0,76,0.7)", "rgba(47,0,76,0.9)"]}
+              locations={[0, 0.45, 1]}
+              style={[styles.fade, { top: photoHeight - 150, height: pageHeight - photoHeight + 150 }]}
               pointerEvents="none"
             />
-            <View style={[styles.texts, { bottom: insets.bottom + 150 }]}>
+            {item.credit ? <Text style={[styles.credit, { top: photoHeight - 118 }]} numberOfLines={1}>{item.credit}</Text> : null}
+            <View style={[styles.texts, { top: photoHeight - 70 }]}>
               <Text style={styles.title}>{t(item.titleKey)}</Text>
               <Text style={styles.subtitle}>{t(item.subtitleKey)}</Text>
             </View>
@@ -169,7 +194,8 @@ export default function SplashScreen({ onStart }: Props) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.onPrimaryFixed },
   shadeTop: { position: "absolute", top: 0, left: 0, right: 0 },
-  shadeBottom: { position: "absolute", bottom: 0, left: 0, right: 0 },
+  fade: { position: "absolute", left: 0, right: 0 },
+  credit: { position: "absolute", left: spacing.lg, right: spacing.lg, ...typography.labelSm, color: "rgba(255,255,255,0.7)", textAlign: "left" },
   header: {
     position: "absolute",
     top: 0,
@@ -193,7 +219,7 @@ const styles = StyleSheet.create({
   skipHidden: { opacity: 0 },
   skipText: { ...typography.labelMd, color: colors.onPrimary },
 
-  texts: { position: "absolute", left: 0, right: 0, paddingHorizontal: spacing.xl, alignItems: "center", gap: spacing.xs },
+  texts: { position: "absolute", left: 0, right: 0, paddingHorizontal: spacing.xl, alignItems: "center", gap: spacing.sm },
   title: { ...typography.headlineLg, color: colors.onPrimary, textAlign: "center" },
   subtitle: { ...typography.bodyLg, color: `${colors.onPrimary}E6`, textAlign: "center" },
 

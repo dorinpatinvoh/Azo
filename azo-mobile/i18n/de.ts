@@ -42,10 +42,12 @@ export const de: Record<MessageKey, string> = {
   "onboarding.page": "Seite {current} von {total}",
   "onboarding.slide1.title": "Dein Speeder, im Handumdrehen",
   "onboarding.slide1.subtitle": "In Sekunden bestellt, er kommt zu dir.",
-  "onboarding.slide2.title": "Fahre mit Vertrauen",
-  "onboarding.slide2.subtitle": "Geprüfte Speeder und bei jeder Abfahrt ein Sicherheitscode.",
-  "onboarding.slide3.title": "Steig auf Elektro um",
-  "onboarding.slide3.subtitle": "Leiser, sauberer, sparsamer.",
+  "onboarding.slide2.title": "Pakete und Besorgungen, geliefert",
+  "onboarding.slide2.subtitle": "Verschicke oder erhalte alles, überall in der Stadt.",
+  "onboarding.slide3.title": "Fahre mit Vertrauen",
+  "onboarding.slide3.subtitle": "Geprüfte Speeder und bei jeder Abfahrt ein Sicherheitscode.",
+  "onboarding.slide4.title": "Steig auf Elektro um",
+  "onboarding.slide4.subtitle": "Leiser, sauberer, sparsamer.",
 
   // ---------------------------------------------------------------- Tab-Leiste
   "tabs.home": "Start",

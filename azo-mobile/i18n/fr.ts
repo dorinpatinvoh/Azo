@@ -44,10 +44,12 @@ export const fr = {
   "onboarding.page": "Page {current} sur {total}",
   "onboarding.slide1.title": "Ton Speeder, en un clin d'œil",
   "onboarding.slide1.subtitle": "Commande en quelques secondes, il vient à toi.",
-  "onboarding.slide2.title": "Roule en confiance",
-  "onboarding.slide2.subtitle": "Speeders vérifiés et code de sécurité à chaque départ.",
-  "onboarding.slide3.title": "Passe à l'électrique",
-  "onboarding.slide3.subtitle": "Plus silencieux, plus propre, plus économique.",
+  "onboarding.slide2.title": "Colis et courses, livrés",
+  "onboarding.slide2.subtitle": "Envoie ou fais livrer ce que tu veux, partout en ville.",
+  "onboarding.slide3.title": "Roule en confiance",
+  "onboarding.slide3.subtitle": "Speeders vérifiés et code de sécurité à chaque départ.",
+  "onboarding.slide4.title": "Passe à l'électrique",
+  "onboarding.slide4.subtitle": "Plus silencieux, plus propre, plus économique.",
 
   // ---------------------------------------------------------------- barre d'onglets
   "tabs.home": "Accueil",

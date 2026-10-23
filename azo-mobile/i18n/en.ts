@@ -42,10 +42,12 @@ export const en: Record<MessageKey, string> = {
   "onboarding.page": "Page {current} of {total}",
   "onboarding.slide1.title": "Your Speeder, in the blink of an eye",
   "onboarding.slide1.subtitle": "Order in seconds, it comes to you.",
-  "onboarding.slide2.title": "Ride with confidence",
-  "onboarding.slide2.subtitle": "Verified Speeders and a security code at every pick-up.",
-  "onboarding.slide3.title": "Go electric",
-  "onboarding.slide3.subtitle": "Quieter, cleaner, more economical.",
+  "onboarding.slide2.title": "Parcels and errands, delivered",
+  "onboarding.slide2.subtitle": "Send or get anything delivered, anywhere in town.",
+  "onboarding.slide3.title": "Ride with confidence",
+  "onboarding.slide3.subtitle": "Verified Speeders and a security code at every pick-up.",
+  "onboarding.slide4.title": "Go electric",
+  "onboarding.slide4.subtitle": "Quieter, cleaner, more economical.",
 
   // ---------------------------------------------------------------- tab bar
   "tabs.home": "Home",
