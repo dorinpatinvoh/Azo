@@ -82,6 +82,8 @@ const SLIDES: Slide[] = [
 const LAST = SLIDES.length - 1;
 /** Les photos font 1080×1240 ; sur un écran plus étroit, on garde la partie gauche (le sujet) en priorité. */
 const PHOTO_RATIO = 1080 / 1240;
+/** Distance entre le bas de l'écran (hors barre système) et le haut du bloc de texte : bouton + points + marges du dock. */
+const TEXT_FROM_BOTTOM = 106 + 14 + 120;
 const FOCUS_X = 0.3;
 
 export default function SplashScreen({ onStart }: Props) {
@@ -135,25 +137,18 @@ export default function SplashScreen({ onStart }: Props) {
         style={StyleSheet.absoluteFill}
         renderItem={({ item }) => (
           <View style={{ width, height: pageHeight }}>
-            {/* Photo plein écran (largeur et hauteur de l'écran) : agrandie pour tout couvrir, recadrée sans déborder, sujet gardé du côté gauche */}
-            <View style={{ width, height: pageHeight, overflow: "hidden" }}>
-              <Image
-                source={item.image}
-                style={{ width: Math.max(width, pageHeight * PHOTO_RATIO), height: pageHeight, marginLeft: -Math.max(0, pageHeight * PHOTO_RATIO - width) * FOCUS_X }}
-                resizeMode="cover"
-                accessibilityLabel={t(item.titleKey)}
-              />
-            </View>
+            {/* Photo plein écran (largeur et hauteur de l'écran) : agrandie pour tout couvrir, recadrée au centre sans déborder */}
+            <Image source={item.image} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel={t(item.titleKey)} />
             {/* Voile en haut (logo, « Passer ») et fondu de la photo vers le fond violet, pour que tout reste lisible */}
             <LinearGradient colors={["rgba(20,0,34,0.65)", "rgba(20,0,34,0)"]} style={[styles.shadeTop, { height: insets.top + 110 }]} pointerEvents="none" />
             <LinearGradient
               colors={["rgba(47,0,76,0)", "rgba(47,0,76,0.7)", "rgba(47,0,76,0.9)"]}
               locations={[0, 0.45, 1]}
-              style={[styles.fade, { top: photoHeight - 150, height: pageHeight - photoHeight + 150 }]}
+              style={[styles.fade, { top: pageHeight - insets.bottom - TEXT_FROM_BOTTOM - 150, bottom: 0 }]}
               pointerEvents="none"
             />
-            {item.credit ? <Text style={[styles.credit, { top: photoHeight - 118 }]} numberOfLines={1}>{item.credit}</Text> : null}
-            <View style={[styles.texts, { top: photoHeight - 70 }]}>
+            {/* Texte posé juste au-dessus des quatre points */}
+            <View style={[styles.texts, { bottom: insets.bottom + TEXT_FROM_BOTTOM - 120 }]}>
               <Text style={styles.title}>{t(item.titleKey)}</Text>
               <Text style={styles.subtitle}>{t(item.subtitleKey)}</Text>
             </View>
@@ -195,7 +190,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.onPrimaryFixed },
   shadeTop: { position: "absolute", top: 0, left: 0, right: 0 },
   fade: { position: "absolute", left: 0, right: 0 },
-  credit: { position: "absolute", left: spacing.lg, right: spacing.lg, ...typography.labelSm, color: "rgba(255,255,255,0.7)", textAlign: "left" },
   header: {
     position: "absolute",
     top: 0,
@@ -220,8 +214,8 @@ const styles = StyleSheet.create({
   skipText: { ...typography.labelMd, color: colors.onPrimary },
 
   texts: { position: "absolute", left: 0, right: 0, paddingHorizontal: spacing.xl, alignItems: "center", gap: spacing.sm },
-  title: { ...typography.headlineLg, color: colors.onPrimary, textAlign: "center" },
-  subtitle: { ...typography.bodyLg, color: `${colors.onPrimary}E6`, textAlign: "center" },
+  title: { ...typography.headlineMd, color: colors.onPrimary, textAlign: "center" },
+  subtitle: { ...typography.bodyMd, color: `${colors.onPrimary}E6`, textAlign: "center" },
 
   dock: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.lg },
   dots: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 10 },
