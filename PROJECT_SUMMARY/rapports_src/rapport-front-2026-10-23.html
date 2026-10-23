@@ -1,0 +1,52 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 23 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) et la console web (<code>admin-web</code>) — pour Sergio</p><span class="tag">23 octobre 2026 · console d'administration, interface plus sobre, logo, onboarding, carte Speeder à essence</span></div>
+
+<h2>1. En résumé</h2>
+<p>La <b>console d'administration</b> gagne la suppression définitive de tout compte, la correction des noms, la remise à zéro d'un portefeuille et du tableau de bord (avant la mise en service), et un tableau de bord actualisé tout seul. Côté <b>application</b> : numéro du destinataire obligatoire pour une livraison, accueil client plus sobre, nouveau logo, onboarding refait, photo de fond sur la carte « Speeder à essence ». <code>tsc</code> sans erreur (mobile et console).</p>
+<div class="box warn"><b>À savoir avant de tester :</b> <b>aucun écran n'a été vérifié par moi sur un téléphone</b> ; les captures reçues le 23 octobre montrent que les <b>photos de l'onboarding ne s'affichent pas</b> (cause non trouvée, voir §6). Déployer le serveur <b>avant</b> l'APK (migrations <code>20261023120000</code> et <code>20261023180000</code>). Après chaque changement de la console, la reconstruire <b>avec</b> <code>VITE_API_URL=https://azo-backend.onrender.com</code> puis la renvoyer sur Cloudflare : sans cette variable, le tableau de bord affiche « Erreur 404 ».</div>
+
+<h2>2. Console d'administration</h2>
+<ul>
+<li><b>Supprimer définitivement</b> tout compte (client, commercial, prestataire, agence, administrateur). L'historique est conservé de façon anonyme (choix validé) ; refus pour son propre compte, le dernier administrateur actif, une course en cours, un portefeuille non nul (« Solder et supprimer »).</li>
+<li><b>Modifier le nom</b> d'une personne (compte et dossier prestataire), tracé au journal. <b>Solde à zéro</b> d'un client, Speeder, coursier ou artisan, avec écriture visible.</li>
+<li><b>Tableau de bord</b> : en cours, aujourd'hui, volumes, 7 derniers jours (barres), retraits à payer, note moyenne, comptes sans les comptes supprimés ; <b>actualisation automatique toutes les 20 s</b> et à chaque retour sur l'onglet.</li>
+<li><b>Remise à zéro avant lancement</b> (bouton « Remettre le tableau de bord à 0 », page Finances) : une date de départ est enregistrée ; gains, commissions, volumes, retraits, comptes, courses, livraisons, graphique et note ne comptent plus que ce qui suit. <b>Rien n'est effacé</b>. Irréversible depuis la console : à faire juste avant lundi.</li>
+</ul>
+
+<h2>3. Application : interface plus sobre</h2>
+<ul>
+<li>Accueil client : sous-titres des tuiles et des sections retirés, pastilles « Populaire » / « Sécurisé » retirées, bannière écologique retirée.</li>
+<li>Menus profil (Speeder, coursier, agence) sans phrases d'aide ; états vides en icône + mot (Speeder, coursier).</li>
+<li>Propositions pour la suite (non faites) : tableau de bord de l'agence en 4 tuiles de chiffres, écran de course du Speeder avec un seul bouton qui change d'étape, textes explicatifs derrière un « ⓘ ».</li>
+</ul>
+
+<h2>4. Livraison, logo, carte Speeder à essence</h2>
+<ul>
+<li>Livraison : numéro du destinataire obligatoire ; le code de remise n'est plus visible du coursier (il va au destinataire s'il a un compte, sinon le client le transmet).</li>
+<li><b>Logo</b> : <code>nouveau_launch.png</code> devient l'icône (<code>launchicon</code>, <code>icon</code>), l'écran de lancement et les icônes Android. Le dossier <code>android</code> n'étant pas suivi par git, les icônes natives ont été régénérées sur le poste.</li>
+<li><b>Carte « Speeder à essence »</b> (choix du Speeder) : photo de moto en fond à 45 % d'opacité, photo « Zémidjan Abomey Calavi » (Oloudare king, CC BY-SA 4.0), recadrée et intégrée au code.</li>
+</ul>
+
+<h2>5. Onboarding</h2>
+<ul>
+<li>Quatre pages, photo plein écran (agrandie et recadrée au centre), titre et phrase juste au-dessus des quatre points, police réduite, sans ligne de crédit à l'écran. Photos : <code>assets/onboarding/*.jpg</code>.</li>
+</ul>
+
+<h2>6. Points ouverts</h2>
+<ul>
+<li><b>Photos de l'onboarding invisibles</b> sur le téléphone de test alors qu'elles sont dans l'APK, déclarées dans le code et que les JPEG sont normaux. Un essai avec des photos redimensionnées et intégrées au code (<code>assets/onboarding/photos.ts</code>) est en test, <b>sans retour à ce jour</b>. Si elles restent invisibles : test d'un bloc de couleur à la place de la photo pour savoir si la zone existe.</li>
+<li><b>Licence des photos</b> (CC BY-SA 4.0) : le nom de l'auteur doit être affiché quelque part (par exemple « À propos ») avant la mise en ligne publique ; détail dans <code>CREDITS_PHOTOS.md</code>.</li>
+<li>Connexion : message « NPI déjà utilisé » pour un NPI déjà lié à un autre compte (test) ; supprimer d'abord les comptes de test avant le lancement. Une recherche par NPI dans la console est proposée.</li>
+<li>Commits locaux non poussés au moment de ce rapport : accueil sobre (<code>ec6f44d3</code>), onboarding (<code>812c3e83</code>, <code>203fe077</code>).</li>
+</ul>
+
+<h2>7. Commits</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>40dfb451</code></td><td>« Supprimer définitivement » sur tous les comptes</td></tr>
+<tr><td><code>4d2b9c4c</code></td><td>Modifier le nom, solde à zéro d'un compte</td></tr>
+<tr><td><code>13e48705</code>, <code>5044ff4c</code></td><td>Tableau de bord réel, actualisation, portefeuille de l'entreprise</td></tr>
+<tr><td><code>f86a32ae</code>, <code>f08b0864</code></td><td>Remise à zéro par date de départ (migration <code>20261023180000</code>), correction d'un plantage du tableau de bord</td></tr>
+<tr><td><code>b75fe985</code>, <code>76d2cd14</code></td><td>Interface sobre ; nouveau logo</td></tr>
+<tr><td><code>ec6f44d3</code>, <code>812c3e83</code>, <code>203fe077</code></td><td>Accueil sans bannière ; onboarding (en local)</td></tr>
+<tr><td>à venir</td><td>Carte Speeder à essence avec photo de fond</td></tr></table>
+</body></html>

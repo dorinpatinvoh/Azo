@@ -10,3 +10,5 @@ Photos de l'écran de présentation (onboarding), recadrées. Source : Wikimedia
 | assets/onboarding/confiance.jpg | Oloudare king | https://commons.wikimedia.org/wiki/File:Zemidjan_Porto_Novo.jpg |
 
 `assets/onboarding/electrique.jpg` est tiré de `assets/moto-electrique.png` (visuel fourni par AZO).
+
+`assets/vehicles/zem-essence-bg.ts` (fond de la carte « Speeder à essence ») : photo « Zémidjan Abomey Calavi.jpg », auteur Oloudare king, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), https://commons.wikimedia.org/wiki/File:Z%C3%A9midjan_Abomey_Calavi.jpg (recadrée).

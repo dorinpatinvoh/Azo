@@ -1,5 +1,5 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 23 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
-<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">23 octobre 2026 · migration <code>20261023120000_delivery_recipient_phone</code> · commit <code>f89f09c5</code></span></div>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">23 octobre 2026 · migrations <code>20261023120000</code> et <code>20261023180000</code> · commit <code>f08b0864</code></span></div>
 
 <h2>1. En résumé</h2>
 <p>Trois changements : le <b>numéro du destinataire</b> est obligatoire pour une livraison et le <b>code de remise n'est plus visible du coursier</b> ; le <b>kilométrage démarre dès le départ</b> ; la <b>suppression de compte par l'administrateur</b> couvre tous les profils.</p>
@@ -22,6 +22,14 @@
 <li>Tous les profils peuvent être supprimés : client, commercial, prestataire, agence, administrateur (y compris <code>0197000000</code>).</li>
 <li>Si l'effacement définitif d'un compte sans historique échoue à cause d'une donnée liée (clé étrangère), le compte est <b>anonymisé</b> au lieu de renvoyer une erreur.</li>
 <li>Garde-fous conservés : son propre compte, le dernier administrateur actif, une course ou livraison en cours, un portefeuille non nul (« Solder et supprimer »).</li>
+</ul>
+
+<h2>4 bis. Console : nom, portefeuille, tableau de bord, remise à zéro</h2>
+<ul>
+<li><code>POST /admin/users/:id/name</code> (corrige le nom du compte et du dossier prestataire, tracé dans <code>UserProfileChange</code>) et <code>POST /admin/users/:id/wallet-reset</code> (portefeuille d'un client ou prestataire remis à zéro par une écriture ; refusé pour administrateur ou agence).</li>
+<li><code>GET /admin/stats</code> enrichi : en cours, aujourd'hui, 7 jours (heure du Bénin), volume, retraits à payer, note moyenne ; comptes supprimés exclus.</li>
+<li><b>Remise à zéro</b> : table <code>AppSetting</code> (migration <code>20261023180000_app_setting</code>, clé <code>moneyBaselineAt</code>, <b>non validée sur une vraie base</b>). <code>POST /admin/finance/reset</code> pose la date de départ et ramène le portefeuille administrateur à 0 ; gains, commissions, volumes, retraits, comptes, courses, livraisons, graphique et note ne comptent que ce qui suit. Rien n'est effacé en base. Un défaut de cette fonction (variable lue avant d'être déclarée : plantage du tableau de bord) a été corrigé dans <code>f08b0864</code> et couvert par un test.</li>
+<li>Suppression de compte : si l'effacement définitif échoue (clé étrangère), le compte est anonymisé.</li>
 </ul>
 
 <h2>5. Vérifications</h2>

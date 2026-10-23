@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View, Text, TextInput, StyleSheet, Pressable, ScrollView,
+  View, Text, TextInput, StyleSheet, Pressable, ScrollView, Image,
   ActivityIndicator, Linking, Keyboard, Platform,
 } from "react-native";
 // Supprime l'ancien import de MapView, UrlTile, Marker
@@ -24,6 +24,7 @@ import { useCurrentLocation } from "../hooks/useCurrentLocation";
 import { getDrivingRoute, type DrivingRoute } from "../services/routing";
 import { getLanguage, languageInfo, tr, useI18n, type MessageKey } from "../i18n";
 import { BrandAlert } from "../components/BrandAlert";
+import { ZEM_ESSENCE_BG } from "../assets/vehicles/zem-essence-bg";
 
 type Props = {
   service: "transport" | "zem";
@@ -165,6 +166,8 @@ function VehicleOfferCard({
           : tr("ride.a11y.offer", { vehicle: vLabel(vehicle) })
       }
     >
+      {/* Photo de fond de la carte Speeder à essence, à 45 % d'opacité */}
+      {vehicle === "ZEM_ESSENCE" ? <Image source={{ uri: ZEM_ESSENCE_BG }} style={styles.zemCardBg} resizeMode="cover" /> : null}
       <View style={styles.zemCardTop}>
         <View style={styles.zemCardIcon}>
           <MaterialIcons name={VEHICLES[vehicle].icon} size={30} color={colors.primary} />
@@ -1033,7 +1036,8 @@ const styles = StyleSheet.create({
   zemList: { paddingHorizontal: spacing.md, gap: spacing.md },
   zemStep: { ...typography.labelSm, color: colors.primary, letterSpacing: 1 },
   // Carte de choix du Speeder : en-tête (icône, titre, chevron), puis le détail du prix en dessous
-  zemCard: { gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
+  zemCardBg: { ...StyleSheet.absoluteFill, opacity: 0.45 },
+  zemCard: { overflow: "hidden", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
   zemCardPressed: { borderColor: colors.primary, backgroundColor: colors.primaryFixed },
   zemCardTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   zemCardIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryFixed, alignItems: "center", justifyContent: "center" },
