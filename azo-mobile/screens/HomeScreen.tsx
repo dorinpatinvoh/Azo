@@ -306,9 +306,6 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
                 <View style={styles.mainServiceIcon}>
                   <MaterialIcons name={s.icon} size={26} color={s.fg} />
                 </View>
-                <View style={styles.mainServiceBadge}>
-                  <Text style={[styles.mainServiceBadgeText, { color: s.fg }]} numberOfLines={1}>{t(s.badgeKey)}</Text>
-                </View>
               </View>
               <Text style={styles.mainServiceText} numberOfLines={2}>{t(s.labelKey)}</Text>
             </Pressable>
@@ -337,27 +334,6 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
           ))}
         </View>
 
-        {/* Bannière promo Speeder Électrique */}
-        <LinearGradient
-          colors={["#008751", "#005a36"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.promoBanner}
-        >
-          <View style={{ flex: 1 }}>
-            <View style={styles.promoTag}>
-              <MaterialIcons name="bolt" size={14} color="#008751" />
-              <Text style={styles.promoTagText}>
-                {promoSavings > 0 ? t("home.promo.tagSave", { amount: promoSavings, km: PROMO_KM }) : t("home.promo.tag")}
-              </Text>
-            </View>
-            <Text style={styles.promoTitle}>{t("home.promo.title")}</Text>
-          </View>
-          <Pressable style={styles.promoCta} onPress={() => onSelectService("zem")}>
-            <Text style={styles.promoCtaText}>{t("home.promo.cta")}</Text>
-            <MaterialIcons name="arrow-forward" size={16} color="#008751" />
-          </Pressable>
-        </LinearGradient>
       </ScrollView>
 
       {/* Barre de navigation basse (composant partagé avec Courses et Profil) */}
