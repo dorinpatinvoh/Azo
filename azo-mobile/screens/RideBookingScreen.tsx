@@ -177,8 +177,8 @@ function VehicleOfferCard({
         <>
           <Image source={{ uri: CARD_BG[vehicle] }} style={styles.zemCardBg} resizeMode="cover" />
           <LinearGradient
-            colors={["rgba(255,255,255,0.9)", "rgba(255,255,255,0.55)", "rgba(255,255,255,0.05)"]}
-            locations={[0, 0.5, 1]}
+            colors={["rgba(255,255,255,0.94)", "rgba(255,255,255,0.78)", "rgba(255,255,255,0.45)"]}
+            locations={[0, 0.55, 1]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFill}
@@ -1054,7 +1054,7 @@ const styles = StyleSheet.create({
   zemList: { paddingHorizontal: spacing.md, gap: spacing.md },
   zemStep: { ...typography.labelSm, color: colors.primary, letterSpacing: 1 },
   // Carte de choix du Speeder : en-tête (icône, titre, chevron), puis le détail du prix en dessous
-  zemCardBg: { ...StyleSheet.absoluteFill },
+  zemCardBg: { ...StyleSheet.absoluteFill, opacity: 0.8 },
   zemCard: { overflow: "hidden", gap: spacing.sm, backgroundColor: colors.surfaceContainerLowest, borderRadius: radius.xl, borderWidth: 1.5, borderColor: colors.surfaceContainer, padding: spacing.md, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8 },
   zemCardPressed: { borderColor: colors.primary, backgroundColor: colors.primaryFixed },
   zemCardTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },
@@ -1063,11 +1063,11 @@ const styles = StyleSheet.create({
   zemCardTitle: { ...typography.headlineSm, color: colors.onSurface, flexShrink: 1 },
   zemBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: colors.primaryFixed, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
   zemBadgeText: { ...typography.labelSm, color: colors.primary },
-  zemCardSub: { ...typography.bodySm, color: colors.onSurfaceVariant, marginTop: 2 },
+  zemCardSub: { ...typography.bodySm, color: colors.onSurface, marginTop: 2 },
   zemBaseRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.surfaceContainerLow, borderRadius: radius.md, paddingHorizontal: spacing.sm + 2, paddingVertical: 8, marginTop: spacing.xs },
   zemBaseLabel: { ...typography.labelMd, color: colors.onSurfaceVariant },
   zemBaseValue: { ...typography.labelLg, color: colors.primary },
-  zemTiers: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.82)", borderWidth: 1, borderColor: colors.surfaceContainer, borderRadius: radius.md, overflow: "hidden" },
+  zemTiers: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.92)", borderWidth: 1, borderColor: colors.surfaceContainer, borderRadius: radius.md, overflow: "hidden" },
   zemTier: { flex: 1, alignItems: "center", paddingVertical: 8, paddingHorizontal: 4, gap: 2 },
   zemTierDivider: { borderRightWidth: 1, borderRightColor: colors.surfaceContainer },
   zemTierLabel: { ...typography.bodySm, color: colors.onSurfaceVariant, fontSize: 11 },
