@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   AppState,
   Modal,
+  Animated,
+  AccessibilityInfo,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -117,10 +119,32 @@ const QUICK_DESTINATIONS: { id: string; labelKey: MessageKey; icon: keyof typeof
 // Économie du Speeder électrique sur un trajet de référence, calculée avec le barème (jamais écrite à la main).
 const PROMO_KM = 5;
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+/** Toutes les 30 secondes, les cartes de services vibrent pendant 1 seconde (désactivé si l'utilisateur a réduit les animations). */
+const SHAKE_EVERY_MS = 30000;
+
 export default function HomeScreen({ clientName = "", onSelectService, onQuickOrder, onNavigateTab }: Props) {
   const [quick, setQuick] = useState<{ id: string; label: string; kind: QuickKind | null } | null>(null);
   const insets = useSafeAreaInsets();
   const { t, locale } = useI18n();
+  const shake = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    let reduce = false;
+    AccessibilityInfo.isReduceMotionEnabled().then((v) => { reduce = v; }).catch(() => {});
+    const run = () => {
+      if (reduce || AppState.currentState !== "active") return;
+      const step = (to: number) => Animated.timing(shake, { toValue: to, duration: 100, useNativeDriver: true });
+      Animated.sequence([step(1), step(-1), step(1), step(-1), step(1), step(-1), step(1), step(-1), step(1), step(0)]).start();
+    };
+    const id = setInterval(run, SHAKE_EVERY_MS);
+    return () => clearInterval(id);
+  }, [shake]);
+  const shakeStyle = {
+    transform: [
+      { translateX: shake.interpolate({ inputRange: [-1, 1], outputRange: [-3, 3] }) },
+      { rotate: shake.interpolate({ inputRange: [-1, 1], outputRange: ["-1.5deg", "1.5deg"] }) },
+    ],
+  };
   const [name, setName] = useState(clientName);
   const [balance, setBalance] = useState<number | null>(null);
   const [loadingWallet, setLoadingWallet] = useState(true);
@@ -297,9 +321,9 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
         </View>
         <View style={styles.mainServicesRow}>
           {MAIN_SERVICES.map((s) => (
-            <Pressable
+            <AnimatedPressable
               key={s.id}
-              style={[styles.mainServiceCard, { backgroundColor: s.bg }]}
+              style={[styles.mainServiceCard, { backgroundColor: s.bg }, shakeStyle]}
               onPress={() => onSelectService(s.id)}
             >
               <View style={styles.mainServiceTop}>
@@ -308,7 +332,7 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
                 </View>
               </View>
               <Text style={styles.mainServiceText} numberOfLines={2}>{t(s.labelKey)}</Text>
-            </Pressable>
+            </AnimatedPressable>
           ))}
         </View>
 
@@ -318,9 +342,9 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
         </View>
         <View style={styles.otherServicesGrid}>
           {OTHER_SERVICES.map((s, i) => (
-            <Pressable
+            <AnimatedPressable
               key={s.id}
-              style={[styles.smallTile, i >= 3 && styles.wideTile]}
+              style={[styles.smallTile, i >= 3 && styles.wideTile, shakeStyle]}
               onPress={() => onSelectService(s.id)}
               accessibilityRole="button"
             >
@@ -330,7 +354,7 @@ export default function HomeScreen({ clientName = "", onSelectService, onQuickOr
               <Text style={[styles.smallTileLabel, i >= 3 && styles.wideTileLabel]} numberOfLines={2}>
                 {t(s.labelKey)}
               </Text>
-            </Pressable>
+            </AnimatedPressable>
           ))}
         </View>
 
