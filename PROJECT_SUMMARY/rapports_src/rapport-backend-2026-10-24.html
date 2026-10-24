@@ -1,0 +1,53 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport backend — 24 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport backend — AZƆ̀</h1><p>Ce qui a été fait sur l'API (<code>azo-backend</code>) — pour Dorin</p><span class="tag">24 octobre 2026 · notifications push, accusés de commande, grille tarifaire · commit <code>2b7c2ab8</code> · aucune migration</span></div>
+
+<h2>1. En résumé</h2>
+<p>Deux changements sur les <b>notifications</b> : le serveur écrit désormais dans ses journaux <b>pourquoi une notification poussée n'est pas partie</b>, et le client reçoit un <b>accusé de réception</b> quand il commande une course, une course programmée ou une livraison. La <b>grille tarifaire</b> est remise à jour. 439 tests verts, <code>tsc</code> sans erreur. <b>Aucune migration</b> : le déploiement ne demande que le redémarrage habituel.</p>
+<div class="box warn"><b>À savoir :</b> je n'ai <b>pas vu une seule notification arriver sur un téléphone</b>. Au dernier test, un client dont le compte a été rechargé n'a rien reçu ; la cause n'est pas encore identifiée (voir §3). Aucun fournisseur de SMS n'est branché : le serveur tourne en simulation (code <code>0000</code> accepté partout) ; <code>SMS_PROVIDER=live</code> sans passerelle empêcherait toute connexion.</div>
+
+<h2>2. Accusés de commande</h2>
+<ul>
+<li>Le serveur notifiait déjà le client à presque toutes les étapes (chauffeur trouvé, proposition, arrivée, départ, fin, annulation, aucun chauffeur, livraison assignée / ramassée / livrée / annulée, recharge). Il manquait l'accusé à la commande.</li>
+<li><code>RidesService.create</code> : « Commande envoyée — nous cherchons un Speeder près de toi » (<code>NOTIFICATION_RIDE_REQUESTED</code>), ou « Course programmée enregistrée » (<code>NOTIFICATION_RIDE_REQUESTED_SCHEDULED</code>). <code>DeliveryService.create</code> : <code>NOTIFICATION_DELIVERY_REQUESTED</code>. Textes en 4 langues dans <code>notification-texts.ts</code> ; événements <code>ride-requested</code> et <code>delivery-requested</code> (l'application ne réagit qu'à <code>ride-offered</code> et <code>ride-new</code>, aucun effet de bord).</li>
+<li>L'envoi est enveloppé dans un <code>try/catch</code> : un échec de notification ne bloque jamais une commande. Le test du destinataire de livraison a été adapté (l'expéditeur reçoit son accusé ; aucun code de remise n'est envoyé à un tiers).</li>
+</ul>
+
+<h2>3. Notifications poussées : ce qui a été trouvé</h2>
+<ul>
+<li>Le serveur envoie bien par Expo Push (<code>NotificationsService.sendExpoPush</code>), après une ligne dans la boîte de réception. Mais deux cas échouaient <b>en silence</b> : aucun jeton enregistré pour l'utilisateur, et envoi refusé par Expo (seul <code>DeviceNotRegistered</code> était traité).</li>
+<li><b>Journaux ajoutés</b> (<code>4a1d44dc</code>) : « Push non envoyé : aucun jeton enregistré pour l'utilisateur … » et « Expo Push API : N envoi(s) refusé(s) — &lt;motif&gt; » (<code>InvalidCredentials</code> = clé FCM absente chez Expo ; <code>MismatchSenderId</code> = mauvais projet Firebase). Jamais de jeton dans les journaux.</li>
+<li><b>Côté application</b> (voir rapport front) : <code>google-services.json</code> manquait, ce qui empêchait Android de créer un jeton ; il est maintenant dans l'APK. La clé FCM V1 est, d'après Sergio, déjà déposée chez Expo (non vérifiable d'ici).</li>
+<li><b>Vérification à faire</b> : après une commande, ouvrir les journaux Render (Logs) et chercher « Push non envoyé » ou « Expo Push API ». Résultat à communiquer.</li>
+<li><b>Non fait</b> : page « Notifications » dans la console pour envoyer un message à tous ou par profil (proposée).</li>
+</ul>
+
+<h2>4. SMS (information)</h2>
+<ul>
+<li>Brevo propose des SMS transactionnels par API, mais la <b>couverture du Bénin et le prix n'ont pas pu être confirmés</b> ; l'enregistrement d'un nom d'expéditeur (Sender ID) est obligatoire par pays depuis le 13 mars 2026. Aucun code d'envoi de SMS n'existe dans le serveur (ni Brevo, ni Twilio, ni autre). À trancher avant d'activer <code>SMS_PROVIDER=live</code>.</li>
+</ul>
+
+<h2>5. Grille tarifaire</h2>
+<ul>
+<li><code>GRILLE_TARIFAIRE_AZO.pdf</code> du 24 octobre : courses simples (6 véhicules), colis, coursier personnel, commissions (15 % + <b>commission téléphone 10 %, lundi au vendredi, 4 mois</b>), retraits (prestataire : minimum 1 000 F, paiement manuel), recharges (minimum 300 F), 6 niveaux d'agence. Les tarifs n'ont pas changé ; ils viennent de <code>tarification.json</code>.</li>
+<li>Restent « à trancher » : commission des livraisons (15 % provisoire), taux d'agence appliqué seulement aux courses simples, aucun frais d'annulation.</li>
+</ul>
+
+<h2>6. Vérifications</h2>
+<ul>
+<li><b>Tests</b> : 439 verts sur 41 suites. <code>tsc</code> sans erreur.</li>
+<li><b>Non vérifié</b> : tout envoi réel de notification, la migration <code>20261023180000_app_setting</code> sur une vraie base (rappel du rapport du 23), la remise à zéro du tableau de bord de la console en production.</li>
+</ul>
+
+<h2>7. Points à connaître</h2>
+<ul>
+<li>Un NPI ne peut être lié qu'à un seul compte (contrainte unique) : un compte de test qui garde un NPI bloque une nouvelle inscription avec le même NPI. Supprimer les comptes de test avant lundi.</li>
+<li>Les comptes administrateur ne se connectent pas par code dans l'application tant que <code>SMS_PROVIDER</code> n'est pas « live » : mot de passe sur la console web.</li>
+<li>Audit du 21 octobre toujours ouvert : boutique « marché » (prix négatif), SMS, suppression de compte par l'utilisateur et pages légales, schéma / migrations, dépendances vulnérables, hébergement gratuit.</li>
+</ul>
+
+<h2>8. Commits</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>4a1d44dc</code></td><td>Journaux explicites des push (aucun jeton, motif du refus d'Expo)</td></tr>
+<tr><td><code>2b7c2ab8</code></td><td>Accusé de réception à la commande (course, course programmée, livraison)</td></tr>
+<tr><td><code>48b97891</code></td><td>Grille tarifaire du 24 octobre</td></tr></table>
+</body></html>

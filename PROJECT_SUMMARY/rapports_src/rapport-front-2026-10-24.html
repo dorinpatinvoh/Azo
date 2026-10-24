@@ -1,0 +1,53 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport front — 24 octobre 2026</title><link rel="stylesheet" href="rapport.css"></head><body>
+<div class="cover"><h1>Rapport front — AZƆ̀</h1><p>Ce qui a été fait sur l'application mobile (<code>azo-mobile</code>) et la console web (<code>admin-web</code>) — pour Sergio</p><span class="tag">24 octobre 2026 · cartes Speeder illustrées, accueil animé, notifications push (Firebase), onboarding en test</span></div>
+
+<h2>1. En résumé</h2>
+<p>Choix du Speeder : les cartes <b>Speeder à essence, électrique et tricycle</b> ont chacune un visuel fourni par AZO en fond. L'accueil client est plus sobre et ses cartes de services <b>vibrent 1 seconde toutes les 30 secondes</b>. Les <b>notifications push</b> sont branchées côté Android (fichier Firebase + plugin). L'<b>onboarding</b> reste en test : les photos ne s'affichaient pas. <code>tsc</code> sans erreur.</p>
+<div class="box warn"><b>À savoir avant de tester :</b> <b>je n'ai vu aucun écran sur un téléphone</b> ; les retours viennent des captures de Sergio. Les push n'ont pas encore été vus fonctionner. Désinstaller l'ancienne version avant d'installer l'APK (icône et onboarding). La console doit être reconstruite avec <code>VITE_API_URL=https://azo-backend.onrender.com</code> avant d'être renvoyée sur Cloudflare.</div>
+
+<h2>2. Cartes du choix du Speeder (course)</h2>
+<ul>
+<li>Essais successifs d'après les captures : photo Wikimedia à 45 % (trop pâle), puis en couleurs avec un voile blanc dégradé (texte peu lisible par endroits), puis voile renforcé. <b>Version finale</b> : trois visuels fournis par AZO (<code>assets/moto_essence.png</code>, <code>moto_electrique.png</code>, <code>moto_tricycle.png</code>), placés à droite de la carte sur fond blanc pur (le gris du fond est poussé vers le blanc), à 55 % d'opacité ; le fond du tableau des prix est blanc à 72 %. Les cartes voiture n'ont pas de visuel.</li>
+<li>Les images sont <b>intégrées au code</b> (<code>assets/vehicles/*-bg.ts</code>, data URI) : c'est la méthode qui s'affiche sur le téléphone de test.</li>
+<li><b>Droits</b> : ces trois visuels montrent des modèles de marque ; vérifier qu'AZO a le droit de les publier. Les photos Wikimedia (CC BY-SA 4.0) ne sont plus utilisées sur ces cartes ; <code>CREDITS_PHOTOS.md</code> est à jour.</li>
+</ul>
+
+<h2>3. Accueil client</h2>
+<ul>
+<li>Toutes les 30 secondes, les 3 cartes Speeder et les 5 cartes de services tremblent pendant 1 seconde (va-et-vient de 3 px, légère inclinaison), seulement si l'application est au premier plan et si l'utilisateur n'a pas réduit les animations dans Android. Vibration <b>visuelle</b> (pas du moteur du téléphone).</li>
+<li>Accueil sobre : sous-titres et pastilles « Populaire » / « Sécurisé » retirés, bannière écologique retirée (commits du 23 octobre).</li>
+</ul>
+
+<h2>4. Notifications push : côté application</h2>
+<ul>
+<li><b>Cause d'absence de push</b> : <code>app.json</code> référence <code>google-services.json</code>, mais le fichier n'existait pas ; Android ne pouvait pas créer de jeton, et l'application n'affichait aucune erreur (le jeton revient « vide »).</li>
+<li>Le bon fichier (projet Firebase <code>azo-push-74d5b</code>, paquet <code>bj.azo.app</code>) a été copié dans <code>azo-mobile/</code> et <code>android/app/</code> ; trois autres fichiers du dossier Téléchargements appartenaient à une autre application et n'ont pas été utilisés. Le plugin <code>com.google.gms.google-services</code> a été ajouté au projet Android ; la configuration est bien présente dans l'APK compilé.</li>
+<li><b>Hors dépôt</b> : le fichier est ignoré par git et le dossier <code>android</code> n'est pas suivi ; si le dossier est régénéré (<code>expo prebuild</code>), refaire l'ajout du plugin et du fichier. La clé FCM V1 est, d'après Sergio, déposée chez Expo.</li>
+<li><b>Test à faire</b> : installer l'APK du jour, se connecter, accepter les notifications, commander une course ; application en arrière-plan, la notification « Commande envoyée » doit apparaître. Sinon, journaux Render (voir rapport backend).</li>
+</ul>
+
+<h2>5. Onboarding : toujours ouvert</h2>
+<ul>
+<li>Quatre pages, photo plein écran, texte au-dessus des quatre points, police réduite, sans ligne de crédit à l'écran. Les photos <b>n'apparaissaient pas</b> au dernier test (les fichiers sont dans l'APK, les JPEG sont normaux).</li>
+<li>Essai en cours, <b>non commité</b> : photos redimensionnées à 720 px et intégrées au code (<code>assets/onboarding/photos.ts</code>, <code>SplashScreen.tsx</code>) ; la même méthode fonctionne pour les cartes du Speeder. <b>Pas de retour de test</b> à ce jour. S'il fonctionne : commiter.</li>
+<li><b>Licence</b> : photos CC BY-SA 4.0 ; afficher les noms des auteurs dans l'application (par exemple « À propos ») avant la mise en ligne publique.</li>
+</ul>
+
+<h2>6. Problèmes rencontrés (diagnostic)</h2>
+<ul>
+<li><b>« NPI déjà utilisé »</b> à l'inscription : un NPI ne peut appartenir qu'à un seul compte. Supprimer les comptes de test avant lundi ; une recherche par NPI dans la console est proposée, pas faite.</li>
+<li><b>Connexion refusée</b> pour un numéro : messages possibles — compte bloqué, compte administrateur (mot de passe sur la console), trop de demandes de code, ou compte supprimé (le numéro est libre, la connexion crée un compte vide). Cause réelle non identifiée faute du message exact.</li>
+</ul>
+
+<h2>7. Console</h2>
+<ul>
+<li>Pas de changement de code aujourd'hui. Rappel : la remise à zéro du tableau de bord n'est active que lorsque le bouton « Remettre le tableau de bord à 0 » est pressé (page Finances), et ne peut pas être annulée depuis la console.</li>
+</ul>
+
+<h2>8. Commits</h2>
+<table><tr><th>Commit</th><th>Contenu</th></tr>
+<tr><td><code>cf49fdec</code>, <code>86de492e</code>, <code>c1bd6400</code></td><td>Cartes Speeder : photo de fond, voile, lisibilité</td></tr>
+<tr><td><code>0c6e9a1a</code></td><td>Vibration des cartes de services</td></tr>
+<tr><td><code>f457ef48</code></td><td>Visuels AZO pour les trois cartes Speeder</td></tr>
+<tr><td>local, non commité</td><td>Onboarding à photos intégrées au code ; <code>google-services.json</code> et plugin Android (hors dépôt)</td></tr></table>
+</body></html>
