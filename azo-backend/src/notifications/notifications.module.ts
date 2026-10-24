@@ -136,7 +136,11 @@ export class NotificationsService {
       this.logger.warn(`Expo Push tokens unavailable: ${error instanceof Error ? error.message : "unknown error"}`);
       return;
     }
-    if (devices.length === 0) return;
+    if (devices.length === 0) {
+      // Silencieux jusqu'ici : sans jeton enregistré, la notification n'est que dans la boîte de réception de l'application
+      if (!extras.silent) this.logger.warn(`Push non envoyé : aucun jeton enregistré pour l'utilisateur ${userId} (application ancienne, autorisation refusée ou jeton non créé)`);
+      return;
+    }
 
     const endpoint = "https://exp.host/--/api/v2/push/send";
     const batchSize = 100;
@@ -199,9 +203,11 @@ export class NotificationsService {
           await this.prisma.devicePushToken.deleteMany({ where: { token: { in: invalidTokens } } });
         }
 
-        const failures = tickets.filter((ticket: any) => ticket?.status === "error").length;
-        if (failures > 0) {
-          this.logger.warn(`Expo Push API returned ${failures} failed ticket(s)`);
+        const failed = tickets.filter((ticket: any) => ticket?.status === "error");
+        if (failed.length > 0) {
+          // Raison de l'échec (jamais le jeton) : InvalidCredentials = clé FCM absente ou fausse chez Expo, MismatchSenderId = mauvais projet Firebase
+          const reasons = [...new Set(failed.map((t: any) => `${t?.details?.error ?? "erreur"}: ${String(t?.message ?? "").slice(0, 160)}`))];
+          this.logger.warn(`Expo Push API : ${failed.length} envoi(s) refusé(s) — ${reasons.join(" | ")}`);
         }
       } catch (error) {
         // Push delivery is best-effort: the in-app inbox and Socket.IO status remain available.
