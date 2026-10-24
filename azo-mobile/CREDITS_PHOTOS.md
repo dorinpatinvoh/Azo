@@ -11,7 +11,4 @@ Photos de l'écran de présentation (onboarding), recadrées. Source : Wikimedia
 
 `assets/onboarding/electrique.jpg` est tiré de `assets/moto-electrique.png` (visuel fourni par AZO).
 
-`assets/vehicles/zem-essence-bg.ts` (fond de la carte « Speeder à essence ») : photo « Zémidjan Abomey Calavi.jpg », auteur Oloudare king, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), https://commons.wikimedia.org/wiki/File:Z%C3%A9midjan_Abomey_Calavi.jpg (recadrée).
-
-`assets/vehicles/tricycle-bg.ts` (fond de la carte « Speeder tricycle ») : photo « Taxi Tricycle.jpg », auteur Amegnanglo Loic, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), https://commons.wikimedia.org/wiki/File:Taxi_Tricycle.jpg (recadrée).
-`assets/vehicles/zem-electric-bg.ts` (fond de la carte « Speeder électrique ») : tiré de `assets/moto-electrique.png` (visuel fourni par AZO).
+`assets/vehicles/*-bg.ts` (fonds des cartes Speeder à essence, électrique et tricycle) : visuels `moto_essence.png`, `moto_electrique.png` et `moto_tricycle.png` fournis par AZO (aucune photo Wikimedia n'est plus utilisée pour ces cartes). **Vérifier que AZO détient bien les droits de ces trois images** (elles montrent des modèles de marque).
