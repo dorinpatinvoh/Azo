@@ -5,6 +5,7 @@ import { phone as formatPhone } from "./format";
 import Dashboard from "./pages/Dashboard";
 import Providers from "./pages/Providers";
 import Users from "./pages/Users";
+import AddAccount from "./pages/AddAccount";
 import Finance from "./pages/Finance";
 import ProviderWithdrawals from "./pages/ProviderWithdrawals";
 import Commercials from "./pages/Commercials";
@@ -55,6 +56,7 @@ const NAV: { key: string; label: string; icon: string }[] = [
   { key: "tableau-de-bord", label: "Tableau de bord", icon: "📊" },
   { key: "dossiers", label: "Dossiers", icon: "🛡️" },
   { key: "utilisateurs", label: "Utilisateurs", icon: "👥" },
+  { key: "ajouter", label: "Ajouter un compte", icon: "➕" },
   { key: "finances", label: "Finances", icon: "💰" },
   { key: "retraits", label: "Retraits prestataires", icon: "💸" },
   { key: "commerciaux", label: "Commerciaux", icon: "🤝" },
@@ -142,6 +144,7 @@ function Shell({ admin, onLogout }: { admin: Admin; onLogout: () => void }) {
   switch (page) {
     case "dossiers": content = <Providers id={id} />; break;
     case "utilisateurs": content = <Users />; break;
+    case "ajouter": content = <AddAccount />; break;
     case "finances": content = <Finance />; break;
     case "retraits": content = <ProviderWithdrawals />; break;
     case "commerciaux": content = <Commercials id={id} />; break;

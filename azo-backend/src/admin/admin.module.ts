@@ -26,6 +26,7 @@ import { NpiCryptoService } from "../common/npi-crypto.service";
 import { FinanceService, MIN_COMPANY_WITHDRAWAL } from "./finance.service";
 import { deleteClientAccount } from "./client-deletion";
 import { moneyBaseline } from "./money-baseline";
+import { createAgencyAccount, createProviderAccount, PROVIDER_PROFILES } from "./account-creation";
 
 class ProviderWithdrawalPaidDto {
   @IsOptional() @IsString() @MaxLength(60) reference?: string;
@@ -69,6 +70,22 @@ class MarkPaidDto {
   @IsString()
   @MaxLength(80)
   reference?: string;
+}
+
+class CreateProviderAccountDto {
+  @IsString() @MaxLength(30) phone: string;
+  @IsString() @MinLength(2) @MaxLength(80) fullName: string;
+  @IsIn(Object.keys(PROVIDER_PROFILES)) profile: string;
+  @IsOptional() @IsString() @MaxLength(20) vehicle?: string;
+  @IsOptional() @IsString() @MaxLength(20) plate?: string;
+}
+
+class CreateAgencyAccountDto {
+  @IsString() @MaxLength(30) phone: string;
+  @IsString() @MinLength(2) @MaxLength(80) ownerName: string;
+  @IsString() @MinLength(2) @MaxLength(80) agencyName: string;
+  @IsIn(["PRO", "SILVER", "OR", "DIAMANT", "PLATINE", "ELITE"]) plan: string;
+  @IsOptional() activated?: boolean;
 }
 
 class UpdateUserNameDto {
@@ -227,6 +244,17 @@ export class AdminService {
     const at = new Date();
     await this.prisma.user.update({ where: { id: userId }, data: { ratingResetAt: at } });
     return { userId, ratingResetAt: at.toISOString(), by: adminId };
+  }
+
+  /** Ajoute un Speeder, une voiture, un coursier ou un livreur (déjà approuvé). Voir account-creation.ts. */
+  createProvider(adminId: string, dto: CreateProviderAccountDto) {
+    return createProviderAccount(this.prisma, adminId, dto);
+  }
+
+  /** Ajoute une agence et son gérant. Frais, commission et plafond viennent du niveau choisi (tarification.json). */
+  createAgency(adminId: string, dto: CreateAgencyAccountDto) {
+    const levels = Object.fromEntries(["PRO", "SILVER", "OR", "DIAMANT", "PLATINE", "ELITE"].map((k) => [k, this.pricing.getAgencyLevel(k)]));
+    return createAgencyAccount(this.prisma, adminId, levels, { ...dto, activated: dto.activated === true });
   }
 
   /** Corrige le nom d'une personne (compte, et dossier prestataire s'il existe). Chaque changement est noté au journal du compte. */
@@ -435,6 +463,18 @@ export class AdminController {
   @Post("users/:id/ratings-reset")
   resetRatings(@CurrentUser() u, @Param("id") id: string) {
     return this.svc.resetRatings(u.userId, id);
+  }
+
+  // POST /admin/accounts/provider {phone, fullName, profile, vehicle?, plate?} — ajoute un Speeder / voiture / coursier / livreur (approuvé)
+  @Post("accounts/provider")
+  createProviderAccount(@CurrentUser() u, @Body() dto: CreateProviderAccountDto) {
+    return this.svc.createProvider(u.userId, dto);
+  }
+
+  // POST /admin/accounts/agency {phone, ownerName, agencyName, plan, activated?} — ajoute une agence et son gérant
+  @Post("accounts/agency")
+  createAgencyAccount(@CurrentUser() u, @Body() dto: CreateAgencyAccountDto) {
+    return this.svc.createAgency(u.userId, dto);
   }
 
   // POST /admin/users/:id/name {firstName, lastName?} — corrige le nom d'une personne
