@@ -585,8 +585,8 @@ export default function ProviderOnboardingScreen({ onSubmitted, onBack, initialT
           type: asset.mimeType || "image/jpeg",
           base64,
         });
+        // Récupération silencieuse : aucun popup au retour dans l'application
         await refresh();
-        BrandAlert.alert("Photo récupérée", "Ta photo avait été interrompue quand l'application s'est fermée : elle a bien été enregistrée dans ton dossier.");
       } catch {
         // rien à récupérer : l'utilisateur reprendra sa photo
       } finally {
