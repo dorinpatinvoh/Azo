@@ -24,6 +24,24 @@ export const NOTIFICATION_TEXTS: Record<string, Entry> = {
     es: t("Nueva solicitud de carrera", "{vehicleLabel} · {price} FCFA — abre tu radar para aceptarla."),
     de: t("Neue Fahrtanfrage", "{vehicleLabel} · {price} FCFA — öffne dein Radar, um sie anzunehmen."),
   },
+  NOTIFICATION_RIDE_REQUESTED: {
+    fr: t("Commande envoyée", "Nous cherchons un Speeder près de toi. Tu seras prévenu dès qu'il accepte."),
+    en: t("Order sent", "We are looking for a Speeder near you. You will be notified as soon as one accepts."),
+    es: t("Pedido enviado", "Buscamos un Speeder cerca de ti. Te avisaremos en cuanto uno acepte."),
+    de: t("Bestellung gesendet", "Wir suchen einen Speeder in deiner Nähe. Du wirst benachrichtigt, sobald einer annimmt."),
+  },
+  NOTIFICATION_RIDE_REQUESTED_SCHEDULED: {
+    fr: t("Course programmée enregistrée", "Nous préviendrons les Speeders peu avant l'heure prévue."),
+    en: t("Scheduled ride saved", "We will alert Speeders shortly before the planned time."),
+    es: t("Carrera programada guardada", "Avisaremos a los Speeders poco antes de la hora prevista."),
+    de: t("Geplante Fahrt gespeichert", "Wir benachrichtigen die Speeder kurz vor der geplanten Zeit."),
+  },
+  NOTIFICATION_DELIVERY_REQUESTED: {
+    fr: t("Commande envoyée", "Nous cherchons un livreur pour ta commande. Tu seras prévenu dès qu'il accepte."),
+    en: t("Order sent", "We are looking for a courier for your order. You will be notified as soon as one accepts."),
+    es: t("Pedido enviado", "Buscamos un repartidor para tu pedido. Te avisaremos en cuanto uno acepte."),
+    de: t("Bestellung gesendet", "Wir suchen einen Kurier für deine Bestellung. Du wirst benachrichtigt, sobald einer annimmt."),
+  },
   NOTIFICATION_RIDE_NO_DRIVER: {
     fr: t("Aucun chauffeur trouvé", "Ta demande est restée {minutes} min sans chauffeur disponible : elle a été annulée. Aucun montant n'a été débité — relance une recherche."),
     en: t("No driver found", "Your request waited {minutes} min without an available driver and was cancelled. Nothing was charged — start a new search."),

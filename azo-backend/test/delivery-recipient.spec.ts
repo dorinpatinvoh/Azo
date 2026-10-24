@@ -77,13 +77,18 @@ describe("Livraison express : numéro du destinataire et code de remise", () => 
     );
   });
 
-  it("sans compte pour ce numéro, ou si c'est l'expéditeur lui-même, aucune notification (l'expéditeur transmet le code)", async () => {
+  it("sans compte pour ce numéro, ou si c'est l'expéditeur lui-même, aucun code de remise n'est envoyé (l'expéditeur transmet le code) ; l'expéditeur reçoit seulement l'accusé de sa commande", async () => {
+    const onlyAck = (push: jest.Mock) => {
+      expect(push).toHaveBeenCalledTimes(1);
+      expect(push.mock.calls[0][0]).toBe("c1");
+      expect(push.mock.calls[0][4]).toMatchObject({ titleKey: "NOTIFICATION_DELIVERY_REQUESTED" });
+    };
     const none = make({ recipientUser: null });
     await none.service.create("c1", order({ recipientPhone: "0197000042" }));
-    expect(none.notifications.push).not.toHaveBeenCalled();
+    onlyAck(none.notifications.push);
     const self = make({ recipientUser: { id: "c1" } });
     await self.service.create("c1", order({ recipientPhone: "0196000001" }));
-    expect(self.notifications.push).not.toHaveBeenCalled();
+    onlyAck(self.notifications.push);
   });
 
   it("le coursier ne voit JAMAIS le code de remise, même en simulation, et le numéro du destinataire est masqué", async () => {

@@ -327,6 +327,19 @@ export class RidesService {
       },
     });
 
+    // Accusé de réception pour le client (au mieux : ne bloque jamais la commande)
+    try {
+      await this.notifications.push(
+        clientId,
+        scheduledAt ? "Course programmée enregistrée" : "Commande envoyée",
+        scheduledAt ? "Nous préviendrons les Speeders peu avant l'heure prévue." : "Nous cherchons un Speeder près de toi. Tu seras prévenu dès qu'il accepte.",
+        "ride",
+        { titleKey: scheduledAt ? "NOTIFICATION_RIDE_REQUESTED_SCHEDULED" : "NOTIFICATION_RIDE_REQUESTED", data: { event: "ride-requested", rideId: ride.id } }
+      );
+    } catch {
+      // l'accusé de réception est facultatif
+    }
+
     // Course programmée : aucune diffusion maintenant, la demande sera ouverte aux chauffeurs peu avant l'heure
     // (releaseDueScheduledRides, tâche périodique).
     if (!scheduledAt) await this.publishRequest(ride, clientId);

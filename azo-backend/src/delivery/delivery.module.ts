@@ -230,6 +230,15 @@ export class DeliveryService {
       data: { ...base, dropAddress, pickupLat, pickupLng, dropLat, dropLng, ...(personal ? { payer: "SENDER" as Payer } : {}), ...extra, price, clientId, recipientPhone, pickupCode: code4(), deliveryCode: code4() } as Prisma.DeliveryUncheckedCreateInput,
       include: { client: { select: { fullName: true, phone: true } } },
     });
+    // Accusé de réception pour l'expéditeur (au mieux : ne bloque jamais la commande)
+    try {
+      await this.notifications.push(clientId, "Commande envoyée", "Nous cherchons un livreur pour ta commande. Tu seras prévenu dès qu'il accepte.", "DELIVERY", {
+        titleKey: "NOTIFICATION_DELIVERY_REQUESTED",
+        data: { event: "delivery-requested", deliveryId: created.id },
+      });
+    } catch {
+      // l'accusé de réception est facultatif
+    }
     // Le destinataire a un compte AZƆ̀ : son code de remise lui arrive dans l'application (notification). Sinon l'expéditeur le lui transmet.
     if (recipientPhone) {
       const recipient = await this.prisma.user
